@@ -4,24 +4,44 @@ A very small local web app for tracking softball player development.
 
 You can add players, rate skills, write notes, and see progress over time. Nothing is sent to the internet. Data stays in a file on your computer.
 
+## Get it onto your computer (no Git needed)
+
+A "repo" is just the project folder stored on GitHub. You do not need to know Git. Downloading a zip is enough.
+
+1. Install Python 3 from [python.org/downloads](https://www.python.org/downloads/).
+   - On Windows, check the box **Add python.exe to PATH** before you click Install.
+2. Open this page: [github.com/wolf359-ai/idev](https://github.com/wolf359-ai/idev)
+3. If GitHub asks you to sign in, sign in.
+4. Near the top left, click the branch menu (it may say `main`). Choose `cursor/idev-softball-tracker-2082`.
+5. Click the green **Code** button, then **Download ZIP**.
+6. Unzip the file. You should get a folder that contains `app.py`.
+
+Direct zip link for the current app branch:
+
+https://github.com/wolf359-ai/idev/archive/refs/heads/cursor/idev-softball-tracker-2082.zip
+
 ## Run it
 
-You only need Python 3. No extra packages.
-
-1. Open a terminal in this folder.
+1. Open a terminal in that unzipped folder:
+   - **Mac:** open Terminal, type `cd ` (with a space), drag the unzipped folder onto the Terminal window, then press Return.
+   - **Windows:** in File Explorer open the unzipped folder, click the address bar, type `cmd`, and press Enter.
 2. Start the app:
 
 ```bash
 python3 app.py
 ```
 
-3. In your browser, open http://127.0.0.1:8765
+If that says the command was not found, try:
 
-If you are using a Cursor Cloud Agent, that address is the agent machine, not your laptop. Open the Ports / plug control in Cursor and open port 8765, or clone this repo and run `python3 app.py` on your computer.
+```bash
+python app.py
+```
 
-Press `Ctrl+C` in the terminal when you want to stop.
+3. Open a web browser and go to http://127.0.0.1:8765
 
-The first launch creates two sample players so you can click around. Your changes are saved in `data.json`.
+That address only works on the same computer that is running `app.py`. Leave the terminal window open while you use the app. Press `Ctrl+C` in the terminal when you want to stop.
+
+The first launch creates two sample players so you can click around. Your changes are saved in `data.json` in the same folder.
 
 ## What you can do
 
