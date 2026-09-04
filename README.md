@@ -26,6 +26,7 @@ The first launch creates two sample players so you can click around. Your change
 - **Players** — name, position, and jersey number
 - **Skills** — hitting, fielding, throwing, and other softball skills
 - **Ratings** — tap 1–5 on a skill; each tap is saved as a new rating
+- **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
 - **Notes** — short coaching notes for a player
 - **Progress** — see how a rating changed from the first score to the latest one
 

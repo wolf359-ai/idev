@@ -59,6 +59,52 @@ DEFAULT_SKILLS = (
 
 SAFE_ID = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
 
+# Standard GameChanger batting and fielding totals coaches copy from a season page.
+OFFENSE_COUNT_FIELDS = (
+    ("gp", "GP", "Games played"),
+    ("pa", "PA", "Plate appearances"),
+    ("ab", "AB", "At bats"),
+    ("h", "H", "Hits"),
+    ("doubles", "2B", "Doubles"),
+    ("triples", "3B", "Triples"),
+    ("hr", "HR", "Home runs"),
+    ("r", "R", "Runs"),
+    ("rbi", "RBI", "Runs batted in"),
+    ("bb", "BB", "Walks"),
+    ("so", "SO", "Strikeouts"),
+    ("hbp", "HBP", "Hit by pitch"),
+    ("sf", "SF", "Sacrifice flies"),
+    ("sac", "SAC", "Sacrifice bunts"),
+    ("sb", "SB", "Stolen bases"),
+    ("cs", "CS", "Caught stealing"),
+)
+
+DEFENSE_COUNT_FIELDS = (
+    ("inn", "INN", "Innings played"),
+    ("po", "PO", "Putouts"),
+    ("a", "A", "Assists"),
+    ("e", "E", "Errors"),
+    ("dp", "DP", "Double plays"),
+)
+
+OFFENSE_COMPUTED_FIELDS = (
+    ("avg", "AVG", "Batting average"),
+    ("obp", "OBP", "On-base percentage"),
+    ("slg", "SLG", "Slugging percentage"),
+    ("ops", "OPS", "On-base plus slugging"),
+    ("tb", "TB", "Total bases"),
+    ("xbh", "XBH", "Extra-base hits"),
+)
+
+DEFENSE_COMPUTED_FIELDS = (
+    ("tc", "TC", "Total chances"),
+    ("fpct", "FLD%", "Fielding percentage"),
+)
+
+COUNT_FIELDS = OFFENSE_COUNT_FIELDS + DEFENSE_COUNT_FIELDS
+DECIMAL_COUNT_KEYS = {"inn"}
+MAX_STAT = 9999
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -106,6 +152,142 @@ def parse_position(value: object) -> str:
     if position not in POSITIONS:
         raise ValueError("Choose a position from the list")
     return position
+
+
+def empty_stat_counts() -> dict:
+    return {key: 0 for key, _abbr, _label in COUNT_FIELDS}
+
+
+def parse_stat_value(value: object, label: str, decimal: bool = False) -> int | float:
+    if value is None or value == "":
+        return 0
+    if isinstance(value, bool):
+        raise ValueError(f"{label} must be a number from 0 to {MAX_STAT}")
+    try:
+        number = float(value) if decimal else int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{label} must be a number from 0 to {MAX_STAT}") from exc
+    if number < 0 or number > MAX_STAT:
+        raise ValueError(f"{label} must be a number from 0 to {MAX_STAT}")
+    if not decimal:
+        return int(number)
+    rounded = round(number, 1)
+    if rounded == int(rounded):
+        return int(rounded)
+    return rounded
+
+
+def parse_stat_counts(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Send a JSON object")
+    counts = empty_stat_counts()
+    for key, abbr, _label in COUNT_FIELDS:
+        if key in payload:
+            counts[key] = parse_stat_value(
+                payload[key], abbr, decimal=key in DECIMAL_COUNT_KEYS
+            )
+    return counts
+
+
+def normalize_stat_counts(raw: object) -> dict:
+    counts = empty_stat_counts()
+    if not isinstance(raw, dict):
+        return counts
+    for key, abbr, _label in COUNT_FIELDS:
+        if key not in raw:
+            continue
+        try:
+            counts[key] = parse_stat_value(
+                raw[key], abbr, decimal=key in DECIMAL_COUNT_KEYS
+            )
+        except ValueError:
+            counts[key] = 0
+    return counts
+
+
+def format_rate(value: float | None) -> str:
+    if value is None:
+        return "—"
+    text = f"{value:.3f}"
+    if text.startswith("0"):
+        return text[1:]
+    return text
+
+
+def compute_game_stats(counts: dict) -> dict:
+    at_bats = int(counts["ab"])
+    hits = int(counts["h"])
+    doubles = int(counts["doubles"])
+    triples = int(counts["triples"])
+    home_runs = int(counts["hr"])
+    extra_base = doubles + triples + home_runs
+    singles = max(hits - extra_base, 0)
+    total_bases = singles + (2 * doubles) + (3 * triples) + (4 * home_runs)
+    avg = (hits / at_bats) if at_bats else None
+    on_base_chances = at_bats + int(counts["bb"]) + int(counts["hbp"]) + int(counts["sf"])
+    on_base = hits + int(counts["bb"]) + int(counts["hbp"])
+    obp = (on_base / on_base_chances) if on_base_chances else None
+    slg = (total_bases / at_bats) if at_bats else None
+    ops = (obp + slg) if obp is not None and slg is not None else None
+    total_chances = int(counts["po"]) + int(counts["a"]) + int(counts["e"])
+    fpct = ((int(counts["po"]) + int(counts["a"])) / total_chances) if total_chances else None
+    return {
+        "avg": None if avg is None else round(avg, 3),
+        "obp": None if obp is None else round(obp, 3),
+        "slg": None if slg is None else round(slg, 3),
+        "ops": None if ops is None else round(ops, 3),
+        "tb": total_bases,
+        "xbh": extra_base,
+        "tc": total_chances,
+        "fpct": None if fpct is None else round(fpct, 3),
+    }
+
+
+def build_stats_view(raw: object) -> dict:
+    counts = normalize_stat_counts(raw)
+    computed = compute_game_stats(counts)
+
+    def count_items(fields: tuple) -> list[dict]:
+        items = []
+        for key, abbr, label in fields:
+            items.append(
+                {
+                    "key": key,
+                    "abbr": abbr,
+                    "label": label,
+                    "kind": "count",
+                    "value": counts[key],
+                    "display": str(counts[key]),
+                }
+            )
+        return items
+
+    def computed_items(fields: tuple) -> list[dict]:
+        items = []
+        for key, abbr, label in fields:
+            value = computed[key]
+            if key in {"tb", "xbh", "tc"}:
+                display = str(value)
+            else:
+                display = format_rate(value)
+            items.append(
+                {
+                    "key": key,
+                    "abbr": abbr,
+                    "label": label,
+                    "kind": "computed",
+                    "value": value,
+                    "display": display,
+                }
+            )
+        return items
+
+    return {
+        "counts": counts,
+        "computed": computed,
+        "offense": count_items(OFFENSE_COUNT_FIELDS) + computed_items(OFFENSE_COMPUTED_FIELDS),
+        "defense": count_items(DEFENSE_COUNT_FIELDS) + computed_items(DEFENSE_COMPUTED_FIELDS),
+    }
 
 
 class Store:
@@ -159,6 +341,29 @@ class Store:
                 "position": "Shortstop",
                 "number": 7,
                 "created_at": earlier,
+                "stats": {
+                    "gp": 10,
+                    "pa": 36,
+                    "ab": 32,
+                    "h": 12,
+                    "doubles": 3,
+                    "triples": 1,
+                    "hr": 1,
+                    "r": 9,
+                    "rbi": 8,
+                    "bb": 3,
+                    "so": 5,
+                    "hbp": 1,
+                    "sf": 0,
+                    "sac": 0,
+                    "sb": 4,
+                    "cs": 1,
+                    "inn": 48,
+                    "po": 18,
+                    "a": 22,
+                    "e": 2,
+                    "dp": 3,
+                },
             }
             jordan = {
                 "id": new_id("player"),
@@ -166,6 +371,29 @@ class Store:
                 "position": "Pitcher",
                 "number": 21,
                 "created_at": earlier,
+                "stats": {
+                    "gp": 10,
+                    "pa": 28,
+                    "ab": 24,
+                    "h": 6,
+                    "doubles": 1,
+                    "triples": 0,
+                    "hr": 0,
+                    "r": 3,
+                    "rbi": 2,
+                    "bb": 3,
+                    "so": 7,
+                    "hbp": 0,
+                    "sf": 1,
+                    "sac": 0,
+                    "sb": 0,
+                    "cs": 0,
+                    "inn": 42,
+                    "po": 3,
+                    "a": 8,
+                    "e": 1,
+                    "dp": 0,
+                },
             }
             self.data["skills"] = skills
             self.data["players"] = [alex, jordan]
@@ -265,6 +493,7 @@ class Store:
         player["ratings"] = ratings
         player["notes"] = notes
         player["progress"] = build_progress(skills, ratings)
+        player["stats"] = build_stats_view(player.get("stats"))
         return player
 
     def add_player(self, payload: dict) -> dict:
@@ -274,6 +503,7 @@ class Store:
             "position": parse_position(payload.get("position")),
             "number": parse_number(payload.get("number")),
             "created_at": utc_now(),
+            "stats": empty_stat_counts(),
         }
         with self.lock:
             self.data["players"].append(player)
@@ -339,6 +569,14 @@ class Store:
             self.data["notes"].append(note)
             self._save()
             return dict(note)
+
+    def update_stats(self, player_id: str, payload: dict) -> dict:
+        counts = parse_stat_counts(payload)
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            player["stats"] = counts
+            self._save()
+        return build_stats_view(counts)
 
     def delete_note(self, note_id: str) -> None:
         with self.lock:
@@ -521,6 +759,10 @@ class IdevHandler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             payload = json_body(self)
+            stats_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/stats", path)
+            if stats_match:
+                send_json(self, 200, self.store.update_stats(stats_match.group(1), payload))
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.update_player(player_match.group(1), payload))

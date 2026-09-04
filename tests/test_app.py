@@ -91,6 +91,53 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(fielding["first"], 3)
         self.assertEqual(fielding["current"], 4)
         self.assertEqual(fielding["delta"], 1)
+        alex_stats = self.store.get_player(alex["id"])["stats"]
+        self.assertEqual(alex_stats["computed"]["avg"], 0.375)
+        self.assertEqual(alex_stats["computed"]["obp"], 0.444)
+        self.assertEqual(alex_stats["computed"]["slg"], 0.625)
+        self.assertEqual(alex_stats["computed"]["ops"], 1.069)
+        self.assertEqual(alex_stats["computed"]["fpct"], 0.952)
+
+    def test_gamechanger_stats_compute_and_validate(self) -> None:
+        player = self.store.add_player({"name": "Riley", "position": "Utility"})
+        empty = self.store.get_player(player["id"])["stats"]
+        self.assertEqual(empty["computed"]["avg"], None)
+        self.assertEqual(empty["computed"]["tc"], 0)
+        self.assertEqual(
+            next(item["display"] for item in empty["offense"] if item["key"] == "avg"),
+            "—",
+        )
+        updated = self.store.update_stats(
+            player["id"],
+            {
+                "ab": 32,
+                "h": 12,
+                "doubles": 3,
+                "triples": 1,
+                "hr": 1,
+                "bb": 3,
+                "hbp": 1,
+                "sf": 0,
+                "po": 18,
+                "a": 22,
+                "e": 2,
+                "secret": "ignore-me",
+            },
+        )
+        self.assertEqual(updated["counts"]["ab"], 32)
+        self.assertNotIn("secret", updated["counts"])
+        self.assertEqual(updated["computed"]["avg"], 0.375)
+        self.assertEqual(updated["computed"]["tb"], 20)
+        self.assertEqual(updated["computed"]["xbh"], 5)
+        self.assertEqual(updated["computed"]["tc"], 42)
+        self.assertEqual(
+            next(item["display"] for item in updated["offense"] if item["key"] == "avg"),
+            ".375",
+        )
+        with self.assertRaises(ValueError):
+            self.store.update_stats(player["id"], {"ab": -1})
+        with self.assertRaises(ValueError):
+            self.store.update_stats(player["id"], {"h": 10000})
 
 
 class HttpTests(unittest.TestCase):
@@ -137,6 +184,11 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("idev", html)
         self.assertIn("Softball player development", html)
+        status, script = self.call("GET", "/static/app.js")
+        self.assertEqual(status, 200)
+        self.assertIn("GameChanger stats", script)
+        self.assertIn("Offense", script)
+        self.assertIn("Defense", script)
 
     def test_player_rating_note_flow(self) -> None:
         status, skill = self.call("POST", "/api/skills", {"name": "Infield"})
@@ -166,6 +218,26 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(detail["notes"][0]["text"], "Good feeds to second.")
         infield = next(item for item in detail["progress"] if item["skill_name"] == "Infield")
         self.assertEqual(infield["current"], 3)
+        self.assertIn("stats", detail)
+        self.assertEqual(detail["stats"]["computed"]["avg"], None)
+        status, stats = self.call(
+            "PUT",
+            f"/api/players/{player['id']}/stats",
+            {"ab": 4, "h": 2, "po": 3, "a": 1, "e": 0},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(stats["computed"]["avg"], 0.5)
+        self.assertEqual(stats["computed"]["fpct"], 1.0)
+        status, detail = self.call("GET", f"/api/players/{player['id']}")
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["stats"]["computed"]["avg"], 0.5)
+        status, payload = self.call(
+            "PUT",
+            f"/api/players/{player['id']}/stats",
+            {"ab": -3},
+        )
+        self.assertEqual(status, 400)
+        self.assertIn("0 to 9999", payload["error"])
 
     def test_validation_and_missing_player(self) -> None:
         status, payload = self.call("POST", "/api/players", {"name": "", "position": "Pitcher"})

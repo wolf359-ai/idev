@@ -173,6 +173,25 @@
       ),
     );
 
+    const stats = player.stats || { offense: [], defense: [] };
+    const statsCard = el(
+      "section",
+      { className: "card" },
+      el("h2", {}, "GameChanger stats"),
+      el(
+        "p",
+        { className: "meta" },
+        "Most common offense and defense totals from GameChanger. AVG, OBP, SLG, OPS, and FLD% update when you save.",
+      ),
+      el(
+        "form",
+        { className: "form", onSubmit: saveStats },
+        statsGroup("Offense", stats.offense || []),
+        statsGroup("Defense", stats.defense || []),
+        el("button", { type: "submit", className: "btn btn-primary" }, "Save stats"),
+      ),
+    );
+
     const progress = el(
       "section",
       { className: "card" },
@@ -232,7 +251,45 @@
     );
 
     const notesCard = el("section", { className: "card" }, el("h2", {}, "Notes"), noteForm, noteList);
-    main.replaceChildren(header, skills, progress, notesCard);
+    main.replaceChildren(header, skills, statsCard, progress, notesCard);
+  }
+
+  function statsGroup(title, items) {
+    const counts = items.filter((item) => item.kind === "count");
+    const computed = items.filter((item) => item.kind === "computed");
+    return el(
+      "div",
+      { className: "stat-group" },
+      el("h3", {}, title),
+      el("div", { className: "stat-grid" }, counts.map(statInput)),
+      el("div", { className: "stat-rates" }, computed.map(statChip)),
+    );
+  }
+
+  function statInput(item) {
+    return el(
+      "label",
+      { className: "stat-field" },
+      el("span", { className: "stat-abbr", title: item.label || item.abbr }, item.abbr || item.key),
+      el("input", {
+        name: item.key,
+        type: "number",
+        min: "0",
+        max: "9999",
+        step: item.key === "inn" ? "0.1" : "1",
+        value: item.value === undefined || item.value === null ? 0 : item.value,
+        "aria-label": item.label || item.abbr || item.key,
+      }),
+    );
+  }
+
+  function statChip(item) {
+    return el(
+      "div",
+      { className: "stat-chip", title: item.label || item.abbr },
+      el("span", { className: "stat-abbr" }, item.abbr || item.key),
+      el("strong", {}, item.display || "—"),
+    );
   }
 
   async function loadPlayers(preferredId) {
@@ -273,6 +330,26 @@
       await request(`/api/players/${encodeURIComponent(state.selectedId)}/ratings`, {
         method: "POST",
         body: JSON.stringify({ skill_id: skillId, score }),
+      });
+      await loadDetail(state.selectedId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function saveStats(event) {
+    event.preventDefault();
+    if (!state.selectedId) {
+      return;
+    }
+    const body = {};
+    new FormData(event.currentTarget).forEach((value, key) => {
+      body[key] = value;
+    });
+    try {
+      await request(`/api/players/${encodeURIComponent(state.selectedId)}/stats`, {
+        method: "PUT",
+        body: JSON.stringify(body),
       });
       await loadDetail(state.selectedId);
     } catch (error) {
