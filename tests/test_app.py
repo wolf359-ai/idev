@@ -80,6 +80,17 @@ class StoreTests(unittest.TestCase):
         self.store.seed_demo_if_empty()
         self.assertEqual(len(self.store.list_players()), 2)
         self.assertEqual(len(self.store.list_skills()), len(app.DEFAULT_SKILLS))
+        alex = next(
+            player for player in self.store.list_players() if player["name"] == "Alex Rivera"
+        )
+        fielding = next(
+            item
+            for item in self.store.get_player(alex["id"])["progress"]
+            if item["skill_name"] == "Fielding"
+        )
+        self.assertEqual(fielding["first"], 3)
+        self.assertEqual(fielding["current"], 4)
+        self.assertEqual(fielding["delta"], 1)
 
 
 class HttpTests(unittest.TestCase):

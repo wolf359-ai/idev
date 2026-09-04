@@ -15,7 +15,7 @@ import os
 import re
 import threading
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -150,19 +150,22 @@ class Store:
             ]
             by_name = {skill["name"]: skill["id"] for skill in skills}
             now = utc_now()
+            earlier = (
+                datetime.now(timezone.utc) - timedelta(days=14)
+            ).replace(microsecond=0).isoformat()
             alex = {
                 "id": new_id("player"),
                 "name": "Alex Rivera",
                 "position": "Shortstop",
                 "number": 7,
-                "created_at": now,
+                "created_at": earlier,
             }
             jordan = {
                 "id": new_id("player"),
                 "name": "Jordan Blake",
                 "position": "Pitcher",
                 "number": 21,
-                "created_at": now,
+                "created_at": earlier,
             }
             self.data["skills"] = skills
             self.data["players"] = [alex, jordan]
@@ -172,6 +175,13 @@ class Store:
                     "player_id": alex["id"],
                     "skill_id": by_name["Fielding"],
                     "score": 3,
+                    "created_at": earlier,
+                },
+                {
+                    "id": new_id("rating"),
+                    "player_id": alex["id"],
+                    "skill_id": by_name["Fielding"],
+                    "score": 4,
                     "created_at": now,
                 },
                 {
@@ -449,7 +459,7 @@ class IdevHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: object) -> None:
         message = format % args
         safe = message.replace("\r", " ").replace("\n", " ")
-        print(f"{self.address_string()} {safe}")
+        print(f"{self.address_string()} {safe}", flush=True)
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
@@ -552,12 +562,12 @@ def main() -> None:
     store = Store(DATA_PATH)
     store.seed_demo_if_empty()
     server = make_server(store, HOST, PORT)
-    print(f"idev is running at http://{HOST}:{PORT}")
-    print("Press Ctrl+C to stop.")
+    print(f"idev is running at http://{HOST}:{PORT}", flush=True)
+    print("Press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\nStopping idev.")
+        print("\nStopping idev.", flush=True)
     finally:
         server.server_close()
 
