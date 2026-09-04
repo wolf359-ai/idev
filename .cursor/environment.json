@@ -1,0 +1,16 @@
+{
+  "name": "idev",
+  "terminals": [
+    {
+      "name": "idev",
+      "command": "python3 app.py",
+      "description": "Local softball tracker web app on port 8765"
+    }
+  ],
+  "ports": [
+    {
+      "name": "idev",
+      "port": 8765
+    }
+  ]
+}
