@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>idev — softball player development</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="mark" aria-hidden="true">◆</span>
+        <div>
+          <h1>idev</h1>
+          <p>Softball player development</p>
+        </div>
+      </div>
+    </header>
+
+    <aside class="roster" aria-label="Players">
+      <div class="roster-head">
+        <h2>Players</h2>
+        <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
+      </div>
+      <form id="add-player-form" class="card form hidden" autocomplete="off">
+        <label>
+          Name
+          <input id="player-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Position
+          <select id="player-position" name="position" required>
+            <option value="">Choose one</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Jersey number
+          <input id="player-number" name="number" type="number" min="0" max="99">
+        </label>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">Save player</button>
+          <button type="button" id="cancel-add-player" class="btn">Cancel</button>
+        </div>
+      </form>
+      <ul id="player-list" class="player-list"></ul>
+    </aside>
+
+    <main class="main" id="main">
+      <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, notes, and progress.</p>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
