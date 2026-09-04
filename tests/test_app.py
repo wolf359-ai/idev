@@ -139,6 +139,49 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.update_stats(player["id"], {"h": 10000})
 
+    def test_preview_and_import_gamechanger_roster(self) -> None:
+        csv_text = (
+            "#,Roster,GP,PA,AB,H\n"
+            '7,"Rivera, Alex",10,36,32,12\n'
+            "21,Jordan Blake,10,28,24,6\n"
+            ",Team,10,64,56,18\n"
+        )
+        preview = self.store.import_roster({"text": csv_text, "preview": True})
+        self.assertEqual(len(preview["players"]), 2)
+        self.assertEqual(preview["players"][0]["name"], "Rivera, Alex")
+        self.assertEqual(preview["players"][0]["number"], 7)
+        self.assertEqual(preview["players"][0]["position"], "Utility")
+        self.assertEqual(self.store.list_players(), [])
+
+        result = self.store.import_roster({"text": csv_text, "preview": False})
+        self.assertEqual(len(result["imported"]), 2)
+        self.assertEqual(len(self.store.list_players()), 2)
+        duplicate = self.store.import_roster({"text": csv_text, "preview": True})
+        self.assertEqual(duplicate["players"], [])
+        self.assertEqual(len(duplicate["skipped"]), 2)
+        self.assertTrue(all("already on the roster" in row["reason"] for row in duplicate["skipped"]))
+
+    def test_import_pasted_roster_with_positions(self) -> None:
+        result = self.store.import_roster(
+            {
+                "text": "7,Alex Rivera,SS\n21,Jordan Blake,P\nTaylor Brooks",
+                "preview": False,
+            }
+        )
+        self.assertEqual(len(result["imported"]), 3)
+        players = {player["name"]: player for player in self.store.list_players()}
+        self.assertEqual(players["Alex Rivera"]["position"], "Shortstop")
+        self.assertEqual(players["Jordan Blake"]["position"], "Pitcher")
+        self.assertEqual(players["Taylor Brooks"]["position"], "Utility")
+
+    def test_import_rejects_empty_and_invalid_rosters(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.import_roster({"text": "", "preview": True})
+        with self.assertRaises(ValueError):
+            self.store.import_roster({"text": "#,Roster\n100,Bad Jersey", "preview": True})
+        with self.assertRaises(ValueError):
+            self.store.import_roster({"text": "x" * (app.MAX_ROSTER_TEXT_BYTES + 1)})
+
 
 class HttpTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -184,11 +227,14 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("idev", html)
         self.assertIn("Softball player development", html)
+        self.assertIn("Import roster", html)
+        self.assertIn("Export Stats", html)
         status, script = self.call("GET", "/static/app.js")
         self.assertEqual(status, 200)
         self.assertIn("GameChanger stats", script)
         self.assertIn("Offense", script)
         self.assertIn("Defense", script)
+        self.assertIn("/api/players/import", script)
 
     def test_player_rating_note_flow(self) -> None:
         status, skill = self.call("POST", "/api/skills", {"name": "Infield"})
@@ -245,6 +291,36 @@ class HttpTests(unittest.TestCase):
         self.assertIn("required", payload["error"].lower())
         status, payload = self.call("GET", "/api/players/player-missing1")
         self.assertEqual(status, 404)
+
+    def test_roster_import_preview_commit_and_duplicate_skip(self) -> None:
+        roster = "#,Roster,Position,GP\n7,Alex Rivera,SS,10\n21,Jordan Blake,P,10\n"
+        status, preview = self.call(
+            "POST",
+            "/api/players/import",
+            {"text": roster, "preview": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(len(preview["players"]), 2)
+        status, listed = self.call("GET", "/api/players")
+        self.assertEqual(listed["players"], [])
+
+        status, imported = self.call(
+            "POST",
+            "/api/players/import",
+            {"text": roster, "preview": False},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(len(imported["imported"]), 2)
+        self.assertEqual(imported["imported"][0]["position"], "Shortstop")
+
+        status, duplicate = self.call(
+            "POST",
+            "/api/players/import",
+            {"text": roster, "preview": True},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(duplicate["players"], [])
+        self.assertEqual(len(duplicate["skipped"]), 2)
 
     def test_xss_is_stored_as_text(self) -> None:
         status, player = self.call(

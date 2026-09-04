@@ -21,8 +21,37 @@
     <aside class="roster" aria-label="Players">
       <div class="roster-head">
         <h2>Players</h2>
-        <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
+        <div class="row">
+          <button type="button" id="show-import-roster" class="btn">Import roster</button>
+          <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
+        </div>
       </div>
+      <form id="import-roster-form" class="card form hidden" autocomplete="off">
+        <h3>Import GameChanger roster</h3>
+        <p class="meta">
+          In GameChanger, open Stats and choose Export Stats. Select that CSV here;
+          the importer reads the # and Roster columns. You can also paste one player
+          per line.
+        </p>
+        <label>
+          GameChanger CSV
+          <input id="roster-file" type="file" accept=".csv,text/csv">
+        </label>
+        <label>
+          Or paste roster
+          <textarea
+            id="roster-text"
+            name="text"
+            maxlength="204800"
+            placeholder="#,Roster&#10;7,Alex Rivera&#10;21,Jordan Blake"
+          ></textarea>
+        </label>
+        <div id="roster-preview" class="import-preview hidden" aria-live="polite"></div>
+        <div class="row">
+          <button type="submit" id="preview-roster" class="btn btn-primary">Preview roster</button>
+          <button type="button" id="cancel-import-roster" class="btn">Cancel</button>
+        </div>
+      </form>
       <form id="add-player-form" class="card form hidden" autocomplete="off">
         <label>
           Name

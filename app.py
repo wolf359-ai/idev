@@ -10,6 +10,8 @@ Then open http://127.0.0.1:8765 in your browser.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import os
 import re
@@ -22,10 +24,12 @@ from urllib.parse import unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = (ROOT / "static").resolve()
-MAX_BODY_BYTES = 32 * 1024
+MAX_BODY_BYTES = 256 * 1024
 MAX_NAME_LEN = 80
 MAX_NOTE_LEN = 2000
 MAX_SKILL_LEN = 40
+MAX_ROSTER_PLAYERS = 200
+MAX_ROSTER_TEXT_BYTES = 200 * 1024
 HOST = os.environ.get("IDEV_HOST", "127.0.0.1")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
@@ -105,6 +109,24 @@ COUNT_FIELDS = OFFENSE_COUNT_FIELDS + DEFENSE_COUNT_FIELDS
 DECIMAL_COUNT_KEYS = {"inn"}
 MAX_STAT = 9999
 
+POSITION_ALIASES = {
+    "p": "Pitcher",
+    "c": "Catcher",
+    "1b": "First Base",
+    "2b": "Second Base",
+    "3b": "Third Base",
+    "ss": "Shortstop",
+    "lf": "Left Field",
+    "cf": "Center Field",
+    "rf": "Right Field",
+    "of": "Utility",
+    "util": "Utility",
+    "utility": "Utility",
+    "dp": "DP/Flex",
+    "flex": "DP/Flex",
+    "dp/flex": "DP/Flex",
+}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -152,6 +174,116 @@ def parse_position(value: object) -> str:
     if position not in POSITIONS:
         raise ValueError("Choose a position from the list")
     return position
+
+
+def normalize_position(value: object) -> str:
+    if not isinstance(value, str) or not value.strip():
+        return "Utility"
+    text = " ".join(value.split())
+    for position in POSITIONS:
+        if text.casefold() == position.casefold():
+            return position
+    return POSITION_ALIASES.get(text.casefold(), "Utility")
+
+
+def normalize_header(value: str) -> str:
+    text = value.lstrip("\ufeff").strip().casefold()
+    if text == "#":
+        return "number"
+    return re.sub(r"[^a-z0-9]+", "", text)
+
+
+def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Choose a CSV file or paste a roster")
+    if len(text.encode("utf-8")) > MAX_ROSTER_TEXT_BYTES:
+        raise ValueError("Roster file must be 200 KB or smaller")
+
+    try:
+        rows = list(csv.reader(io.StringIO(text)))
+    except csv.Error as exc:
+        raise ValueError("Roster is not valid CSV") from exc
+    rows = [
+        [cell.strip() for cell in row]
+        for row in rows
+        if any(cell.strip() for cell in row)
+    ]
+    if not rows:
+        raise ValueError("No players found in this roster")
+
+    name_aliases = {"roster", "player", "playername", "name"}
+    number_aliases = {"number", "no", "num", "jersey", "jerseynumber"}
+    position_aliases = {"position", "pos", "primaryposition"}
+    header_index = None
+    header = []
+    for index, row in enumerate(rows[:15]):
+        normalized = [normalize_header(cell) for cell in row]
+        if any(cell in name_aliases for cell in normalized):
+            header_index = index
+            header = normalized
+            break
+
+    candidates = []
+    skipped = []
+    data_rows = rows[header_index + 1 :] if header_index is not None else rows
+
+    def column(aliases: set[str]) -> int | None:
+        for index, value in enumerate(header):
+            if value in aliases:
+                return index
+        return None
+
+    name_index = column(name_aliases)
+    number_index = column(number_aliases)
+    position_index = column(position_aliases)
+
+    first_line = header_index + 2 if header_index is not None else 1
+    for offset, row in enumerate(data_rows, start=first_line):
+        if len(candidates) >= MAX_ROSTER_PLAYERS:
+            skipped.append({"line": offset, "reason": "200-player import limit reached"})
+            continue
+        if header_index is not None:
+            raw_name = row[name_index] if name_index is not None and name_index < len(row) else ""
+            raw_number = (
+                row[number_index]
+                if number_index is not None and number_index < len(row)
+                else ""
+            )
+            raw_position = (
+                row[position_index]
+                if position_index is not None and position_index < len(row)
+                else ""
+            )
+        elif len(row) == 1:
+            raw_name, raw_number, raw_position = row[0], "", ""
+        elif row[0].lstrip("#").isdigit():
+            raw_number = row[0].lstrip("#")
+            raw_name = row[1] if len(row) > 1 else ""
+            raw_position = row[2] if len(row) > 2 else ""
+        else:
+            raw_name = row[0]
+            raw_number = row[1].lstrip("#") if len(row) > 1 else ""
+            raw_position = row[2] if len(row) > 2 else ""
+
+        if raw_name.casefold() in {"team", "total", "totals", "roster"}:
+            continue
+        try:
+            name = clean_text(raw_name, "Player name", MAX_NAME_LEN)
+            number = parse_number(raw_number)
+        except ValueError as exc:
+            skipped.append({"line": offset, "reason": str(exc)})
+            continue
+        candidates.append(
+            {
+                "name": name,
+                "number": number,
+                "position": normalize_position(raw_position),
+            }
+        )
+
+    if not candidates:
+        raise ValueError("No valid players found. Include a Roster, Player, or Name column.")
+    return candidates, skipped
 
 
 def empty_stat_counts() -> dict:
@@ -510,6 +642,54 @@ class Store:
             self._save()
             return dict(player)
 
+    def import_roster(self, payload: dict) -> dict:
+        candidates, skipped = parse_roster_text(payload.get("text"))
+        preview = payload.get("preview", True)
+        if not isinstance(preview, bool):
+            raise ValueError("Preview must be true or false")
+
+        with self.lock:
+            existing_names = {
+                player.get("name", "").casefold()
+                for player in self.data["players"]
+                if isinstance(player.get("name"), str)
+            }
+            unique = []
+            seen = set(existing_names)
+            for player in candidates:
+                folded = player["name"].casefold()
+                if folded in seen:
+                    skipped.append(
+                        {"line": None, "reason": f"{player['name']} is already on the roster"}
+                    )
+                    continue
+                seen.add(folded)
+                unique.append(player)
+
+            imported = []
+            if not preview:
+                now = utc_now()
+                for candidate in unique:
+                    player = {
+                        "id": new_id("player"),
+                        "name": candidate["name"],
+                        "position": candidate["position"],
+                        "number": candidate["number"],
+                        "created_at": now,
+                        "stats": empty_stat_counts(),
+                    }
+                    self.data["players"].append(player)
+                    imported.append(dict(player))
+                if imported:
+                    self._save()
+
+        return {
+            "preview": preview,
+            "players": unique,
+            "imported": imported,
+            "skipped": skipped,
+        }
+
     def update_player(self, player_id: str, payload: dict) -> dict:
         with self.lock:
             player = self._player_unlocked(player_id)
@@ -732,6 +912,10 @@ class IdevHandler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             payload = json_body(self)
+            if path == "/api/players/import":
+                result = self.store.import_roster(payload)
+                send_json(self, 200 if result["preview"] else 201, result)
+                return
             if path == "/api/players":
                 send_json(self, 201, self.store.add_player(payload))
                 return

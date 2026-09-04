@@ -24,11 +24,27 @@ The first launch creates two sample players so you can click around. Your change
 ## What you can do
 
 - **Players** — name, position, and jersey number
+- **Roster import** — preview and import players from a GameChanger Stats CSV or pasted list
 - **Skills** — hitting, fielding, throwing, and other softball skills
 - **Ratings** — tap 1–5 on a skill; each tap is saved as a new rating
 - **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
 - **Notes** — short coaching notes for a player
 - **Progress** — see how a rating changed from the first score to the latest one
+
+## Import a GameChanger roster
+
+GameChanger does not provide a separate roster CSV, but staff can export a Stats
+CSV that contains the same player list:
+
+1. In GameChanger, open your team and go to **Stats**.
+2. Choose **Export Stats** and save the CSV.
+3. In idev, choose **Import roster**, select the CSV, and preview it.
+4. Confirm the import.
+
+idev reads GameChanger's `#` and `Roster` columns. If position is not included,
+the player is added as Utility and can be edited later. You can also paste one
+player per line, or use CSV rows such as `7,Alex Rivera,SS`. Existing players
+with the same name are skipped.
 
 ## Tests
 

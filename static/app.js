@@ -5,11 +5,19 @@
   const addForm = document.getElementById("add-player-form");
   const showAdd = document.getElementById("show-add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
+  const importForm = document.getElementById("import-roster-form");
+  const showImport = document.getElementById("show-import-roster");
+  const cancelImport = document.getElementById("cancel-import-roster");
+  const rosterFile = document.getElementById("roster-file");
+  const rosterText = document.getElementById("roster-text");
+  const rosterPreview = document.getElementById("roster-preview");
+  const previewRosterButton = document.getElementById("preview-roster");
 
   const state = {
     players: [],
     selectedId: null,
     detail: null,
+    importReady: false,
   };
 
   function showError(message) {
@@ -76,6 +84,51 @@
       day: "numeric",
       year: "numeric",
     });
+  }
+
+  function resetImportPreview() {
+    state.importReady = false;
+    rosterPreview.classList.add("hidden");
+    rosterPreview.replaceChildren();
+    previewRosterButton.textContent = "Preview roster";
+  }
+
+  function renderImportPreview(result) {
+    const players = result.players || [];
+    const skipped = result.skipped || [];
+    rosterPreview.replaceChildren(
+      el("strong", {}, `${players.length} player${players.length === 1 ? "" : "s"} ready`),
+      players.length
+        ? el(
+            "ul",
+            { className: "import-list" },
+            players.map((player) =>
+              el(
+                "li",
+                {},
+                [player.number === null ? "" : `#${player.number}`, player.name, player.position]
+                  .filter(Boolean)
+                  .join(" · "),
+              ),
+            ),
+          )
+        : el("p", { className: "empty" }, "No new players found."),
+      skipped.length
+        ? el(
+            "p",
+            { className: "meta" },
+            `${skipped.length} row${skipped.length === 1 ? "" : "s"} skipped: ${skipped
+              .slice(0, 3)
+              .map((item) => item.reason)
+              .join("; ")}${skipped.length > 3 ? "…" : ""}`,
+          )
+        : null,
+    );
+    rosterPreview.classList.remove("hidden");
+    state.importReady = players.length > 0;
+    previewRosterButton.textContent = state.importReady
+      ? `Import ${players.length} player${players.length === 1 ? "" : "s"}`
+      : "Preview roster";
   }
 
   function renderRoster() {
@@ -431,6 +484,7 @@
   }
 
   showAdd.addEventListener("click", () => {
+    importForm.classList.add("hidden");
     addForm.classList.remove("hidden");
     document.getElementById("player-name").focus();
   });
@@ -438,6 +492,71 @@
   cancelAdd.addEventListener("click", () => {
     addForm.reset();
     addForm.classList.add("hidden");
+  });
+
+  showImport.addEventListener("click", () => {
+    addForm.classList.add("hidden");
+    importForm.classList.remove("hidden");
+    rosterText.focus();
+  });
+
+  cancelImport.addEventListener("click", () => {
+    importForm.reset();
+    importForm.classList.add("hidden");
+    resetImportPreview();
+  });
+
+  rosterText.addEventListener("input", resetImportPreview);
+
+  rosterFile.addEventListener("change", async () => {
+    resetImportPreview();
+    const file = rosterFile.files && rosterFile.files[0];
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      rosterFile.value = "";
+      showError("Choose a .csv file");
+      return;
+    }
+    if (file.size > 200 * 1024) {
+      rosterFile.value = "";
+      showError("Roster file must be 200 KB or smaller");
+      return;
+    }
+    try {
+      rosterText.value = await file.text();
+    } catch (_error) {
+      rosterFile.value = "";
+      showError("Could not read that file");
+    }
+  });
+
+  importForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = rosterText.value;
+    try {
+      if (!state.importReady) {
+        const result = await request("/api/players/import", {
+          method: "POST",
+          body: JSON.stringify({ text, preview: true }),
+        });
+        renderImportPreview(result);
+        return;
+      }
+      const result = await request("/api/players/import", {
+        method: "POST",
+        body: JSON.stringify({ text, preview: false }),
+      });
+      const imported = result.imported || [];
+      importForm.reset();
+      importForm.classList.add("hidden");
+      resetImportPreview();
+      await loadPlayers(imported.length ? imported[0].id : undefined);
+    } catch (error) {
+      resetImportPreview();
+      showError(error.message);
+    }
   });
 
   addForm.addEventListener("submit", async (event) => {
