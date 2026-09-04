@@ -15,7 +15,9 @@ You only need Python 3. No extra packages.
 python3 app.py
 ```
 
-3. In your browser, open [http://127.0.0.1:8765](http://127.0.0.1:8765).
+3. In your browser, open http://127.0.0.1:8765
+
+If you are using a Cursor Cloud Agent, that address is the agent machine, not your laptop. Open the Ports / plug control in Cursor and open port 8765, or clone this repo and run `python3 app.py` on your computer.
 
 Press `Ctrl+C` in the terminal when you want to stop.
 

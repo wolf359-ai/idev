@@ -30,7 +30,7 @@ MAX_NOTE_LEN = 2000
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
 MAX_ROSTER_TEXT_BYTES = 200 * 1024
-HOST = os.environ.get("IDEV_HOST", "127.0.0.1")
+HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
 
@@ -988,7 +988,7 @@ def main() -> None:
     store = Store(DATA_PATH)
     store.seed_demo_if_empty()
     server = make_server(store, HOST, PORT)
-    print(f"idev is running at http://{HOST}:{PORT}", flush=True)
+    print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()
