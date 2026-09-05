@@ -1152,7 +1152,7 @@ textarea {
 
 .skill-metric {
   flex-shrink: 0;
-  text-align: right;
+  text-align: center;
 }
 
 .skill-metric h3 {
@@ -1168,7 +1168,7 @@ textarea {
 
 .skill-metric-input {
   width: 5rem;
-  text-align: right;
+  text-align: center;
   font-size: 1.35rem;
   font-weight: 700;
   line-height: 1.1;
