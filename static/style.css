@@ -661,7 +661,7 @@ h1, h2, h3, p {
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
   align-items: baseline;
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   line-height: 1.25;
   color: var(--ink);
 }
@@ -699,7 +699,7 @@ h1, h2, h3, p {
 }
 
 .drill-freq {
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .drill-remove {
