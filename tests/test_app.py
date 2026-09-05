@@ -191,12 +191,17 @@ class StoreTests(unittest.TestCase):
         self.assertGreaterEqual(record["iterations"], 600_000)
         self.assertNotIn("s3cret-pass", json.dumps(record))
 
-    def test_generated_admin_password_returned_once(self) -> None:
+    def test_default_admin_password_returned_once(self) -> None:
         generated = self.store.ensure_admin_password(None)
-        self.assertIsInstance(generated, str)
-        self.assertTrue(self.store.verify_admin_password(generated))
-        # Already set: no new password is generated.
+        self.assertEqual(generated, "123")
+        self.assertEqual(generated, app.DEFAULT_ADMIN_PASSWORD)
+        self.assertTrue(self.store.verify_admin_password("123"))
+        # Already set: the default is not re-created on later runs.
         self.assertIsNone(self.store.ensure_admin_password(None))
+        # A coach-chosen password still overrides the default.
+        self.assertIsNone(self.store.ensure_admin_password("my-own-pass"))
+        self.assertTrue(self.store.verify_admin_password("my-own-pass"))
+        self.assertFalse(self.store.verify_admin_password("123"))
 
     def test_access_code_roundtrip_and_not_leaked(self) -> None:
         player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})

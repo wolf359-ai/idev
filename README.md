@@ -53,22 +53,26 @@ idev now has a sign-in page with two kinds of access:
 
 ### Coach password
 
-The **first** time you run `app.py`, idev creates a coach password for you and
-prints it once in the terminal, for example:
+The **first** time you run `app.py`, idev sets a default coach password of
+`123` and prints it once in the terminal:
 
 ```
-First-time setup: a coach password was created for you:
-    Qk7c-3fJ8s2A
-Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.
+First-time setup: the default coach password is:
+    123
+Sign in as Coach with it, then set IDEV_ADMIN_PASSWORD to change it.
 ```
 
-Copy that password and use it on the **Coach** tab. It is stored only as a
-salted hash in `data.json`, never in plain text. To choose your own password
-instead, set an environment variable before starting the app:
+Sign in on the **Coach** tab with `123`. It is stored only as a salted hash in
+`data.json`, never in plain text. The default `123` stays in effect until you
+choose your own password by setting an environment variable before starting the
+app:
 
 ```bash
 IDEV_ADMIN_PASSWORD="your-own-password" python3 app.py
 ```
+
+`123` is a deliberately weak default that is convenient for local use. Change it
+with `IDEV_ADMIN_PASSWORD` before running idev anywhere others can reach it.
 
 ### Giving a player access
 

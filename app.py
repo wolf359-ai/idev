@@ -54,6 +54,10 @@ PBKDF2_ITERATIONS = 600_000
 # appropriate (brute force is infeasible) and keeps per-login lookup cheap.
 ACCESS_CODE_BYTES = 18
 GENERATED_ADMIN_BYTES = 12
+# Weak, well-known default coach password used only until the coach picks their
+# own (via IDEV_ADMIN_PASSWORD). Fine for a local, single-user app; change it
+# before exposing idev on a network.
+DEFAULT_ADMIN_PASSWORD = "123"
 LOGIN_MAX_FAILURES = 10
 LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_BLOCK_SECONDS = 5 * 60
@@ -959,10 +963,11 @@ class Store:
         """Ensure a coach password hash exists.
 
         If ``env_password`` is provided it always governs. Otherwise, if no
-        password has ever been set, a strong one is generated and returned once
-        (to print for first-time setup); only its hash is stored. Returns the
-        generated plaintext when one was created, else None. Never stores or
-        returns an existing plaintext.
+        password has ever been set, the default password (``123``) is stored and
+        returned once (to print for first-time setup); only its hash is stored.
+        The default persists until the coach chooses their own via
+        ``IDEV_ADMIN_PASSWORD``. Returns the default plaintext when one was
+        created, else None. Never stores or returns an existing plaintext.
         """
         with self.lock:
             auth = self.data.setdefault("auth", {})
@@ -974,10 +979,9 @@ class Store:
                 return None
             if isinstance(auth.get("admin"), dict):
                 return None
-            generated = secrets.token_urlsafe(GENERATED_ADMIN_BYTES)
-            auth["admin"] = hash_password(generated)
+            auth["admin"] = hash_password(DEFAULT_ADMIN_PASSWORD)
             self._save()
-            return generated
+            return DEFAULT_ADMIN_PASSWORD
 
     def verify_admin_password(self, password: object) -> bool:
         with self.lock:
@@ -1461,9 +1465,9 @@ def main() -> None:
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
     if generated_password:
         print("", flush=True)
-        print("First-time setup: a coach password was created for you:", flush=True)
+        print("First-time setup: the default coach password is:", flush=True)
         print(f"    {generated_password}", flush=True)
-        print("Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.", flush=True)
+        print("Sign in as Coach with it, then set IDEV_ADMIN_PASSWORD to change it.", flush=True)
         print("", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:
