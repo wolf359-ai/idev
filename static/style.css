@@ -568,8 +568,6 @@ h1, h2, h3, p {
   padding-left: 1.05rem;
   display: grid;
   gap: 0.22rem;
-  max-height: 220px;
-  overflow-y: auto;
 }
 
 .drill-item {
