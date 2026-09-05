@@ -1206,7 +1206,21 @@
     const pts = s.map((v, i) => [xAt(i), yAt(v)]);
     const lineD = smoothPathD(pts);
     const areaD = `${lineD} L ${W},${H} L 0,${H} Z`;
-    const area = svgEl("path", { d: areaD, class: "trend-area" });
+    // A vertical gradient fades the fill from the tile accent (top) to
+    // transparent (bottom). currentColor resolves to each tile's accent.
+    const gradId = `trend-grad-${Math.random().toString(36).slice(2, 9)}`;
+    const gradient = svgEl(
+      "linearGradient",
+      { id: gradId, x1: "0", y1: "0", x2: "0", y2: "1" },
+      svgEl("stop", { offset: "0", "stop-color": "currentColor", "stop-opacity": "0.5" }),
+      svgEl("stop", { offset: "1", "stop-color": "currentColor", "stop-opacity": "0" }),
+    );
+    const defs = svgEl("defs", {}, gradient);
+    const area = svgEl("path", {
+      d: areaD,
+      class: "trend-area",
+      style: `fill: url(#${gradId}); opacity: 1;`,
+    });
     const line = svgEl("path", {
       d: lineD,
       class: "trend-line",
@@ -1224,6 +1238,7 @@
         preserveAspectRatio: "none",
         "aria-hidden": "true",
       },
+      defs,
       area,
       line,
     );
