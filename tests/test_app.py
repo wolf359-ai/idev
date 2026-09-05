@@ -44,6 +44,31 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "Pat", "position": "Quarterback"})
 
+    def test_secondary_position(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "secondary_position": "Second Base"}
+        )
+        self.assertEqual(created["secondary_position"], "Second Base")
+        # Omitted or blank secondary position stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["secondary_position"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "secondary_position": "  "}
+        )
+        self.assertEqual(blank["secondary_position"], "")
+        # Updating just the secondary position leaves the primary intact.
+        updated = self.store.update_player(
+            created["id"], {"secondary_position": "Third Base"}
+        )
+        self.assertEqual(updated["position"], "Shortstop")
+        self.assertEqual(updated["secondary_position"], "Third Base")
+
+    def test_rejects_unknown_secondary_position(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "secondary_position": "Quarterback"}
+            )
+
     def test_rejects_bad_jersey(self) -> None:
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "Pat", "position": "Utility", "number": 100})

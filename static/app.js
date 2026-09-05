@@ -201,6 +201,14 @@
     return SCORE_COLORS[level];
   }
 
+  // "Shortstop · Second Base" when a secondary position is set, else just primary.
+  function positionLabel(player) {
+    const primary = player.position || "";
+    const secondary = player.secondary_position || "";
+    if (primary && secondary) return `${primary} · ${secondary}`;
+    return primary || secondary;
+  }
+
   function renderRoster() {
     playerList.replaceChildren();
     if (!state.players.length) {
@@ -701,7 +709,7 @@
       { className: "card hero-id" },
       el("div", { className: "hero-num" }, jersey(player) || "—"),
       el("div", { className: "hero-name" }, player.name),
-      el("div", { className: "hero-sub" }, player.position || "Athlete"),
+      el("div", { className: "hero-sub" }, positionLabel(player) || "Athlete"),
       el("div", { className: "tags" }, tags),
       actions.length ? el("div", { className: "row", style: "margin-top:0.7rem" }, actions) : null,
     );
@@ -953,8 +961,15 @@
     if (name === null) {
       return;
     }
-    const position = window.prompt("Position", state.detail.position);
+    const position = window.prompt("Primary position", state.detail.position);
     if (position === null) {
+      return;
+    }
+    const secondaryPosition = window.prompt(
+      "Secondary position (blank for none)",
+      state.detail.secondary_position || "",
+    );
+    if (secondaryPosition === null) {
       return;
     }
     const number = window.prompt("Jersey number (blank to clear)", state.detail.number ?? "");
@@ -964,7 +979,12 @@
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
         method: "PUT",
-        body: JSON.stringify({ name, position, number }),
+        body: JSON.stringify({
+          name,
+          position,
+          secondary_position: secondaryPosition,
+          number,
+        }),
       });
       await loadPlayers(state.selectedId);
     } catch (error) {
@@ -1213,6 +1233,7 @@
         body: JSON.stringify({
           name: form.get("name"),
           position: form.get("position"),
+          secondary_position: form.get("secondary_position"),
           number: form.get("number"),
         }),
       });

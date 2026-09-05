@@ -214,6 +214,15 @@ def parse_position(value: object) -> str:
     return position
 
 
+def parse_optional_position(value: object) -> str:
+    """Secondary position is optional; blank means none."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    return parse_position(value)
+
+
 def normalize_position(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         return "Utility"
@@ -460,7 +469,15 @@ def build_stats_view(raw: object) -> dict:
     }
 
 
-PUBLIC_PLAYER_FIELDS = ("id", "name", "position", "number", "created_at", "stats")
+PUBLIC_PLAYER_FIELDS = (
+    "id",
+    "name",
+    "position",
+    "secondary_position",
+    "number",
+    "created_at",
+    "stats",
+)
 
 
 def public_player(player: dict) -> dict:
@@ -662,6 +679,7 @@ class Store:
                 "id": new_id("player"),
                 "name": "Alex Rivera",
                 "position": "Shortstop",
+                "secondary_position": "Second Base",
                 "number": 7,
                 "created_at": earlier,
                 "stats": {
@@ -692,6 +710,7 @@ class Store:
                 "id": new_id("player"),
                 "name": "Jordan Blake",
                 "position": "Pitcher",
+                "secondary_position": "First Base",
                 "number": 21,
                 "created_at": earlier,
                 "stats": {
@@ -828,6 +847,7 @@ class Store:
             "id": new_id("player"),
             "name": clean_text(payload.get("name"), "Player name", MAX_NAME_LEN),
             "position": parse_position(payload.get("position")),
+            "secondary_position": parse_optional_position(payload.get("secondary_position")),
             "number": parse_number(payload.get("number")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
@@ -869,6 +889,7 @@ class Store:
                         "id": new_id("player"),
                         "name": candidate["name"],
                         "position": candidate["position"],
+                        "secondary_position": candidate.get("secondary_position", ""),
                         "number": candidate["number"],
                         "created_at": now,
                         "stats": empty_stat_counts(),
@@ -892,6 +913,10 @@ class Store:
                 player["name"] = clean_text(payload.get("name"), "Player name", MAX_NAME_LEN)
             if "position" in payload:
                 player["position"] = parse_position(payload.get("position"))
+            if "secondary_position" in payload:
+                player["secondary_position"] = parse_optional_position(
+                    payload.get("secondary_position")
+                )
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
             self._save()
