@@ -171,6 +171,48 @@ class StoreTests(unittest.TestCase):
                 {"name": "Lee", "position": "Utility", "exit_velo": 250}
             )
 
+    def test_distance(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "distance": "220.5"}
+        )
+        self.assertEqual(created["distance"], 220.5)
+        # Omitted or blank distance stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["distance"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "distance": "  "}
+        )
+        self.assertEqual(blank["distance"], "")
+        updated = self.store.update_player(created["id"], {"distance": 240})
+        self.assertEqual(updated["distance"], 240.0)
+        cleared = self.store.update_player(created["id"], {"distance": ""})
+        self.assertEqual(cleared["distance"], "")
+
+    def test_rejects_invalid_distance(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "distance": "far"}
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Lee", "position": "Utility", "distance": 1200}
+            )
+
+    def test_personal_record_distance_higher_is_better(self) -> None:
+        created = self.store.add_player({"name": "Sky", "position": "Shortstop"})
+        pid = created["id"]
+        # First value is a baseline, not a PR.
+        self.store.update_player(pid, {"distance": "200"})
+        self.assertEqual(len(self.store.get_player(pid)["records"]), 0)
+        # A longer hit is a PR with a positive delta.
+        self.store.update_player(pid, {"distance": "230.5"})
+        detail = self.store.get_player(pid)
+        self.assertEqual(len(detail["records"]), 1)
+        self.assertEqual(detail["records"][0]["metric"], "distance")
+        self.assertEqual(detail["records"][0]["label"], "Distance")
+        self.assertEqual(detail["records"][0]["unit"], "Feet")
+        self.assertEqual(detail["records"][0]["delta"], 30.5)
+
     def test_base_time(self) -> None:
         created = self.store.add_player(
             {"name": "Sky", "position": "Shortstop", "base_time": "3.45"}

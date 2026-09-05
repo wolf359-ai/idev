@@ -48,6 +48,7 @@ PR_METRICS = {
     "exit_velo": {"label": "Exit Velo", "unit": "MPH", "higher_better": True},
     "pitch_velo": {"label": "Velocity", "unit": "MPH", "higher_better": True},
     "throw_speed": {"label": "Throw Speed", "unit": "MPH", "higher_better": True},
+    "distance": {"label": "Distance", "unit": "Feet", "higher_better": True},
     "base_time": {"label": "Running speed", "unit": "s", "higher_better": False},
 }
 # Keep this many timestamped snapshots in data_backups/ so an accidental
@@ -382,6 +383,23 @@ def parse_base_time(value: object) -> object:
     if seconds < 0 or seconds > 60:
         raise ValueError("Time must be between 0 and 60 seconds")
     return round(seconds, 2)
+
+
+def parse_distance(value: object) -> object:
+    """Optional hitting distance in feet; blank means unset, otherwise 0-1000."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        feet = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Distance must be a number")
+    if feet != feet or feet in (float("inf"), float("-inf")):
+        raise ValueError("Distance must be a number")
+    if feet < 0 or feet > 1000:
+        raise ValueError("Distance must be between 0 and 1000 feet")
+    return round(feet, 2)
 
 
 def parse_optional_contact(value: object) -> str:
@@ -773,6 +791,7 @@ PUBLIC_PLAYER_FIELDS = (
     "base_time",
     "pitch_velo",
     "throw_speed",
+    "distance",
     "created_at",
     "stats",
 )
@@ -1285,6 +1304,7 @@ class Store:
             "base_time": parse_base_time(payload.get("base_time")),
             "pitch_velo": parse_pitch_velo(payload.get("pitch_velo")),
             "throw_speed": parse_throw_speed(payload.get("throw_speed")),
+            "distance": parse_distance(payload.get("distance")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
             "drills": [],
@@ -1375,6 +1395,9 @@ class Store:
             if "throw_speed" in payload:
                 player["throw_speed"] = parse_throw_speed(payload.get("throw_speed"))
                 self._record_pr(player, "throw_speed", player["throw_speed"])
+            if "distance" in payload:
+                player["distance"] = parse_distance(payload.get("distance"))
+                self._record_pr(player, "distance", player["distance"])
             self._save()
             return public_player(player)
 

@@ -1572,6 +1572,15 @@
       step: 0.01,
       aria: "Exit velocity in MPH",
     },
+    Power: {
+      key: "distance",
+      heading: "Distance",
+      unit: "Feet",
+      min: 0,
+      max: 1000,
+      step: 0.01,
+      aria: "Hitting distance in feet",
+    },
     "Base running": {
       key: "base_time",
       heading: "Time",
