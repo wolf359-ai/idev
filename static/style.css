@@ -715,6 +715,7 @@ textarea {
 #add-player-form .btn-primary,
 #add-staff-form .btn-primary,
 #open-add-staff,
+.staff-pw-set,
 #preview-roster {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
@@ -723,6 +724,7 @@ textarea {
 #add-player-form .btn-primary:hover,
 #add-staff-form .btn-primary:hover,
 #open-add-staff:hover,
+.staff-pw-set:hover,
 #preview-roster:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
 }
@@ -813,6 +815,60 @@ textarea {
   flex: none;
   padding: 0.3rem 0.55rem;
   font-size: 0.7rem;
+}
+
+/* Manage staff access modal. */
+.modal-wide {
+  width: min(540px, 94vw);
+}
+
+.staff-manage-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.staff-manage-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  min-width: 0;
+}
+
+.staff-manage-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.staff-pw-input {
+  flex: 1 1 8rem;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+}
+
+.staff-manage-controls .btn {
+  flex: none;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+}
+
+.staff-manage-item .staff-meta {
+  white-space: normal;
 }
 
 .btn-danger {

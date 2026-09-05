@@ -28,6 +28,10 @@
   const staffModal = document.getElementById("staff-modal");
   const openStaffBtn = document.getElementById("open-add-staff");
   const cancelStaff = document.getElementById("cancel-add-staff");
+  const staffManageModal = document.getElementById("staff-manage-modal");
+  const staffManageList = document.getElementById("staff-manage-list");
+  const openManageStaffBtn = document.getElementById("open-manage-staff");
+  const closeManageStaffBtn = document.getElementById("close-manage-staff");
 
   const state = {
     players: [],
@@ -263,18 +267,10 @@
       return;
     }
     state.staff.forEach((member) => {
-      const meta = [member.role, member.contact].filter(Boolean).join(" · ");
-      const remove = el(
-        "button",
-        {
-          type: "button",
-          className: "btn btn-danger staff-remove",
-          title: `Remove ${member.name}`,
-          "aria-label": `Remove ${member.name}`,
-          onClick: () => removeStaff(member),
-        },
-        "Remove",
-      );
+      const details = [member.role, member.contact].filter(Boolean).join(" · ");
+      const meta = [details, member.has_password ? "Password set" : "No password"]
+        .filter(Boolean)
+        .join(" · ");
       const info = el(
         "div",
         { className: "staff-info" },
@@ -286,7 +282,7 @@
         ),
         meta ? el("div", { className: "meta staff-meta" }, meta) : null,
       );
-      staffList.append(el("li", { className: "staff-item" }, info, remove));
+      staffList.append(el("li", { className: "staff-item" }, info));
     });
   }
 
@@ -297,9 +293,127 @@
     try {
       await request(`/api/staff/${encodeURIComponent(member.id)}`, { method: "DELETE" });
       await loadStaff();
+      renderManageStaff();
     } catch (error) {
       showError(error.message);
     }
+  }
+
+  async function setStaffPassword(member, password) {
+    const value = (password || "").trim();
+    if (value.length < 4) {
+      showError("Password must be at least 4 characters");
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}/password`, {
+        method: "PUT",
+        body: JSON.stringify({ password: value }),
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function clearStaffPassword(member) {
+    if (!window.confirm(`Clear ${member.name}'s access password?`)) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}/password`, {
+        method: "DELETE",
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function renderManageStaff() {
+    if (!staffManageList) {
+      return;
+    }
+    staffManageList.replaceChildren();
+    if (!state.staff.length) {
+      staffManageList.append(
+        el("li", { className: "staff-empty meta" }, "No staff added yet."),
+      );
+      return;
+    }
+    state.staff.forEach((member) => {
+      const details = [member.role, member.contact].filter(Boolean).join(" · ");
+      const info = el(
+        "div",
+        { className: "staff-info" },
+        el(
+          "div",
+          { className: "staff-top" },
+          el("strong", {}, member.name),
+          el("span", { className: "staff-access" }, member.access_level || ""),
+        ),
+        el(
+          "div",
+          { className: "meta staff-meta" },
+          [details, member.has_password ? "Password set" : "No password"]
+            .filter(Boolean)
+            .join(" · "),
+        ),
+      );
+
+      const pwInput = el("input", {
+        type: "password",
+        className: "staff-pw-input",
+        placeholder: member.has_password ? "New password" : "Set password",
+        maxLength: 128,
+        autocomplete: "new-password",
+      });
+      const setBtn = el(
+        "button",
+        {
+          type: "button",
+          className: "btn btn-primary staff-pw-set",
+          onClick: () => {
+            setStaffPassword(member, pwInput.value).then(() => {
+              pwInput.value = "";
+            });
+          },
+        },
+        member.has_password ? "Update" : "Set",
+      );
+      const controls = [pwInput, setBtn];
+      if (member.has_password) {
+        controls.push(
+          el(
+            "button",
+            {
+              type: "button",
+              className: "btn staff-pw-clear",
+              onClick: () => clearStaffPassword(member),
+            },
+            "Clear",
+          ),
+        );
+      }
+      controls.push(
+        el(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-danger staff-remove",
+            onClick: () => removeStaff(member),
+          },
+          "Remove",
+        ),
+      );
+
+      const controlRow = el("div", { className: "staff-manage-controls" }, ...controls);
+      staffManageList.append(
+        el("li", { className: "staff-manage-item" }, info, controlRow),
+      );
+    });
   }
 
   function scoreDots(skillId, current, readOnly) {
@@ -1271,6 +1385,35 @@
       closeStaffModal();
     }
   });
+
+  function openManageStaffModal() {
+    renderManageStaff();
+    if (typeof staffManageModal.showModal === "function") {
+      staffManageModal.showModal();
+    } else {
+      staffManageModal.setAttribute("open", "");
+    }
+  }
+
+  function closeManageStaffModal() {
+    if (staffManageModal.open) {
+      staffManageModal.close();
+    }
+  }
+
+  if (openManageStaffBtn) {
+    openManageStaffBtn.addEventListener("click", openManageStaffModal);
+  }
+  if (closeManageStaffBtn) {
+    closeManageStaffBtn.addEventListener("click", closeManageStaffModal);
+  }
+  if (staffManageModal) {
+    staffManageModal.addEventListener("click", (event) => {
+      if (event.target === staffManageModal) {
+        closeManageStaffModal();
+      }
+    });
+  }
 
   cancelAdd.addEventListener("click", () => {
     addForm.reset();

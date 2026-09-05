@@ -163,6 +163,7 @@
             <ul id="staff-list" class="staff-list"></ul>
             <div class="row">
               <button type="button" id="open-add-staff" class="btn btn-primary">Add staff</button>
+              <button type="button" id="open-manage-staff" class="btn">Manage access</button>
             </div>
           </div>
         </details>
@@ -206,6 +207,15 @@
           <button type="button" id="cancel-add-staff" class="btn">Cancel</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="staff-manage-modal" class="modal modal-wide" aria-labelledby="staff-manage-title">
+      <h3 class="modal-title" id="staff-manage-title">Manage staff access</h3>
+      <p class="meta">Set or clear access passwords, or remove a coach or staff member.</p>
+      <ul id="staff-manage-list" class="staff-manage-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-manage-staff" class="btn">Done</button>
+      </div>
     </dialog>
   </div>
   <script src="/static/app.js"></script>

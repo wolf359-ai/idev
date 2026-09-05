@@ -130,6 +130,31 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_staff({"name": "Pat", "role": "Coach", "access_level": "Emperor"})
 
+    def test_staff_password_set_and_clear(self) -> None:
+        member = self.store.add_staff(
+            {"name": "Pat", "role": "Coach", "access_level": "Full"}
+        )
+        # New staff have no password, and the hash never appears in the view.
+        self.assertFalse(member["has_password"])
+        self.assertNotIn("password_hash", member)
+
+        updated = self.store.set_staff_password(member["id"], "secret1")
+        self.assertTrue(updated["has_password"])
+        self.assertNotIn("password_hash", updated)
+
+        listed = self.store.list_staff()[0]
+        self.assertTrue(listed["has_password"])
+        self.assertNotIn("password_hash", listed)
+
+        cleared = self.store.clear_staff_password(member["id"])
+        self.assertFalse(cleared["has_password"])
+
+        # Too-short passwords are rejected and unknown ids raise KeyError.
+        with self.assertRaises(ValueError):
+            self.store.set_staff_password(member["id"], "no")
+        with self.assertRaises(KeyError):
+            self.store.set_staff_password("staff-missing", "secret1")
+
     def test_rejects_bad_jersey(self) -> None:
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "Pat", "position": "Utility", "number": 100})
@@ -606,6 +631,12 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
+        # A player cannot manage staff passwords either.
+        status, _payload = self.call(
+            "PUT", f"/api/staff/{created['id']}/password", {"password": "secret1"}
+        )
+        self.assertEqual(status, 403)
+
         # Back as coach, deletion works.
         self.sign_out()
         self.login_coach()
@@ -613,6 +644,34 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, listing = self.call("GET", "/api/staff")
         self.assertFalse(any(m["id"] == created["id"] for m in listing["staff"]))
+
+    def test_staff_password_endpoints(self) -> None:
+        status, created = self.call(
+            "POST",
+            "/api/staff",
+            {"name": "Dana Kim", "role": "Coach", "access_level": "Full"},
+        )
+        self.assertEqual(status, 201)
+        self.assertFalse(created["has_password"])
+
+        status, updated = self.call(
+            "PUT", f"/api/staff/{created['id']}/password", {"password": "secret1"}
+        )
+        self.assertEqual(status, 200)
+        self.assertTrue(updated["has_password"])
+        self.assertNotIn("password_hash", updated)
+
+        # Too-short passwords are rejected.
+        status, _payload = self.call(
+            "PUT", f"/api/staff/{created['id']}/password", {"password": "no"}
+        )
+        self.assertEqual(status, 400)
+
+        status, cleared = self.call(
+            "DELETE", f"/api/staff/{created['id']}/password"
+        )
+        self.assertEqual(status, 200)
+        self.assertFalse(cleared["has_password"])
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf

@@ -273,6 +273,17 @@ def parse_staff(payload: object) -> dict:
     }
 
 
+def parse_staff_password(value: object) -> str:
+    """Validate a staff member's access password."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("Password is required")
+    if len(value) < 4:
+        raise ValueError("Password must be at least 4 characters")
+    if len(value) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    return value
+
+
 def normalize_position(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         return "Utility"
@@ -534,6 +545,16 @@ PUBLIC_PLAYER_FIELDS = (
 def public_player(player: dict) -> dict:
     """Copy only non-sensitive player fields (never the access-code hash)."""
     return {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+
+
+PUBLIC_STAFF_FIELDS = ("id", "name", "role", "contact", "access_level", "created_at")
+
+
+def public_staff(member: dict) -> dict:
+    """Copy non-sensitive staff fields; never expose the password hash."""
+    view = {key: member.get(key) for key in PUBLIC_STAFF_FIELDS if key in member}
+    view["has_password"] = bool(member.get("password_hash"))
+    return view
 
 
 def hash_password(password: str, *, iterations: int = PBKDF2_ITERATIONS, salt: bytes | None = None) -> dict:
@@ -1063,9 +1084,15 @@ class Store:
             self._save()
 
     # -- staff -------------------------------------------------------------
+    def _staff_unlocked(self, staff_id: str) -> dict:
+        for member in self.data["staff"]:
+            if member.get("id") == staff_id:
+                return member
+        raise KeyError("Staff member not found")
+
     def list_staff(self) -> list[dict]:
         with self.lock:
-            return [dict(member) for member in self.data["staff"]]
+            return [public_staff(member) for member in self.data["staff"]]
 
     def add_staff(self, payload: dict) -> dict:
         fields = parse_staff(payload)
@@ -1073,7 +1100,24 @@ class Store:
         with self.lock:
             self.data["staff"].append(member)
             self._save()
-            return dict(member)
+            return public_staff(member)
+
+    def set_staff_password(self, staff_id: str, password: object) -> dict:
+        """Store only a salted hash of the staff member's access password."""
+        secret = parse_staff_password(password)
+        record = hash_password(secret)
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member["password_hash"] = record
+            self._save()
+            return public_staff(member)
+
+    def clear_staff_password(self, staff_id: str) -> dict:
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member.pop("password_hash", None)
+            self._save()
+            return public_staff(member)
 
     def delete_staff(self, staff_id: str) -> None:
         with self.lock:
@@ -1539,6 +1583,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             if player_match:
                 send_json(self, 200, self.store.update_player(player_match.group(1), payload))
                 return
+            staff_pw_match = re.fullmatch(
+                r"/api/staff/([a-zA-Z0-9_-]{8,64})/password", path
+            )
+            if staff_pw_match:
+                member = self.store.set_staff_password(
+                    staff_pw_match.group(1), payload.get("password")
+                )
+                send_json(self, 200, member)
+                return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
@@ -1570,6 +1623,13 @@ class IdevHandler(BaseHTTPRequestHandler):
             if note_match:
                 self.store.delete_note(note_match.group(1))
                 send_json(self, 200, {"ok": True})
+                return
+            staff_pw_match = re.fullmatch(
+                r"/api/staff/([a-zA-Z0-9_-]{8,64})/password", path
+            )
+            if staff_pw_match:
+                member = self.store.clear_staff_password(staff_pw_match.group(1))
+                send_json(self, 200, member)
                 return
             staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
             if staff_match:
