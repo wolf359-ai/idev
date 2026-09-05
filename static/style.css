@@ -968,7 +968,8 @@ textarea {
   background: linear-gradient(180deg, #38dcf3, #17c1e0);
 }
 
-/* Admin actions (Save player, Preview roster, Add staff) use the orange accent. */
+/* Admin actions (Add/Save player, Preview roster, Add staff) use the orange accent. */
+#open-add-player,
 #add-player-form .btn-primary,
 #add-staff-form .btn-primary,
 #open-add-staff,
@@ -980,6 +981,7 @@ textarea {
   color: #2a1405;
 }
 
+#open-add-player:hover,
 #add-player-form .btn-primary:hover,
 #add-staff-form .btn-primary:hover,
 #open-add-staff:hover,
