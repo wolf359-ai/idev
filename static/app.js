@@ -186,9 +186,17 @@
       : "Preview roster";
   }
 
+  const DOT_PALETTE = ["#22d3ee", "#f5566c", "#34d399", "#3b82f6", "#f6c552", "#a78bfa", "#fb923c"];
+
   function renderRoster() {
     playerList.replaceChildren();
-    state.players.forEach((player) => {
+    if (!state.players.length) {
+      return;
+    }
+    playerList.append(el("li", { className: "player-list-title" }, "Athletes"));
+    state.players.forEach((player, index) => {
+      const accent = DOT_PALETTE[index % DOT_PALETTE.length];
+      const badge = player.number === null || player.number === undefined ? "—" : `#${player.number}`;
       const button = el(
         "button",
         {
@@ -196,8 +204,14 @@
           className: "player-btn" + (player.id === state.selectedId ? " active" : ""),
           onClick: () => selectPlayer(player.id),
         },
-        el("strong", {}, player.name),
-        el("div", { className: "meta" }, [jersey(player), player.position].filter(Boolean).join(" · ")),
+        el("span", { className: "player-dot", style: `background:${accent};color:${accent}` }),
+        el(
+          "span",
+          { className: "player-id" },
+          el("strong", {}, player.name),
+          el("span", { className: "meta" }, player.position || "—"),
+        ),
+        el("span", { className: "player-score" }, badge),
       );
       playerList.append(el("li", {}, button));
     });
@@ -270,8 +284,8 @@
       gridRings.push(
         svgEl("polygon", {
           points: pts,
-          fill: "none",
-          stroke: "#d8cebf",
+          fill: ring === rings ? "rgba(34,211,238,0.03)" : "none",
+          stroke: ring === rings ? "#274152" : "#1c2735",
           "stroke-width": ring === rings ? 1.5 : 1,
         }),
       );
@@ -284,7 +298,7 @@
         y1: center,
         x2: x.toFixed(1),
         y2: y.toFixed(1),
-        stroke: "#d8cebf",
+        stroke: "#1c2735",
         "stroke-width": 1,
       });
     });
@@ -293,8 +307,7 @@
       .map((item, index) => point(index, (item.value || 0) / maxScore).map((n) => n.toFixed(1)).join(","))
       .join(" ");
 
-    const average = items.reduce((sum, item) => sum + item.value, 0) / items.length;
-    const shapeColor = scoreColor(average || 1);
+    const shapeColor = "#22d3ee";
 
     const dots = items.map((item, index) => {
       const [x, y] = point(index, (item.value || 0) / maxScore);
@@ -302,7 +315,7 @@
         cx: x.toFixed(1),
         cy: y.toFixed(1),
         r: 3.5,
-        fill: item.value ? scoreColor(item.value) : "#b9b1a1",
+        fill: item.value ? shapeColor : "#3a4757",
       });
     });
 
@@ -317,7 +330,7 @@
           "text-anchor": anchor,
           "dominant-baseline": "middle",
           "font-size": "11",
-          fill: "#1c211e",
+          fill: "#9fb0c0",
         },
         `${item.label} (${item.value || 0})`,
       );
@@ -386,17 +399,9 @@
       );
     }
 
-    const header = el(
-      "section",
-      { className: "card who" },
-      el(
-        "div",
-        {},
-        el("strong", {}, player.name),
-        el("div", { className: "meta" }, [jersey(player), player.position].filter(Boolean).join(" · ")),
-      ),
-      actions.length ? el("div", { className: "row" }, actions) : null,
-    );
+    const metrics = computeMetrics(player);
+    const hero = renderHero(player, actions, metrics);
+    const statTiles = renderStatTiles(metrics);
 
     const skills = el(
       "section",
@@ -427,7 +432,7 @@
     const radar = el(
       "section",
       { className: "card" },
-      el("h2", {}, "Skill radar"),
+      el("h2", {}, "Performance Profile"),
       el("p", { className: "meta" }, "Strengths and weaknesses across every skill at a glance."),
       el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
     );
@@ -482,8 +487,7 @@
         : el("p", { className: "empty" }, "Rate a skill to start a progress history."),
     );
 
-    const cards = [header, skills, radar, statsCard, progress];
-
+    let notesCard;
     if (readOnly) {
       const noteList = el(
         "ul",
@@ -499,7 +503,7 @@
             )
           : el("li", { className: "empty" }, "No notes yet."),
       );
-      cards.push(el("section", { className: "card" }, el("h2", {}, "Notes"), noteList));
+      notesCard = el("section", { className: "card" }, el("h2", {}, "Notes"), noteList);
     } else {
       const noteForm = el(
         "form",
@@ -530,10 +534,173 @@
             )
           : el("li", { className: "empty" }, "No notes yet."),
       );
-      cards.push(el("section", { className: "card" }, el("h2", {}, "Notes"), noteForm, noteList));
+      notesCard = el("section", { className: "card" }, el("h2", {}, "Notes"), noteForm, noteList);
     }
 
-    main.replaceChildren(...cards);
+    const dash = el(
+      "div",
+      { className: "dash" },
+      el("div", { className: "dash-main" }, skills, statsCard, progress, notesCard),
+      el("div", { className: "dash-side" }, radar),
+    );
+
+    const nodes = [hero];
+    if (statTiles) {
+      nodes.push(statTiles);
+    }
+    nodes.push(dash);
+    main.replaceChildren(...nodes);
+  }
+
+  // Map a 1-5 value to a tile accent color name.
+  function accentForScore(value) {
+    const v = Math.round(Number(value) || 0);
+    return { 1: "red", 2: "orange", 3: "yellow", 4: "lime", 5: "green" }[v] || "cyan";
+  }
+
+  function computeMetrics(player) {
+    const items = player.progress || [];
+    const rated = items.filter((item) => item.current);
+    const values = rated.map((item) => Number(item.current) || 0);
+    const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const overall = Math.round((avg / 5) * 100);
+    let top = null;
+    let low = null;
+    rated.forEach((item) => {
+      const v = Number(item.current) || 0;
+      if (!top || v > top.value) {
+        top = { name: item.skill_name || "Skill", value: v };
+      }
+      if (!low || v < low.value) {
+        low = { name: item.skill_name || "Skill", value: v };
+      }
+    });
+    const spark = items.map((item) => Number(item.current) || 0);
+    const stats = player.stats || {};
+    const findStat = (abbr) => {
+      const groups = [stats.offense || [], stats.defense || []];
+      for (const group of groups) {
+        const found = group.find((s) => (s.abbr || "").toUpperCase() === abbr);
+        if (found && found.display !== undefined && found.display !== null && found.display !== "") {
+          return found.display;
+        }
+      }
+      return null;
+    };
+    return { rated: rated.length, total: items.length, avg, overall, top, low, spark, findStat };
+  }
+
+  function metricTile(opts) {
+    const children = [
+      el("span", { className: "ribbon" }),
+      el("div", { className: "tile-label" }, opts.label),
+      el(
+        "div",
+        {},
+        el("span", { className: "tile-value" }, opts.value),
+        opts.unit ? el("span", { className: "tile-unit" }, opts.unit) : null,
+      ),
+    ];
+    if (opts.spark && opts.spark.length) {
+      children.push(
+        el(
+          "div",
+          { className: "spark" },
+          opts.spark.map((v) =>
+            el("i", { style: `height:${Math.max(10, Math.round(((Number(v) || 0) / 5) * 100))}%` }),
+          ),
+        ),
+      );
+    }
+    if (opts.foot) {
+      children.push(el("div", { className: "tile-foot" }, opts.foot));
+    }
+    return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
+  }
+
+  function renderHero(player, actions, m) {
+    const tags = [el("span", { className: "tag on" }, `Overall ${m.overall}%`)];
+    if (player.has_access_code) {
+      tags.push(el("span", { className: "tag on" }, "Access on"));
+    } else {
+      tags.push(el("span", { className: "tag" }, "No access code"));
+    }
+    const idPanel = el(
+      "section",
+      { className: "card hero-id" },
+      el("div", { className: "hero-num" }, jersey(player) || "—"),
+      el("div", { className: "hero-name" }, player.name),
+      el("div", { className: "hero-sub" }, player.position || "Athlete"),
+      el("div", { className: "tags" }, tags),
+      actions.length ? el("div", { className: "row", style: "margin-top:0.7rem" }, actions) : null,
+    );
+
+    const tiles = el(
+      "div",
+      { className: "tiles" },
+      metricTile({
+        label: "Overall",
+        value: m.overall,
+        unit: "%",
+        accent: "cyan",
+        spark: m.spark.length ? m.spark : null,
+        foot: `${m.rated}/${m.total} skills rated`,
+      }),
+      metricTile({
+        label: "Avg Rating",
+        value: m.avg ? m.avg.toFixed(1) : "0.0",
+        unit: "/5",
+        accent: accentForScore(m.avg),
+        foot: "Across rated skills",
+      }),
+      metricTile({
+        label: "Skills Rated",
+        value: m.rated,
+        unit: `/ ${m.total}`,
+        accent: "blue",
+        foot: m.total ? `${Math.round((m.rated / m.total) * 100)}% coverage` : "No skills yet",
+      }),
+      metricTile({
+        label: "Top Skill",
+        value: m.top ? m.top.value : "—",
+        unit: m.top ? "/5" : "",
+        accent: "green",
+        foot: m.top ? m.top.name : "Rate a skill",
+      }),
+      metricTile({
+        label: "Focus Area",
+        value: m.low ? m.low.value : "—",
+        unit: m.low ? "/5" : "",
+        accent: m.low ? accentForScore(m.low.value) : "orange",
+        foot: m.low ? m.low.name : "Rate a skill",
+      }),
+    );
+
+    return el("div", { className: "hero" }, idPanel, tiles);
+  }
+
+  // Secondary tile row from GameChanger computed stats, when present.
+  function renderStatTiles(m) {
+    const specs = [
+      { abbr: "AVG", label: "Batting Avg", accent: "yellow" },
+      { abbr: "OBP", label: "On-Base %", accent: "cyan" },
+      { abbr: "SLG", label: "Slugging", accent: "orange" },
+      { abbr: "OPS", label: "OPS", accent: "lime" },
+      { abbr: "FLD%", label: "Fielding %", accent: "green" },
+    ];
+    const tiles = specs
+      .map((spec) => {
+        const display = m.findStat(spec.abbr);
+        if (display === null) {
+          return null;
+        }
+        return metricTile({ label: spec.label, value: display, accent: spec.accent, foot: "GameChanger" });
+      })
+      .filter(Boolean);
+    if (!tiles.length) {
+      return null;
+    }
+    return el("div", { className: "tiles" }, tiles);
   }
 
   function statsGroup(title, items) {
