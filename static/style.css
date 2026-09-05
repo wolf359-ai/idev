@@ -143,13 +143,12 @@ h1, h2, h3, p {
   margin-bottom: 0.5rem;
 }
 
-/* Collapsible admin section (Import roster / Add player). */
+/* Collapsible admin section styled like a Cursor hover-highlight row:
+   no frame by default, a soft rounded highlight on hover, expands on click. */
 .admin {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #0d1420, #0a0f17);
-  margin-bottom: 0.75rem;
-  overflow: hidden;
+  border: none;
+  background: none;
+  margin-bottom: 0.5rem;
 }
 
 .admin-summary {
@@ -157,16 +156,17 @@ h1, h2, h3, p {
   cursor: pointer;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.6rem 0.75rem;
+  gap: 0.45rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 8px;
   font-size: 0.68rem;
   letter-spacing: 0.16em;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--muted);
+  background: transparent;
   user-select: none;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.12s ease, background 0.12s ease;
 }
 
 .admin-summary::-webkit-details-marker {
@@ -175,15 +175,22 @@ h1, h2, h3, p {
 
 .admin-summary:hover {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.06);
 }
 
+.admin[open] .admin-summary {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Small chevron that rotates open, placed right after the label. */
 .admin-caret {
   width: 0;
   height: 0;
-  border-left: 5px solid transparent;
-  border-right: 5px solid transparent;
-  border-top: 6px solid currentColor;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid currentColor;
+  opacity: 0.75;
   transition: transform 0.18s ease;
 }
 
@@ -191,15 +198,22 @@ h1, h2, h3, p {
   transform: rotate(180deg);
 }
 
-.admin[open] .admin-summary {
-  border-bottom: 1px solid var(--line);
-  color: var(--ink);
-}
-
 .admin-body {
-  padding: 0.7rem 0.75rem;
+  padding: 0.55rem 0.5rem 0.2rem;
   display: grid;
   gap: 0.6rem;
+  animation: admin-reveal 0.16s ease;
+}
+
+@keyframes admin-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .admin-actions {
