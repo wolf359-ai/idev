@@ -94,7 +94,7 @@ over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is marked
 - **Players** — name, position, and jersey number
 - **Roster import** — preview and import players from a GameChanger Stats CSV or pasted list
 - **Skills** — hitting, fielding, throwing, and other softball skills
-- **Ratings** — tap 1–5 on a skill; each tap is saved as a new rating
+- **Ratings** — click 1–5 on a skill; click the left half of a circle for a half point (e.g. 3.5). Each click is saved as a new rating
 - **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
 - **Skill radar** — a spider chart of every skill's current rating, so strengths and weaknesses stand out at a glance
 - **Notes** — short coaching notes for a player

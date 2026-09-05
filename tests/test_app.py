@@ -75,6 +75,28 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_rating(player["id"], {"skill_id": skill["id"], "score": 6})
 
+    def test_accepts_half_step_scores(self) -> None:
+        skill = self.store.add_skill("Slap")
+        player = self.store.add_player({"name": "Dana", "position": "Utility"})
+        first = self.store.add_rating(player["id"], {"skill_id": skill["id"], "score": 2})
+        self.assertEqual(first["score"], 2)
+        half = self.store.add_rating(player["id"], {"skill_id": skill["id"], "score": 3.5})
+        self.assertEqual(half["score"], 3.5)
+        detail = self.store.get_player(player["id"])
+        entry = next(item for item in detail["progress"] if item["skill_id"] == skill["id"])
+        self.assertEqual(entry["current"], 3.5)
+        self.assertEqual(entry["delta"], 1.5)
+        # Whole numbers stay ints, not floats.
+        whole = self.store.add_rating(player["id"], {"skill_id": skill["id"], "score": 4})
+        self.assertIsInstance(whole["score"], int)
+
+    def test_rejects_non_half_step_scores(self) -> None:
+        skill = self.store.add_skill("Bunt")
+        player = self.store.add_player({"name": "Pat", "position": "Utility"})
+        for bad in (3.3, 0.5, 5.5, 0):
+            with self.assertRaises(ValueError):
+                self.store.add_rating(player["id"], {"skill_id": skill["id"], "score": bad})
+
     def test_seed_demo_only_once(self) -> None:
         self.store.seed_demo_if_empty()
         self.store.seed_demo_if_empty()

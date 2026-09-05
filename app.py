@@ -192,14 +192,19 @@ def parse_number(value: object) -> int | None:
     return number
 
 
-def parse_score(value: object) -> int:
+def parse_score(value: object) -> float:
     try:
-        score = int(value)
+        score = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Rating must be a whole number from 1 to 5") from exc
-    if score < 1 or score > 5:
-        raise ValueError("Rating must be a whole number from 1 to 5")
-    return score
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5") from exc
+    halves = round(score * 2)
+    if abs(score * 2 - halves) > 1e-9:
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5")
+    if halves < 2 or halves > 10:
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5")
+    score = halves / 2
+    # Keep whole numbers as ints so stored scores and JSON stay clean.
+    return int(score) if score.is_integer() else score
 
 
 def parse_position(value: object) -> str:
@@ -1036,8 +1041,10 @@ def build_progress(skills: list[dict], ratings: list[dict]) -> list[dict]:
         current = history[-1]["score"] if history else None
         first = history[0]["score"] if history else None
         delta = None
-        if isinstance(current, int) and isinstance(first, int):
-            delta = current - first
+        if isinstance(current, (int, float)) and isinstance(first, (int, float)):
+            delta = round(current - first, 1)
+            if float(delta).is_integer():
+                delta = int(delta)
         progress.append(
             {
                 "skill_id": skill_id,

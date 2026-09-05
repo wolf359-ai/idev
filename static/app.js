@@ -219,20 +219,31 @@
 
   function scoreDots(skillId, current, readOnly) {
     const row = el("div", { className: "dots", role: "group", "aria-label": "Rate 1 to 5" });
-    const level = current ? Math.max(1, Math.min(5, Number(current))) : 0;
-    for (let score = 1; score <= 5; score += 1) {
-      const filled = current && score <= current;
+    const value = current ? Math.max(0, Math.min(5, Number(current))) : 0;
+    const level = value ? Math.max(1, Math.min(5, Math.round(value))) : 0;
+    for (let dot = 1; dot <= 5; dot += 1) {
+      let cls = "dot";
+      if (value >= dot) {
+        cls += ` on full score-${level}`;
+      } else if (value >= dot - 0.5) {
+        cls += ` on half score-${level}`;
+      }
       const attrs = {
         type: "button",
-        className: "dot" + (filled ? ` on score-${level}` : ""),
-        title: `Rate ${score}`,
-        "aria-label": `Rate ${score} out of 5`,
+        className: cls,
+        title: `Rate ${dot} (click left half for ${dot - 0.5})`,
+        "aria-label": `Rate up to ${dot} out of 5`,
       };
       if (readOnly) {
         attrs.disabled = true;
         attrs.className += " static";
       } else {
-        attrs.onClick = () => saveRating(skillId, score);
+        attrs.onClick = (event) => {
+          const target = event.currentTarget;
+          const rect = target.getBoundingClientRect();
+          const leftHalf = event.clientX - rect.left < rect.width / 2;
+          saveRating(skillId, leftHalf ? dot - 0.5 : dot);
+        };
       }
       row.append(el("button", attrs));
     }
@@ -412,7 +423,7 @@
         { className: "meta" },
         readOnly
           ? "Your latest rating for each skill (1–5)."
-          : "Tap a circle to save a new rating (1–5). Older ratings stay in Progress.",
+          : "Click a circle to rate (1–5); click its left half for a half point (e.g. 3.5). Older ratings stay in Progress.",
       ),
       el(
         "div",

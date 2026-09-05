@@ -661,38 +661,39 @@ textarea {
 }
 
 .dot.on {
-  background: var(--cyan);
-  border-color: var(--cyan);
+  --dot-color: var(--cyan);
+  background: var(--dot-color);
+  border-color: var(--dot-color);
+}
+
+/* Half rating: fill only the left half of the circle. */
+.dot.on.half {
+  background: linear-gradient(90deg, var(--dot-color) 0 50%, #0b1019 50% 100%);
 }
 
 /* Rating dots shift from red (weak) to green (strong) with the current score. */
 .dot.on.score-1 {
-  background: hsl(352, 85%, 60%);
-  border-color: hsl(352, 85%, 60%);
+  --dot-color: hsl(352, 85%, 60%);
   box-shadow: 0 0 8px hsla(352, 85%, 60%, 0.5);
 }
 
 .dot.on.score-2 {
-  background: hsl(28, 90%, 58%);
-  border-color: hsl(28, 90%, 58%);
+  --dot-color: hsl(28, 90%, 58%);
   box-shadow: 0 0 8px hsla(28, 90%, 58%, 0.5);
 }
 
 .dot.on.score-3 {
-  background: hsl(50, 92%, 56%);
-  border-color: hsl(50, 92%, 56%);
+  --dot-color: hsl(50, 92%, 56%);
   box-shadow: 0 0 8px hsla(50, 92%, 56%, 0.45);
 }
 
 .dot.on.score-4 {
-  background: hsl(96, 62%, 52%);
-  border-color: hsl(96, 62%, 52%);
+  --dot-color: hsl(96, 62%, 52%);
   box-shadow: 0 0 8px hsla(96, 62%, 52%, 0.45);
 }
 
 .dot.on.score-5 {
-  background: hsl(150, 72%, 50%);
-  border-color: hsl(150, 72%, 50%);
+  --dot-color: hsl(150, 72%, 50%);
   box-shadow: 0 0 10px hsla(150, 72%, 50%, 0.5);
 }
 
