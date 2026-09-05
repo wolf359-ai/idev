@@ -70,7 +70,7 @@ h1, h2, h3, p {
 .brand {
   display: flex;
   gap: 0.75rem;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .logo {
@@ -102,9 +102,11 @@ h1, h2, h3, p {
 
 .brand p {
   color: var(--muted);
-  font-size: 1.15rem;
+  font-size: 1.6rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  line-height: 1;
+  margin: 0;
 }
 
 .session-controls {
