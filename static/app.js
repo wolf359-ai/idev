@@ -396,7 +396,7 @@
     );
 
     const labels = items.map((item, index) => {
-      const [x, y] = point(index, 1.16);
+      const [x, y] = point(index, 1.14);
       const anchor = Math.abs(x - center) < 8 ? "middle" : x > center ? "start" : "end";
       return svgEl(
         "text",
@@ -405,7 +405,7 @@
           y: y.toFixed(1),
           "text-anchor": anchor,
           "dominant-baseline": "middle",
-          "font-size": "9.5",
+          "font-size": "12",
           fill: "#9fb0c0",
         },
         `${item.label} (${item.value || 0})`,
