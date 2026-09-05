@@ -189,13 +189,16 @@ h1, h2, h3, p {
   height: 0;
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
+  /* Collapsed: caret points down. */
   border-top: 5px solid currentColor;
   opacity: 0.75;
-  transition: transform 0.18s ease;
 }
 
-.admin[open] .admin-caret {
-  transform: rotate(180deg);
+/* Open: caret points up. Scoped to this row's own summary so an open parent
+   doesn't flip the carets of its collapsed child rows. */
+.admin[open] > .admin-summary .admin-caret {
+  border-top: 0;
+  border-bottom: 5px solid currentColor;
 }
 
 .admin-body {
