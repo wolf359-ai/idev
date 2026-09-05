@@ -769,9 +769,25 @@
           el(
             "article",
             { className: "skill" },
-            el("h3", {}, item.skill_name || "Skill"),
-            scoreDots(item.skill_id, item.current, readOnly),
-            el("div", { className: "meta" }, item.current ? `${item.current} / 5` : "Not rated yet"),
+            el(
+              "div",
+              { className: "skill-main" },
+              el("h3", {}, item.skill_name || "Skill"),
+              scoreDots(item.skill_id, item.current, readOnly),
+              el(
+                "div",
+                { className: "meta" },
+                item.current ? `${item.current} / 5` : "Not rated yet",
+              ),
+            ),
+            (item.skill_name || "") === "Hitting"
+              ? el(
+                  "div",
+                  { className: "skill-metric" },
+                  el("h3", {}, "Exit Velo"),
+                  el("div", { className: "skill-metric-unit" }, "MPH"),
+                )
+              : null,
           ),
         ),
       ),
