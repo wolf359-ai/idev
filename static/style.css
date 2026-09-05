@@ -41,14 +41,25 @@ h1, h2, h3, p {
 .top {
   grid-column: 1 / -1;
   padding: 1rem 1.25rem;
-  background: var(--grass);
+  background: #000;
   color: #f4efe4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
 }
 
 .brand {
   display: flex;
   gap: 0.75rem;
   align-items: center;
+}
+
+.logo {
+  display: block;
+  width: 40px;
+  height: 40px;
+  flex: none;
 }
 
 .mark {
@@ -61,7 +72,24 @@ h1, h2, h3, p {
   letter-spacing: 0.04em;
 }
 
+/* Title wordmark. BostonCaps is used when installed on the viewer's system;
+   the fallbacks keep the title readable everywhere else. */
+.wordmark {
+  font-family: "BostonCaps", "Avenir Next", "Segoe UI", sans-serif;
+}
+
 .brand p {
+  color: #d6e4db;
+  font-size: 0.9rem;
+}
+
+.session-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.session-label {
   color: #d6e4db;
   font-size: 0.9rem;
 }
@@ -213,7 +241,7 @@ textarea {
 }
 
 .hidden {
-  display: none;
+  display: none !important;
 }
 
 .empty {
@@ -263,6 +291,32 @@ textarea {
 .dot.on {
   background: var(--clay);
   border-color: var(--clay);
+}
+
+/* Rating dots shift from red (weak) to green (strong) with the current score. */
+.dot.on.score-1 {
+  background: hsl(0, 70%, 45%);
+  border-color: hsl(0, 70%, 45%);
+}
+
+.dot.on.score-2 {
+  background: hsl(30, 72%, 46%);
+  border-color: hsl(30, 72%, 46%);
+}
+
+.dot.on.score-3 {
+  background: hsl(52, 75%, 45%);
+  border-color: hsl(52, 75%, 45%);
+}
+
+.dot.on.score-4 {
+  background: hsl(88, 60%, 40%);
+  border-color: hsl(88, 60%, 40%);
+}
+
+.dot.on.score-5 {
+  background: hsl(122, 65%, 36%);
+  border-color: hsl(122, 65%, 36%);
 }
 
 .delta.up {
@@ -357,8 +411,84 @@ textarea {
   font-size: 0.9rem;
 }
 
+.radar-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 0.5rem 0 0.25rem;
+}
+
+.radar {
+  max-width: 360px;
+}
+
+.dot.static,
+.dot:disabled {
+  cursor: default;
+}
+
+/* Login screen */
+.login-view {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.brand-dark {
+  margin-bottom: 1rem;
+}
+
+.brand-dark h1 {
+  color: var(--ink);
+  font-size: 1.5rem;
+  letter-spacing: 0.04em;
+}
+
+.brand-dark p {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.login-tabs .tab {
+  flex: 1;
+}
+
+.login-tabs .tab.active {
+  background: var(--grass);
+  border-color: var(--grass);
+  color: #fff;
+}
+
+.login-form label {
+  color: var(--ink);
+}
+
+.app.role-player {
+  grid-template-columns: 1fr;
+}
+
+.app.role-player .roster {
+  display: none;
+}
+
 @media (max-width: 800px) {
   .app {
+    grid-template-columns: 1fr;
+  }
+
+  .app.role-player {
     grid-template-columns: 1fr;
   }
 
