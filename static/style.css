@@ -451,11 +451,34 @@ h1, h2, h3, p {
 @media (min-width: 1100px) {
   .dash {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    /* Stretch both cards to the same (content-driven) height. */
+    /* Cards in the same row stretch to a shared, content-driven height. */
     align-items: stretch;
   }
 
-  /* Let the skills card grow to fit every skill; the radar card matches it. */
+  /* Row 1: skills next to the radar. */
+  .skills-card {
+    grid-column: 1;
+  }
+
+  .radar-card {
+    grid-column: 2;
+  }
+
+  /* Row 2: GameChanger stats spans the full width. */
+  .stats-card {
+    grid-column: 1 / -1;
+  }
+
+  /* Row 3: progress next to notes. */
+  .progress-card {
+    grid-column: 1;
+  }
+
+  .notes-card {
+    grid-column: 2;
+  }
+
+  /* Let the radar center vertically when its row is taller than the chart. */
   .radar-card {
     display: flex;
     flex-direction: column;

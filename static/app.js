@@ -452,14 +452,14 @@
     const statsCard = readOnly
       ? el(
           "section",
-          { className: "card" },
+          { className: "card stats-card" },
           el("h2", {}, "GameChanger stats"),
           statsReadOnly("Offense", stats.offense || []),
           statsReadOnly("Defense", stats.defense || []),
         )
       : el(
           "section",
-          { className: "card" },
+          { className: "card stats-card" },
           el("h2", {}, "GameChanger stats"),
           el(
             "p",
@@ -477,7 +477,7 @@
 
     const progress = el(
       "section",
-      { className: "card" },
+      { className: "card progress-card" },
       el("h2", {}, "Progress"),
       rated.length
         ? rated.map((item) =>
@@ -514,7 +514,7 @@
             )
           : el("li", { className: "empty" }, "No notes yet."),
       );
-      notesCard = el("section", { className: "card" }, el("h2", {}, "Notes"), noteList);
+      notesCard = el("section", { className: "card notes-card" }, el("h2", {}, "Notes"), noteList);
     } else {
       const noteForm = el(
         "form",
@@ -545,14 +545,17 @@
             )
           : el("li", { className: "empty" }, "No notes yet."),
       );
-      notesCard = el("section", { className: "card" }, el("h2", {}, "Notes"), noteForm, noteList);
+      notesCard = el("section", { className: "card notes-card" }, el("h2", {}, "Notes"), noteForm, noteList);
     }
 
     const dash = el(
       "div",
       { className: "dash" },
-      el("div", { className: "dash-main" }, skills, statsCard, progress, notesCard),
-      el("div", { className: "dash-side" }, radar),
+      skills,
+      radar,
+      statsCard,
+      progress,
+      notesCard,
     );
 
     const nodes = [hero];
