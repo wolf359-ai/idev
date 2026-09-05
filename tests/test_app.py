@@ -69,6 +69,32 @@ class StoreTests(unittest.TestCase):
                 {"name": "Pat", "position": "Utility", "secondary_position": "Quarterback"}
             )
 
+    def test_team_year(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "team_year": "2025"}
+        )
+        self.assertEqual(created["team_year"], "2025")
+        # Omitted or blank team year stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["team_year"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "team_year": "  "}
+        )
+        self.assertEqual(blank["team_year"], "")
+        # Numeric input is accepted and stored as a string.
+        numeric = self.store.add_player(
+            {"name": "Alexis", "position": "Utility", "team_year": 2026}
+        )
+        self.assertEqual(numeric["team_year"], "2026")
+        updated = self.store.update_player(created["id"], {"team_year": "2024-25"})
+        self.assertEqual(updated["team_year"], "2024-25")
+
+    def test_rejects_overlong_team_year(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "team_year": "x" * 21}
+            )
+
     def test_rejects_bad_jersey(self) -> None:
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "Pat", "position": "Utility", "number": 100})

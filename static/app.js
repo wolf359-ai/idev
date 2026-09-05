@@ -699,6 +699,9 @@
 
   function renderHero(player, actions, m) {
     const tags = [el("span", { className: "tag on" }, `Overall ${m.overall}%`)];
+    if (player.team_year) {
+      tags.push(el("span", { className: "tag" }, `${player.team_year} season`));
+    }
     if (player.has_access_code) {
       tags.push(el("span", { className: "tag on" }, "Access on"));
     } else {
@@ -976,6 +979,13 @@
     if (number === null) {
       return;
     }
+    const teamYear = window.prompt(
+      "Team year (blank to clear)",
+      state.detail.team_year || "",
+    );
+    if (teamYear === null) {
+      return;
+    }
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
         method: "PUT",
@@ -983,6 +993,7 @@
           name,
           position,
           secondary_position: secondaryPosition,
+          team_year: teamYear,
           number,
         }),
       });
@@ -1234,6 +1245,7 @@
           name: form.get("name"),
           position: form.get("position"),
           secondary_position: form.get("secondary_position"),
+          team_year: form.get("team_year"),
           number: form.get("number"),
         }),
       });

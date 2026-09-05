@@ -223,6 +223,18 @@ def parse_optional_position(value: object) -> str:
     return parse_position(value)
 
 
+def parse_team_year(value: object) -> str:
+    """Optional team/season year, e.g. "2025" or "2024-25"; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 20:
+        raise ValueError("Team year must be 20 characters or fewer")
+    return text
+
+
 def normalize_position(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         return "Utility"
@@ -474,6 +486,7 @@ PUBLIC_PLAYER_FIELDS = (
     "name",
     "position",
     "secondary_position",
+    "team_year",
     "number",
     "created_at",
     "stats",
@@ -680,6 +693,7 @@ class Store:
                 "name": "Alex Rivera",
                 "position": "Shortstop",
                 "secondary_position": "Second Base",
+                "team_year": "2025",
                 "number": 7,
                 "created_at": earlier,
                 "stats": {
@@ -711,6 +725,7 @@ class Store:
                 "name": "Jordan Blake",
                 "position": "Pitcher",
                 "secondary_position": "First Base",
+                "team_year": "2025",
                 "number": 21,
                 "created_at": earlier,
                 "stats": {
@@ -848,6 +863,7 @@ class Store:
             "name": clean_text(payload.get("name"), "Player name", MAX_NAME_LEN),
             "position": parse_position(payload.get("position")),
             "secondary_position": parse_optional_position(payload.get("secondary_position")),
+            "team_year": parse_team_year(payload.get("team_year")),
             "number": parse_number(payload.get("number")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
@@ -890,6 +906,7 @@ class Store:
                         "name": candidate["name"],
                         "position": candidate["position"],
                         "secondary_position": candidate.get("secondary_position", ""),
+                        "team_year": candidate.get("team_year", ""),
                         "number": candidate["number"],
                         "created_at": now,
                         "stats": empty_stat_counts(),
@@ -917,6 +934,8 @@ class Store:
                 player["secondary_position"] = parse_optional_position(
                     payload.get("secondary_position")
                 )
+            if "team_year" in payload:
+                player["team_year"] = parse_team_year(payload.get("team_year"))
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
             self._save()
