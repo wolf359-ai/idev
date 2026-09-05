@@ -53,6 +53,10 @@
   const noteForm = document.getElementById("note-form");
   const noteInput = document.getElementById("note-input");
   const cancelNote = document.getElementById("cancel-note");
+  const noteViewModal = document.getElementById("note-view-modal");
+  const noteViewWhen = document.getElementById("note-view-when");
+  const noteViewText = document.getElementById("note-view-text");
+  const closeNoteView = document.getElementById("close-note-view");
   const brandTeam = document.getElementById("brand-team");
   const brandMeta = document.getElementById("brand-meta");
   let drillTargetId = null;
@@ -1102,18 +1106,22 @@
               "\u00d7",
             )
           : null;
+        // Each note collapses to a single clickable line; the full text opens
+        // in a read-only modal. The line highlights on hover.
+        const preview = (note.text || "").replace(/\s+/g, " ").trim() || "Untitled note";
+        const openBtn = el(
+          "button",
+          {
+            type: "button",
+            className: "note-open",
+            title: "View note",
+            onClick: () => openNoteView(note),
+          },
+          el("span", { className: "note-when meta" }, formatWhen(note.created_at)),
+          el("span", { className: "note-preview" }, preview),
+        );
         list.append(
-          el(
-            "li",
-            { className: "note-item" },
-            el(
-              "div",
-              { className: "note-item-top" },
-              el("span", { className: "note-when meta" }, formatWhen(note.created_at)),
-              del,
-            ),
-            el("p", { className: "note-text" }, note.text || ""),
-          ),
+          el("li", { className: "note-item" }, openBtn, del),
         );
       });
       children.push(list);
@@ -1787,6 +1795,35 @@
     }
   }
 
+  // Show a single note's full text in a read-only modal.
+  function openNoteView(note) {
+    if (!noteViewModal) {
+      return;
+    }
+    if (noteViewWhen) {
+      noteViewWhen.textContent = formatWhen(note.created_at);
+    }
+    if (noteViewText) {
+      noteViewText.textContent = note.text || "";
+    }
+    if (typeof noteViewModal.showModal === "function") {
+      noteViewModal.showModal();
+    } else {
+      noteViewModal.setAttribute("open", "");
+    }
+  }
+
+  function closeNoteViewModal() {
+    if (!noteViewModal) {
+      return;
+    }
+    if (noteViewModal.open) {
+      noteViewModal.close();
+    } else {
+      noteViewModal.removeAttribute("open");
+    }
+  }
+
   async function saveNote(event) {
     event.preventDefault();
     if (!state.selectedId) {
@@ -2300,6 +2337,16 @@
   }
   if (noteForm) {
     noteForm.addEventListener("submit", saveNote);
+  }
+  if (closeNoteView) {
+    closeNoteView.addEventListener("click", closeNoteViewModal);
+  }
+  if (noteViewModal) {
+    noteViewModal.addEventListener("click", (event) => {
+      if (event.target === noteViewModal) {
+        closeNoteViewModal();
+      }
+    });
   }
 
   cancelAdd.addEventListener("click", () => {
