@@ -809,7 +809,8 @@ textarea {
 .radar {
   width: 100%;
   max-width: 300px;
-  filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.15));
+  /* Neutral glow so the multi-colored score shape keeps its own colors. */
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.08));
 }
 
 .dot.static,

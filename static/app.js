@@ -188,6 +188,21 @@
 
   const DOT_PALETTE = ["#22d3ee", "#f5566c", "#34d399", "#3b82f6", "#f6c552", "#a78bfa", "#fb923c"];
 
+  // Rating colors shared with the skill dots: red (weak) to green (strong).
+  const SCORE_COLORS = {
+    1: "hsl(352, 85%, 60%)",
+    2: "hsl(28, 90%, 58%)",
+    3: "hsl(50, 92%, 56%)",
+    4: "hsl(96, 62%, 52%)",
+    5: "hsl(150, 72%, 50%)",
+  };
+
+  function scoreColor(value) {
+    if (!value) return "#3a4757";
+    const level = Math.max(1, Math.min(5, Math.round(value)));
+    return SCORE_COLORS[level];
+  }
+
   function renderRoster() {
     playerList.replaceChildren();
     if (!state.players.length) {
@@ -314,21 +329,71 @@
       });
     });
 
-    const valuePoints = items
-      .map((item, index) => point(index, (item.value || 0) / maxScore).map((n) => n.toFixed(1)).join(","))
-      .join(" ");
-
-    const shapeColor = "#22d3ee";
-
-    const dots = items.map((item, index) => {
+    // Value vertices, each carrying its own score color.
+    const verts = items.map((item, index) => {
       const [x, y] = point(index, (item.value || 0) / maxScore);
-      return svgEl("circle", {
-        cx: x.toFixed(1),
-        cy: y.toFixed(1),
-        r: 3.5,
-        fill: item.value ? shapeColor : "#3a4757",
-      });
+      return { x, y, color: scoreColor(item.value) };
     });
+
+    // Unique id prefix so multiple gradients never collide.
+    const uid = "rg" + Math.random().toString(36).slice(2, 8);
+
+    // Per-edge linear gradients that blend each vertex color into the next,
+    // making the shape multi-colored to match the skill ratings.
+    const gradientDefs = [];
+    const fillSectors = [];
+    const edges = [];
+    for (let i = 0; i < verts.length; i += 1) {
+      const a = verts[i];
+      const b = verts[(i + 1) % verts.length];
+      const gid = `${uid}-${i}`;
+      gradientDefs.push(
+        svgEl(
+          "linearGradient",
+          {
+            id: gid,
+            gradientUnits: "userSpaceOnUse",
+            x1: a.x.toFixed(1),
+            y1: a.y.toFixed(1),
+            x2: b.x.toFixed(1),
+            y2: b.y.toFixed(1),
+          },
+          svgEl("stop", { offset: "0", "stop-color": a.color }),
+          svgEl("stop", { offset: "1", "stop-color": b.color }),
+        ),
+      );
+      // Triangle from center to this edge tiles the (star-shaped) value area.
+      fillSectors.push(
+        svgEl("polygon", {
+          points: `${center},${center} ${a.x.toFixed(1)},${a.y.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
+          fill: `url(#${gid})`,
+          "fill-opacity": "0.26",
+          stroke: "none",
+        }),
+      );
+      edges.push(
+        svgEl("line", {
+          x1: a.x.toFixed(1),
+          y1: a.y.toFixed(1),
+          x2: b.x.toFixed(1),
+          y2: b.y.toFixed(1),
+          stroke: `url(#${gid})`,
+          "stroke-width": 2.5,
+          "stroke-linecap": "round",
+        }),
+      );
+    }
+
+    const dots = verts.map((v) =>
+      svgEl("circle", {
+        cx: v.x.toFixed(1),
+        cy: v.y.toFixed(1),
+        r: 3.8,
+        fill: v.color,
+        stroke: "#0b1019",
+        "stroke-width": 1,
+      }),
+    );
 
     const labels = items.map((item, index) => {
       const [x, y] = point(index, 1.16);
@@ -356,16 +421,11 @@
         "aria-label": "Skill strengths and weaknesses radar",
         class: "radar",
       },
+      svgEl("defs", {}, ...gradientDefs),
       ...gridRings,
       ...spokes,
-      svgEl("polygon", {
-        points: valuePoints,
-        fill: shapeColor,
-        "fill-opacity": "0.28",
-        stroke: shapeColor,
-        "stroke-width": 2,
-        "stroke-linejoin": "round",
-      }),
+      ...fillSectors,
+      ...edges,
       ...dots,
       ...labels,
     );
