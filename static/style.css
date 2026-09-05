@@ -243,6 +243,12 @@ h1, h2, h3, p {
   font-size: 0.82rem;
 }
 
+/* Larger intro line under the Performance Profile heading. */
+.radar-card > .meta {
+  font-size: 1.05rem;
+  line-height: 1.35;
+}
+
 /* ---------- Main ---------- */
 .main {
   padding: 1.25rem 1.4rem 2rem;
