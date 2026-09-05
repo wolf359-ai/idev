@@ -47,7 +47,7 @@ MAX_RECORDS = 50
 PR_METRICS = {
     "exit_velo": {"label": "Exit Velo", "unit": "MPH", "higher_better": True},
     "pitch_velo": {"label": "Velocity", "unit": "MPH", "higher_better": True},
-    "throw_speed": {"label": "Throw Speed", "unit": "MPH", "higher_better": True},
+    "throw_speed": {"label": "IF Velo", "unit": "MPH", "higher_better": True},
     "distance": {"label": "Distance", "unit": "Feet", "higher_better": True},
     "base_time": {"label": "Running speed", "unit": "s", "higher_better": False},
 }

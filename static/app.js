@@ -1601,12 +1601,12 @@
     },
     Throwing: {
       key: "throw_speed",
-      heading: "Throw Speed",
+      heading: "IF Velo",
       unit: "MPH",
       min: 0,
       max: 200,
       step: 0.01,
-      aria: "Throwing speed in MPH",
+      aria: "Infield throwing velocity in MPH",
     },
   };
 
