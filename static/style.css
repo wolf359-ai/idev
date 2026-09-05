@@ -1007,10 +1007,20 @@ textarea {
 }
 
 .login-tabs .tab.active {
-  background: linear-gradient(180deg, #22d3ee, #14b8d6);
+  background: linear-gradient(180deg, #fdba74, #fb923c);
   border-color: transparent;
-  color: #04121a;
+  color: #2a1405;
   font-weight: 700;
+}
+
+/* Login Sign in button uses the orange accent, matching the tabs. */
+.login-form .btn-primary {
+  background: linear-gradient(180deg, #fdba74, #fb923c);
+  color: #2a1405;
+}
+
+.login-form .btn-primary:hover {
+  background: linear-gradient(180deg, #fecb94, #fca44f);
 }
 
 .login-form label {
