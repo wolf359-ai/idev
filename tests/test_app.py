@@ -815,8 +815,11 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.sign_out()
         self.login_player(code=access["code"])
-        status, _payload = self.call("GET", "/api/team")
-        self.assertEqual(status, 403)
+        # A player may read team info (it appears in the header) ...
+        status, listing = self.call("GET", "/api/team")
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["team"]["name"], "Boston Caps")
+        # ... but cannot edit it.
         status, _payload = self.call("PUT", "/api/team", {"name": "Hijack"})
         self.assertEqual(status, 403)
 

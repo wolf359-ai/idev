@@ -111,6 +111,14 @@ h1, h2, h3, p {
   margin: 17px 0 0;
 }
 
+/* Current team + season, shown under the header title. */
+.brand p.brand-team {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+
 .session-controls {
   display: flex;
   align-items: center;

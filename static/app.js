@@ -41,6 +41,7 @@
   const drillModal = document.getElementById("drill-modal");
   const drillForm = document.getElementById("drill-form");
   const cancelDrill = document.getElementById("cancel-drill");
+  const brandTeam = document.getElementById("brand-team");
   let drillTargetId = null;
 
   const state = {
@@ -428,12 +429,30 @@
   }
 
   async function loadTeam() {
-    if (state.role !== "coach") {
+    if (!state.role) {
       return;
     }
     const data = await request("/api/team");
     state.team = data.team || {};
     renderTeamSummary();
+    renderBrandTeam();
+  }
+
+  // Show the current team + season under the header title (all signed-in users).
+  function renderBrandTeam() {
+    if (!brandTeam) {
+      return;
+    }
+    const team = state.team || {};
+    const when = [team.season, team.year].filter(Boolean).join(" ");
+    const label = [team.name, when].filter(Boolean).join(" \u00b7 ");
+    if (label) {
+      brandTeam.textContent = label;
+      brandTeam.classList.remove("hidden");
+    } else {
+      brandTeam.textContent = "";
+      brandTeam.classList.add("hidden");
+    }
   }
 
   function renderTeamSummary() {
@@ -1409,6 +1428,8 @@
     state.players = [];
     state.selectedId = null;
     state.detail = null;
+    state.team = {};
+    renderBrandTeam();
     appView.classList.add("hidden");
     appView.classList.remove("role-player");
     loginView.classList.remove("hidden");
@@ -1441,8 +1462,9 @@
       sessionLabel.textContent = "Signed in as Coach";
       loadPlayers().catch((error) => showError(error.message));
       loadStaff().catch((error) => showError(error.message));
-      loadTeam().catch((error) => showError(error.message));
     }
+    // Team + season appears in the header for both roles.
+    loadTeam().catch((error) => showError(error.message));
   }
 
   async function doLogin(body) {

@@ -73,6 +73,7 @@ ADMIN_PASSWORD_ENV = os.environ.get("IDEV_ADMIN_PASSWORD")
 PERM_PUBLIC = "public"
 PERM_COACH = "coach"
 PERM_PLAYER_OWN = "player_own"
+PERM_AUTHED = "authed"  # any signed-in user (coach or player)
 
 POSITIONS = (
     "Pitcher",
@@ -784,6 +785,9 @@ def required_permission(method: str, path: str):
             return PERM_PUBLIC  # login page and static assets
         if path in ("/api/health", "/api/session"):
             return PERM_PUBLIC
+        if path == "/api/team":
+            # Team name/season is shown in the header for any signed-in user.
+            return PERM_AUTHED
         match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
         if match:
             return (PERM_PLAYER_OWN, match.group(1))
@@ -1599,6 +1603,8 @@ class IdevHandler(BaseHTTPRequestHandler):
         if session is None:
             self._reject(401, "Please sign in")
             return session, perm, False
+        if perm == PERM_AUTHED:
+            return session, perm, True
         if perm == PERM_COACH:
             if session.get("role") != "coach":
                 self._reject(403, "Not allowed")
