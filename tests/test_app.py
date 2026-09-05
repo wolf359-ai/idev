@@ -125,6 +125,34 @@ class StoreTests(unittest.TestCase):
                 {"name": "Lee", "position": "Utility", "exit_velo": 250}
             )
 
+    def test_base_time(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "base_time": "3.45"}
+        )
+        self.assertEqual(created["base_time"], 3.45)
+        # Omitted or blank base time stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["base_time"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "base_time": "  "}
+        )
+        self.assertEqual(blank["base_time"], "")
+        updated = self.store.update_player(created["id"], {"base_time": 4})
+        self.assertEqual(updated["position"], "Shortstop")
+        self.assertEqual(updated["base_time"], 4.0)
+        cleared = self.store.update_player(created["id"], {"base_time": ""})
+        self.assertEqual(cleared["base_time"], "")
+
+    def test_rejects_invalid_base_time(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "base_time": "slow"}
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Lee", "position": "Utility", "base_time": 120}
+            )
+
     def test_staff_add_list_delete(self) -> None:
         created = self.store.add_staff(
             {

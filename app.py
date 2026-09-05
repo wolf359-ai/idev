@@ -281,6 +281,23 @@ def parse_exit_velo(value: object) -> object:
     return round(mph, 1)
 
 
+def parse_base_time(value: object) -> object:
+    """Optional base-running time in seconds; blank means unset, otherwise 0-60."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Time must be a number")
+    if seconds != seconds or seconds in (float("inf"), float("-inf")):
+        raise ValueError("Time must be a number")
+    if seconds < 0 or seconds > 60:
+        raise ValueError("Time must be between 0 and 60 seconds")
+    return round(seconds, 2)
+
+
 def parse_optional_contact(value: object) -> str:
     """Contact info (email or phone) is optional; blank means none."""
     if value is None:
@@ -652,6 +669,7 @@ PUBLIC_PLAYER_FIELDS = (
     "team_year",
     "number",
     "exit_velo",
+    "base_time",
     "created_at",
     "stats",
 )
@@ -1137,6 +1155,7 @@ class Store:
             "team_year": parse_team_year(payload.get("team_year")),
             "number": parse_number(payload.get("number")),
             "exit_velo": parse_exit_velo(payload.get("exit_velo")),
+            "base_time": parse_base_time(payload.get("base_time")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
             "drills": [],
@@ -1213,6 +1232,8 @@ class Store:
                 player["number"] = parse_number(payload.get("number"))
             if "exit_velo" in payload:
                 player["exit_velo"] = parse_exit_velo(payload.get("exit_velo"))
+            if "base_time" in payload:
+                player["base_time"] = parse_base_time(payload.get("base_time"))
             self._save()
             return public_player(player)
 

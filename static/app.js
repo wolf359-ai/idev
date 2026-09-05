@@ -780,15 +780,7 @@
                 item.current ? `${item.current} / 5` : "Not rated yet",
               ),
             ),
-            (item.skill_name || "") === "Hitting"
-              ? el(
-                  "div",
-                  { className: "skill-metric" },
-                  el("h3", {}, "Exit Velo"),
-                  exitVeloField(player, readOnly),
-                  el("div", { className: "skill-metric-unit" }, "MPH"),
-                )
-              : null,
+            skillMetric(player, item.skill_name || "", readOnly),
           ),
         ),
       ),
@@ -1441,27 +1433,62 @@
     }
   }
 
-  function exitVeloDisplay(player) {
-    const value = player.exit_velo;
+  // Per-skill editable metric shown on the far right of a skill box.
+  const SKILL_METRICS = {
+    Hitting: {
+      key: "exit_velo",
+      heading: "Exit Velo",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.1,
+      aria: "Exit velocity in MPH",
+    },
+    "Base running": {
+      key: "base_time",
+      heading: "Time",
+      unit: "seconds",
+      min: 0,
+      max: 60,
+      step: 0.01,
+      aria: "Base-running time in seconds",
+    },
+  };
+
+  function metricDisplay(value) {
     return value === "" || value === null || value === undefined ? "—" : String(value);
   }
 
-  function exitVeloField(player, readOnly) {
-    if (readOnly) {
-      return el("div", { className: "skill-metric-value" }, exitVeloDisplay(player));
+  function skillMetric(player, skillName, readOnly) {
+    const spec = SKILL_METRICS[skillName];
+    if (!spec) {
+      return null;
     }
-    const value = player.exit_velo;
+    return el(
+      "div",
+      { className: "skill-metric" },
+      el("h3", {}, spec.heading),
+      metricField(player, readOnly, spec),
+      el("div", { className: "skill-metric-unit" }, spec.unit),
+    );
+  }
+
+  function metricField(player, readOnly, spec) {
+    const value = player[spec.key];
+    if (readOnly) {
+      return el("div", { className: "skill-metric-value" }, metricDisplay(value));
+    }
     const input = el("input", {
       type: "number",
       className: "skill-metric-input",
-      min: "0",
-      max: "200",
-      step: "0.1",
+      min: String(spec.min),
+      max: String(spec.max),
+      step: String(spec.step),
       placeholder: "—",
-      "aria-label": "Exit velocity in MPH",
+      "aria-label": spec.aria,
       value: value === "" || value === null || value === undefined ? "" : String(value),
     });
-    input.addEventListener("change", () => saveExitVelo(input.value));
+    input.addEventListener("change", () => saveMetric(spec.key, input.value));
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -1471,14 +1498,14 @@
     return input;
   }
 
-  async function saveExitVelo(raw) {
+  async function saveMetric(key, raw) {
     if (!state.selectedId) {
       return;
     }
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
         method: "PUT",
-        body: JSON.stringify({ exit_velo: String(raw).trim() }),
+        body: JSON.stringify({ [key]: String(raw).trim() }),
       });
       await loadDetail(state.selectedId);
     } catch (error) {
