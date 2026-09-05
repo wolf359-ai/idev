@@ -281,6 +281,23 @@ def parse_exit_velo(value: object) -> object:
     return round(mph, 2)
 
 
+def parse_pitch_velo(value: object) -> object:
+    """Optional pitching velocity in MPH; blank means unset, otherwise 0-200."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        mph = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Velocity must be a number")
+    if mph != mph or mph in (float("inf"), float("-inf")):
+        raise ValueError("Velocity must be a number")
+    if mph < 0 or mph > 200:
+        raise ValueError("Velocity must be between 0 and 200 MPH")
+    return round(mph, 2)
+
+
 def parse_base_time(value: object) -> object:
     """Optional base-running time in seconds; blank means unset, otherwise 0-60."""
     if value is None:
@@ -670,6 +687,7 @@ PUBLIC_PLAYER_FIELDS = (
     "number",
     "exit_velo",
     "base_time",
+    "pitch_velo",
     "created_at",
     "stats",
 )
@@ -1156,6 +1174,7 @@ class Store:
             "number": parse_number(payload.get("number")),
             "exit_velo": parse_exit_velo(payload.get("exit_velo")),
             "base_time": parse_base_time(payload.get("base_time")),
+            "pitch_velo": parse_pitch_velo(payload.get("pitch_velo")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
             "drills": [],
@@ -1234,6 +1253,8 @@ class Store:
                 player["exit_velo"] = parse_exit_velo(payload.get("exit_velo"))
             if "base_time" in payload:
                 player["base_time"] = parse_base_time(payload.get("base_time"))
+            if "pitch_velo" in payload:
+                player["pitch_velo"] = parse_pitch_velo(payload.get("pitch_velo"))
             self._save()
             return public_player(player)
 

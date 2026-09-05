@@ -1453,6 +1453,15 @@
       step: 0.01,
       aria: "Base-running time in seconds",
     },
+    Pitching: {
+      key: "pitch_velo",
+      heading: "Velocity",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.01,
+      aria: "Pitching velocity in MPH",
+    },
   };
 
   function metricDisplay(value) {
