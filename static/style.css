@@ -708,6 +708,16 @@ textarea {
   background: linear-gradient(180deg, #38dcf3, #17c1e0);
 }
 
+/* Save player uses the app's orange accent instead of the cyan primary. */
+#add-player-form .btn-primary {
+  background: linear-gradient(180deg, #fdba74, #fb923c);
+  color: #2a1405;
+}
+
+#add-player-form .btn-primary:hover {
+  background: linear-gradient(180deg, #fecb94, #fca44f);
+}
+
 .btn-danger {
   color: var(--red);
   border-color: rgba(245, 86, 108, 0.35);
