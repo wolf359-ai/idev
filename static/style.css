@@ -451,15 +451,11 @@ h1, h2, h3, p {
 @media (min-width: 1100px) {
   .dash {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    align-items: start;
+    /* Stretch both cards to the same (content-driven) height. */
+    align-items: stretch;
   }
 
-  /* Skills and Performance Profile share the same height side by side. */
-  .skills-card,
-  .radar-card {
-    height: 430px;
-  }
-
+  /* Let the skills card grow to fit every skill; the radar card matches it. */
   .radar-card {
     display: flex;
     flex-direction: column;
@@ -470,28 +466,10 @@ h1, h2, h3, p {
     align-items: center;
   }
 
-  /* Compact the skill cells so all skills fit within the shared height. */
+  /* Two-column skill grid so all skills fit comfortably side by side. */
   .skills-card .skills {
     grid-template-columns: repeat(2, 1fr);
-    gap: 0.45rem;
-  }
-
-  .skills-card .skill {
-    padding: 0.5rem 0.6rem;
-  }
-
-  .skills-card .skill h3 {
-    font-size: 0.78rem;
-    margin-bottom: 0.3rem;
-  }
-
-  .skills-card .dot {
-    width: 1.15rem;
-    height: 1.15rem;
-  }
-
-  .skills-card .skill .meta {
-    font-size: 0.72rem;
+    gap: 0.55rem;
   }
 }
 
