@@ -558,15 +558,21 @@
         "Rate at least three skills to see the strengths and weaknesses radar.",
       );
     }
+    // Square drawing area for the rings, with extra horizontal padding baked
+    // into the viewBox so the long side labels always fit inside the SVG (and
+    // never spill past the card / viewport when the chart is enlarged).
     const size = 320;
-    const center = size / 2;
-    const radius = center - 54;
+    const padX = 70;
+    const viewW = size + padX * 2;
+    const cx = viewW / 2;
+    const cy = size / 2;
+    const radius = cy - 34;
     const maxScore = 5;
     const rings = 5;
     const angleFor = (index) => (Math.PI * 2 * index) / items.length - Math.PI / 2;
     const point = (index, ratio) => {
       const angle = angleFor(index);
-      return [center + radius * ratio * Math.cos(angle), center + radius * ratio * Math.sin(angle)];
+      return [cx + radius * ratio * Math.cos(angle), cy + radius * ratio * Math.sin(angle)];
     };
 
     const gridRings = [];
@@ -588,8 +594,8 @@
     const spokes = items.map((_item, index) => {
       const [x, y] = point(index, 1);
       return svgEl("line", {
-        x1: center,
-        y1: center,
+        x1: cx,
+        y1: cy,
         x2: x.toFixed(1),
         y2: y.toFixed(1),
         stroke: "#1c2735",
@@ -633,7 +639,7 @@
       // Triangle from center to this edge tiles the (star-shaped) value area.
       fillSectors.push(
         svgEl("polygon", {
-          points: `${center},${center} ${a.x.toFixed(1)},${a.y.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
+          points: `${cx},${cy} ${a.x.toFixed(1)},${a.y.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
           fill: `url(#${gid})`,
           "fill-opacity": "0.26",
           stroke: "none",
@@ -665,7 +671,7 @@
 
     const labels = items.map((item, index) => {
       const [x, y] = point(index, 1.14);
-      const anchor = Math.abs(x - center) < 8 ? "middle" : x > center ? "start" : "end";
+      const anchor = Math.abs(x - cx) < 8 ? "middle" : x > cx ? "start" : "end";
       return svgEl(
         "text",
         {
@@ -683,7 +689,7 @@
     const svg = svgEl(
       "svg",
       {
-        viewBox: `0 0 ${size} ${size}`,
+        viewBox: `0 0 ${viewW} ${size}`,
         width: "100%",
         role: "img",
         "aria-label": "Skill strengths and weaknesses radar",

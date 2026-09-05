@@ -651,7 +651,7 @@ h1, h2, h3, p {
 
 @media (min-width: 1100px) {
   .dash {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
     /* Cards in the same row stretch to a shared, content-driven height. */
     align-items: stretch;
   }
@@ -1206,7 +1206,7 @@ textarea {
 
 .radar {
   width: 100%;
-  max-width: 380px;
+  max-width: 560px;
   /* Let labels extend past the viewBox instead of being clipped at the edge. */
   overflow: visible;
   /* Neutral glow so the multi-colored score shape keeps its own colors. */
