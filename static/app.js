@@ -1040,6 +1040,14 @@
     if (!drills.length) {
       children.push(el("div", { className: "drill-empty meta" }, "No drills assigned yet."));
     } else {
+      children.push(
+        el(
+          "div",
+          { className: "drill-head" },
+          el("span", { className: "drill-head-name" }, "Skill Name"),
+          el("span", { className: "drill-head-dur" }, "Duration"),
+        ),
+      );
       const list = el("ul", { className: "drill-list" });
       drills.slice(0, 10).forEach((drill) => {
         const label = safeLink(drill.link)
@@ -1054,9 +1062,11 @@
               drill.name,
             )
           : el("span", { className: "drill-name" }, drill.name);
-        const freq = drill.frequency
-          ? el("span", { className: "drill-freq meta" }, ` — ${drill.frequency}`)
-          : null;
+        const freq = el(
+          "span",
+          { className: "drill-freq meta" },
+          drill.frequency || "\u2014",
+        );
         const remove = readOnly
           ? null
           : el(
@@ -1070,7 +1080,14 @@
               },
               "\u00d7",
             );
-        list.append(el("li", { className: "drill-item" }, label, freq, remove));
+        list.append(
+          el(
+            "li",
+            { className: "drill-item" },
+            el("span", { className: "drill-name-cell" }, label),
+            el("span", { className: "drill-dur-cell" }, freq, remove),
+          ),
+        );
       });
       children.push(list);
     }

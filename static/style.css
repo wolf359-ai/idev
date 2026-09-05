@@ -562,22 +562,60 @@ h1, h2, h3, p {
   gap: 0.4rem;
 }
 
-.drill-list {
-  list-style: disc;
-  margin: 0.15rem 0 0;
-  padding-left: 1.05rem;
+.drill-head {
   display: grid;
-  gap: 0.22rem;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  padding: 0 0.1rem 0.28rem;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.drill-head-dur {
+  text-align: right;
+}
+
+.drill-list {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.28rem;
 }
 
 .drill-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem;
+  align-items: baseline;
   font-size: 0.78rem;
   line-height: 1.25;
   color: var(--ink);
 }
 
-.drill-item::marker {
+.drill-name-cell {
+  position: relative;
+  padding-left: 0.9rem;
+  min-width: 0;
+}
+
+.drill-name-cell::before {
+  content: "\2022";
+  position: absolute;
+  left: 0.1rem;
   color: var(--blue);
+}
+
+.drill-dur-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  white-space: nowrap;
+  color: var(--muted);
 }
 
 .drill-link {
