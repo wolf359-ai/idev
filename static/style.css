@@ -241,6 +241,15 @@ h1, h2, h3, p {
   width: 100%;
 }
 
+/* Staff actions stack full-width to match the Add player button. */
+#staff-tools .row {
+  flex-direction: column;
+}
+
+#staff-tools .row .btn {
+  width: 100%;
+}
+
 .admin-sub > .admin-body {
   padding: 0.35rem 0 0.1rem;
 }
