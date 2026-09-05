@@ -708,13 +708,15 @@ textarea {
   background: linear-gradient(180deg, #38dcf3, #17c1e0);
 }
 
-/* Save player uses the app's orange accent instead of the cyan primary. */
-#add-player-form .btn-primary {
+/* Admin actions (Save player, Preview roster) use the app's orange accent. */
+#add-player-form .btn-primary,
+#preview-roster {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
 }
 
-#add-player-form .btn-primary:hover {
+#add-player-form .btn-primary:hover,
+#preview-roster:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
 }
 
