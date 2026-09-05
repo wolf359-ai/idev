@@ -1201,6 +1201,31 @@
   }
 
   // "Skills Assigned" tile: a bulleted list of up to 10 development drills.
+  // Compact the free-text drill cadence for display, e.g.
+  // "3x per week" -> "3x-pw", "Daily warmup" -> "Daily", "Weekly" -> "pw".
+  function abbreviateFreq(text) {
+    if (!text) {
+      return "";
+    }
+    let s = String(text).trim();
+    if (/\bdaily\b/i.test(s)) {
+      return "Daily";
+    }
+    s = s
+      .replace(/\btimes\b/gi, "x")
+      .replace(/\bper\s*week\b/gi, "pw")
+      .replace(/\bper\s*day\b/gi, "pd")
+      .replace(/\bper\s*month\b/gi, "pm")
+      .replace(/\bweekly\b/gi, "pw")
+      .replace(/\bmonthly\b/gi, "pm")
+      .replace(/\/\s*week\b/gi, "-pw")
+      .replace(/\/\s*day\b/gi, "-pd")
+      .replace(/\/\s*month\b/gi, "-pm");
+    // Join a count like "3x pw" into "3x-pw".
+    s = s.replace(/(\d+)\s*x\s*[-\s]*\s*(pw|pd|pm)\b/gi, "$1x-$2");
+    return s.replace(/\s+/g, " ").trim();
+  }
+
   function drillsTile(player) {
     const readOnly = isReadOnly();
     const drills = Array.isArray(player.drills) ? player.drills : [];
@@ -1236,8 +1261,8 @@
           : el("span", { className: "drill-name" }, drill.name);
         const freq = el(
           "span",
-          { className: "drill-freq meta" },
-          drill.frequency || "\u2014",
+          { className: "drill-freq meta", title: drill.frequency || "" },
+          abbreviateFreq(drill.frequency) || "\u2014",
         );
         const remove = readOnly
           ? null
