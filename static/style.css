@@ -383,6 +383,15 @@ h1, h2, h3, p {
   letter-spacing: 0.12em;
 }
 
+/* Pull the rating hint up toward the heading and leave more room before the boxes. */
+.skills-card > h2 {
+  margin-bottom: 0.3rem;
+}
+
+.skills-card > .meta {
+  margin-bottom: 1.2rem;
+}
+
 /* ---------- Hero ---------- */
 .hero {
   display: grid;
