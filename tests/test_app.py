@@ -95,6 +95,36 @@ class StoreTests(unittest.TestCase):
                 {"name": "Pat", "position": "Utility", "team_year": "x" * 21}
             )
 
+    def test_exit_velo(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "exit_velo": "72.5"}
+        )
+        self.assertEqual(created["exit_velo"], 72.5)
+        # Omitted or blank exit velo stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["exit_velo"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "exit_velo": "  "}
+        )
+        self.assertEqual(blank["exit_velo"], "")
+        # Updating just the exit velo leaves other fields intact.
+        updated = self.store.update_player(created["id"], {"exit_velo": 80})
+        self.assertEqual(updated["position"], "Shortstop")
+        self.assertEqual(updated["exit_velo"], 80.0)
+        # Clearing it back to blank works.
+        cleared = self.store.update_player(created["id"], {"exit_velo": ""})
+        self.assertEqual(cleared["exit_velo"], "")
+
+    def test_rejects_invalid_exit_velo(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "exit_velo": "fast"}
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Lee", "position": "Utility", "exit_velo": 250}
+            )
+
     def test_staff_add_list_delete(self) -> None:
         created = self.store.add_staff(
             {

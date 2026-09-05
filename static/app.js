@@ -785,6 +785,7 @@
                   "div",
                   { className: "skill-metric" },
                   el("h3", {}, "Exit Velo"),
+                  exitVeloField(player, readOnly),
                   el("div", { className: "skill-metric-unit" }, "MPH"),
                 )
               : null,
@@ -1435,6 +1436,51 @@
   async function selectPlayer(playerId) {
     try {
       await loadDetail(playerId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function exitVeloDisplay(player) {
+    const value = player.exit_velo;
+    return value === "" || value === null || value === undefined ? "—" : String(value);
+  }
+
+  function exitVeloField(player, readOnly) {
+    if (readOnly) {
+      return el("div", { className: "skill-metric-value" }, exitVeloDisplay(player));
+    }
+    const value = player.exit_velo;
+    const input = el("input", {
+      type: "number",
+      className: "skill-metric-input",
+      min: "0",
+      max: "200",
+      step: "0.1",
+      placeholder: "—",
+      "aria-label": "Exit velocity in MPH",
+      value: value === "" || value === null || value === undefined ? "" : String(value),
+    });
+    input.addEventListener("change", () => saveExitVelo(input.value));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+    return input;
+  }
+
+  async function saveExitVelo(raw) {
+    if (!state.selectedId) {
+      return;
+    }
+    try {
+      await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ exit_velo: String(raw).trim() }),
+      });
+      await loadDetail(state.selectedId);
     } catch (error) {
       showError(error.message);
     }

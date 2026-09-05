@@ -1159,7 +1159,33 @@ textarea {
   margin-bottom: 0.15rem;
 }
 
+.skill-metric-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+}
+
+.skill-metric-input {
+  width: 5rem;
+  text-align: right;
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  background: #0b1019;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.2rem 0.4rem;
+}
+
+.skill-metric-input:focus {
+  outline: none;
+  border-color: var(--blue);
+}
+
 .skill-metric-unit {
+  margin-top: 0.15rem;
   font-size: 0.9rem;
   letter-spacing: 0.02em;
   color: var(--muted);

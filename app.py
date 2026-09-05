@@ -264,6 +264,23 @@ def parse_team_year(value: object) -> str:
     return text
 
 
+def parse_exit_velo(value: object) -> object:
+    """Optional exit velocity in MPH; blank means unset, otherwise 0-200."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        mph = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Exit velo must be a number")
+    if mph != mph or mph in (float("inf"), float("-inf")):
+        raise ValueError("Exit velo must be a number")
+    if mph < 0 or mph > 200:
+        raise ValueError("Exit velo must be between 0 and 200 MPH")
+    return round(mph, 1)
+
+
 def parse_optional_contact(value: object) -> str:
     """Contact info (email or phone) is optional; blank means none."""
     if value is None:
@@ -634,6 +651,7 @@ PUBLIC_PLAYER_FIELDS = (
     "secondary_position",
     "team_year",
     "number",
+    "exit_velo",
     "created_at",
     "stats",
 )
@@ -1118,6 +1136,7 @@ class Store:
             "secondary_position": parse_optional_position(payload.get("secondary_position")),
             "team_year": parse_team_year(payload.get("team_year")),
             "number": parse_number(payload.get("number")),
+            "exit_velo": parse_exit_velo(payload.get("exit_velo")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
             "drills": [],
@@ -1192,6 +1211,8 @@ class Store:
                 player["team_year"] = parse_team_year(payload.get("team_year"))
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
+            if "exit_velo" in payload:
+                player["exit_velo"] = parse_exit_velo(payload.get("exit_velo"))
             self._save()
             return public_player(player)
 
