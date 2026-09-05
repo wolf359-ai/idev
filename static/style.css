@@ -377,7 +377,8 @@ h1, h2, h3, p {
   margin-bottom: 0.7rem;
 }
 
-.radar-card > h2 {
+.radar-card > h2,
+.skills-card > h2 {
   font-size: 0.98rem;
   letter-spacing: 0.12em;
 }
