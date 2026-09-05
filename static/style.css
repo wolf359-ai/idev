@@ -1173,15 +1173,14 @@ textarea {
   font-weight: 700;
   line-height: 1.1;
   color: var(--ink);
-  background: #0b1019;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.2rem 0.4rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
 }
 
 .skill-metric-input:focus {
   outline: none;
-  border-color: var(--blue);
 }
 
 /* Hide the native number spinner arrows. */
