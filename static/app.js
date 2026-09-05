@@ -1462,6 +1462,15 @@
       step: 0.01,
       aria: "Pitching velocity in MPH",
     },
+    Throwing: {
+      key: "throw_speed",
+      heading: "Throw Speed",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.01,
+      aria: "Throwing speed in MPH",
+    },
   };
 
   function metricDisplay(value) {

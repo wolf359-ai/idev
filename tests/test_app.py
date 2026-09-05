@@ -175,6 +175,28 @@ class StoreTests(unittest.TestCase):
                 {"name": "Lee", "position": "Utility", "pitch_velo": 250}
             )
 
+    def test_throw_speed(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "throw_speed": "62.4"}
+        )
+        self.assertEqual(created["throw_speed"], 62.4)
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["throw_speed"], "")
+        updated = self.store.update_player(created["id"], {"throw_speed": 70})
+        self.assertEqual(updated["throw_speed"], 70.0)
+        cleared = self.store.update_player(created["id"], {"throw_speed": ""})
+        self.assertEqual(cleared["throw_speed"], "")
+
+    def test_rejects_invalid_throw_speed(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "throw_speed": "hard"}
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Lee", "position": "Utility", "throw_speed": 250}
+            )
+
     def test_staff_add_list_delete(self) -> None:
         created = self.store.add_staff(
             {
