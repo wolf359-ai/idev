@@ -162,6 +162,56 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.set_team({"year": "x" * 21})
 
+    def test_drills_add_list_delete(self) -> None:
+        player = self.store.add_player({"name": "Sky", "position": "Shortstop"})
+        drill = self.store.add_drill(
+            player["id"],
+            {
+                "name": "  Tee work  ",
+                "frequency": "3x per week",
+                "link": "https://example.com/tee",
+            },
+        )
+        self.assertTrue(drill["id"].startswith("drill-"))
+        self.assertEqual(drill["name"], "Tee work")
+        self.assertEqual(drill["frequency"], "3x per week")
+        self.assertEqual(drill["link"], "https://example.com/tee")
+
+        # Frequency and link are optional.
+        plain = self.store.add_drill(player["id"], {"name": "Soft toss"})
+        self.assertEqual(plain["frequency"], "")
+        self.assertEqual(plain["link"], "")
+
+        detail = self.store.get_player(player["id"])
+        self.assertEqual(len(detail["drills"]), 2)
+
+        self.store.delete_drill(player["id"], drill["id"])
+        detail = self.store.get_player(player["id"])
+        self.assertEqual(len(detail["drills"]), 1)
+        self.assertEqual(detail["drills"][0]["name"], "Soft toss")
+        with self.assertRaises(KeyError):
+            self.store.delete_drill(player["id"], "drill-missing")
+
+    def test_drill_link_must_be_http(self) -> None:
+        player = self.store.add_player({"name": "Pat", "position": "Catcher"})
+        for bad in ("javascript:alert(1)", "data:text/html,x", "ftp://host/f", "notaurl"):
+            with self.assertRaises(ValueError):
+                self.store.add_drill(player["id"], {"name": "X", "link": bad})
+        # http and https are both accepted.
+        ok = self.store.add_drill(
+            player["id"], {"name": "Y", "link": "http://example.com"}
+        )
+        self.assertEqual(ok["link"], "http://example.com")
+
+    def test_drill_name_required_and_max_ten(self) -> None:
+        player = self.store.add_player({"name": "Max", "position": "Utility"})
+        with self.assertRaises(ValueError):
+            self.store.add_drill(player["id"], {"name": "   "})
+        for i in range(10):
+            self.store.add_drill(player["id"], {"name": f"Drill {i}"})
+        with self.assertRaises(ValueError):
+            self.store.add_drill(player["id"], {"name": "Overflow"})
+
     def test_staff_password_set_and_clear(self) -> None:
         member = self.store.add_staff(
             {"name": "Pat", "role": "Coach", "access_level": "Full"}
@@ -740,6 +790,58 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 403)
         status, _payload = self.call("PUT", "/api/team", {"name": "Hijack"})
         self.assertEqual(status, 403)
+
+    def test_drills_coach_only_player_can_view(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Drew Kim", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+
+        status, drill = self.call(
+            "POST",
+            f"/api/players/{pid}/drills",
+            {"name": "Long toss", "frequency": "Daily", "link": "https://ex.com/d"},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(drill["name"], "Long toss")
+
+        # A javascript: link is rejected.
+        status, _payload = self.call(
+            "POST",
+            f"/api/players/{pid}/drills",
+            {"name": "Bad", "link": "javascript:alert(1)"},
+        )
+        self.assertEqual(status, 400)
+
+        # Give the player an access code and sign in as them.
+        status, access = self.call("POST", f"/api/players/{pid}/access-code")
+        self.assertEqual(status, 201)
+        self.sign_out()
+        self.login_player(code=access["code"])
+
+        # The player can see their own drills...
+        status, detail = self.call("GET", f"/api/players/{pid}")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(d["id"] == drill["id"] for d in detail["drills"]))
+
+        # ...but cannot add or remove them.
+        status, _payload = self.call(
+            "POST", f"/api/players/{pid}/drills", {"name": "Sneaky"}
+        )
+        self.assertEqual(status, 403)
+        status, _payload = self.call(
+            "DELETE", f"/api/players/{pid}/drills/{drill['id']}"
+        )
+        self.assertEqual(status, 403)
+
+        # Back as coach, deletion works.
+        self.sign_out()
+        self.login_coach()
+        status, _payload = self.call("DELETE", f"/api/players/{pid}/drills/{drill['id']}")
+        self.assertEqual(status, 200)
+        status, detail = self.call("GET", f"/api/players/{pid}")
+        self.assertFalse(any(d["id"] == drill["id"] for d in detail["drills"]))
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf

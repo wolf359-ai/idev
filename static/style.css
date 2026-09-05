@@ -549,6 +549,87 @@ h1, h2, h3, p {
 .tile.red .tile-value { color: var(--red); }
 .tile.red .spark i { background: var(--red); }
 
+/* "Skills Assigned" drills tile: a bulleted list with optional links. */
+.drill-tile {
+  gap: 0.4rem;
+}
+
+.drill-list {
+  list-style: disc;
+  margin: 0.15rem 0 0;
+  padding-left: 1.05rem;
+  display: grid;
+  gap: 0.22rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.drill-item {
+  font-size: 0.78rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+
+.drill-item::marker {
+  color: var(--blue);
+}
+
+.drill-link {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.drill-link:hover {
+  color: var(--cyan);
+}
+
+.drill-freq {
+  font-size: 0.72rem;
+}
+
+.drill-remove {
+  margin-left: 0.35rem;
+  padding: 0 0.3rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.drill-remove:hover {
+  color: var(--red);
+  background: rgba(245, 86, 108, 0.1);
+}
+
+.drill-empty {
+  font-size: 0.78rem;
+}
+
+.drill-actions {
+  margin-top: auto;
+  padding-top: 0.3rem;
+}
+
+.drill-add {
+  padding: 0.32rem 0.65rem;
+  font-size: 0.74rem;
+  background: linear-gradient(180deg, #fdba74, #fb923c);
+  color: #2a1405;
+}
+
+.drill-add:hover:not(:disabled) {
+  background: linear-gradient(180deg, #fecb94, #fca44f);
+}
+
+.drill-add:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 /* ---------- Dashboard columns ---------- */
 .dash {
   display: grid;

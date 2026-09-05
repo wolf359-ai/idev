@@ -38,6 +38,10 @@
   const teamForm = document.getElementById("team-form");
   const openTeamBtn = document.getElementById("open-team-info");
   const cancelTeam = document.getElementById("cancel-team-info");
+  const drillModal = document.getElementById("drill-modal");
+  const drillForm = document.getElementById("drill-form");
+  const cancelDrill = document.getElementById("cancel-drill");
+  let drillTargetId = null;
 
   const state = {
     players: [],
@@ -976,13 +980,6 @@
         foot: "Across rated skills",
       }),
       metricTile({
-        label: "Skills Rated",
-        value: m.rated,
-        unit: `/ ${m.total}`,
-        accent: "blue",
-        foot: m.total ? `${Math.round((m.rated / m.total) * 100)}% coverage` : "No skills yet",
-      }),
-      metricTile({
         label: "Top Skill",
         value: m.top ? m.top.value : "—",
         unit: m.top ? "/5" : "",
@@ -996,9 +993,116 @@
         accent: m.low ? accentForScore(m.low.value) : "orange",
         foot: m.low ? m.low.name : "Rate a skill",
       }),
+      drillsTile(player),
     );
 
     return el("div", { className: "hero" }, idPanel, tiles);
+  }
+
+  // Only http(s) links may become clickable anchors (blocks javascript:/data:).
+  function safeLink(url) {
+    return typeof url === "string" && /^https?:\/\//i.test(url.trim());
+  }
+
+  // "Skills Assigned" tile: a bulleted list of up to 10 development drills.
+  function drillsTile(player) {
+    const readOnly = isReadOnly();
+    const drills = Array.isArray(player.drills) ? player.drills : [];
+    const children = [
+      el("span", { className: "ribbon" }),
+      el("div", { className: "tile-label" }, "Skills Assigned"),
+    ];
+    if (!drills.length) {
+      children.push(el("div", { className: "drill-empty meta" }, "No drills assigned yet."));
+    } else {
+      const list = el("ul", { className: "drill-list" });
+      drills.slice(0, 10).forEach((drill) => {
+        const label = safeLink(drill.link)
+          ? el(
+              "a",
+              {
+                className: "drill-link",
+                href: drill.link,
+                target: "_blank",
+                rel: "noopener noreferrer",
+              },
+              drill.name,
+            )
+          : el("span", { className: "drill-name" }, drill.name);
+        const freq = drill.frequency
+          ? el("span", { className: "drill-freq meta" }, ` — ${drill.frequency}`)
+          : null;
+        const remove = readOnly
+          ? null
+          : el(
+              "button",
+              {
+                type: "button",
+                className: "drill-remove",
+                title: `Remove ${drill.name}`,
+                "aria-label": `Remove ${drill.name}`,
+                onClick: () => removeDrill(player.id, drill),
+              },
+              "\u00d7",
+            );
+        list.append(el("li", { className: "drill-item" }, label, freq, remove));
+      });
+      children.push(list);
+    }
+    if (!readOnly) {
+      const full = drills.length >= 10;
+      children.push(
+        el(
+          "div",
+          { className: "drill-actions" },
+          el(
+            "button",
+            {
+              type: "button",
+              className: "btn drill-add",
+              disabled: full || undefined,
+              onClick: () => openDrillModal(player.id),
+            },
+            full ? "Max 10 drills" : "Add drill",
+          ),
+        ),
+      );
+    }
+    return el("div", { className: "tile blue drill-tile" }, ...children);
+  }
+
+  async function removeDrill(playerId, drill) {
+    if (!window.confirm(`Remove drill "${drill.name}"?`)) {
+      return;
+    }
+    try {
+      await request(
+        `/api/players/${encodeURIComponent(playerId)}/drills/${encodeURIComponent(drill.id)}`,
+        { method: "DELETE" },
+      );
+      await loadDetail(state.selectedId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function openDrillModal(playerId) {
+    drillTargetId = playerId;
+    drillForm.reset();
+    if (typeof drillModal.showModal === "function") {
+      drillModal.showModal();
+    } else {
+      drillModal.setAttribute("open", "");
+    }
+    document.getElementById("drill-name").focus();
+  }
+
+  function closeDrillModal() {
+    if (drillModal.open) {
+      drillModal.close();
+    }
+    drillForm.reset();
+    drillTargetId = null;
   }
 
   // Secondary tile row from GameChanger computed stats, when present.
@@ -1519,6 +1623,40 @@
         });
         closeTeamModal();
         await loadTeam();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelDrill) {
+    cancelDrill.addEventListener("click", closeDrillModal);
+  }
+  if (drillModal) {
+    drillModal.addEventListener("click", (event) => {
+      if (event.target === drillModal) {
+        closeDrillModal();
+      }
+    });
+  }
+  if (drillForm) {
+    drillForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!drillTargetId) {
+        return;
+      }
+      const form = new FormData(drillForm);
+      try {
+        await request(`/api/players/${encodeURIComponent(drillTargetId)}/drills`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: form.get("name"),
+            frequency: form.get("frequency"),
+            link: form.get("link"),
+          }),
+        });
+        closeDrillModal();
+        await loadDetail(state.selectedId);
       } catch (error) {
         showError(error.message);
       }

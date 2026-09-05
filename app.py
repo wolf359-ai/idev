@@ -35,6 +35,10 @@ MAX_NOTE_LEN = 2000
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
 MAX_ROSTER_TEXT_BYTES = 200 * 1024
+MAX_DRILLS = 10
+MAX_DRILL_NAME_LEN = 80
+MAX_DRILL_FREQ_LEN = 60
+MAX_DRILL_LINK_LEN = 300
 HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
@@ -340,6 +344,34 @@ def parse_team(payload: object) -> dict:
         "year": parse_team_year(payload.get("year")),
         "season": parse_optional_season(payload.get("season")),
         "play_year": parse_optional_play_year(payload.get("play_year")),
+    }
+
+
+def parse_optional_link(value: object) -> str:
+    """Optional drill link; only http(s) URLs are allowed (blocks javascript:/data:)."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if len(text) > MAX_DRILL_LINK_LEN:
+        raise ValueError(f"Link must be {MAX_DRILL_LINK_LEN} characters or fewer")
+    parsed = urlparse(text)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        raise ValueError("Link must be a http or https URL")
+    return text
+
+
+def parse_drill(payload: object) -> dict:
+    """Validate a skill-development drill: name, practice frequency, and link."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send drill details in the request body")
+    return {
+        "name": clean_text(payload.get("name"), "Drill name", MAX_DRILL_NAME_LEN),
+        "frequency": parse_optional_name(
+            payload.get("frequency"), "Frequency", MAX_DRILL_FREQ_LEN
+        ),
+        "link": parse_optional_link(payload.get("link")),
     }
 
 
@@ -986,12 +1018,18 @@ class Store:
                 for item in self.data["notes"]
                 if item.get("player_id") == player_id
             ]
+            drills = [
+                dict(item)
+                for item in record.get("drills", [])
+                if isinstance(item, dict)
+            ]
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         player["has_access_code"] = has_access_code
         player["ratings"] = ratings
         player["notes"] = notes
+        player["drills"] = drills
         player["progress"] = build_progress(skills, ratings)
         player["stats"] = build_stats_view(raw_stats)
         return player
@@ -1006,6 +1044,7 @@ class Store:
             "number": parse_number(payload.get("number")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
+            "drills": [],
         }
         with self.lock:
             self.data["players"].append(player)
@@ -1144,6 +1183,28 @@ class Store:
             ]
             if len(self.data["notes"]) == before:
                 raise KeyError("Note not found")
+            self._save()
+
+    def add_drill(self, player_id: str, payload: dict) -> dict:
+        fields = parse_drill(payload)
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            drills = player.setdefault("drills", [])
+            if len(drills) >= MAX_DRILLS:
+                raise ValueError(f"A player can have at most {MAX_DRILLS} drills")
+            drill = {"id": new_id("drill"), **fields, "created_at": utc_now()}
+            drills.append(drill)
+            self._save()
+            return dict(drill)
+
+    def delete_drill(self, player_id: str, drill_id: str) -> None:
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            drills = player.get("drills", [])
+            remaining = [d for d in drills if d.get("id") != drill_id]
+            if len(remaining) == len(drills):
+                raise KeyError("Drill not found")
+            player["drills"] = remaining
             self._save()
 
     # -- staff -------------------------------------------------------------
@@ -1637,6 +1698,12 @@ class IdevHandler(BaseHTTPRequestHandler):
             if note_match:
                 send_json(self, 201, self.store.add_note(note_match.group(1), payload))
                 return
+            drill_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/drills", path
+            )
+            if drill_match:
+                send_json(self, 201, self.store.add_drill(drill_match.group(1), payload))
+                return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
@@ -1703,6 +1770,14 @@ class IdevHandler(BaseHTTPRequestHandler):
             note_match = re.fullmatch(r"/api/notes/([a-zA-Z0-9_-]{8,64})", path)
             if note_match:
                 self.store.delete_note(note_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            drill_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/drills/([a-zA-Z0-9_-]{8,64})",
+                path,
+            )
+            if drill_match:
+                self.store.delete_drill(drill_match.group(1), drill_match.group(2))
                 send_json(self, 200, {"ok": True})
                 return
             staff_pw_match = re.fullmatch(

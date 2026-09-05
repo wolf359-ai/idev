@@ -266,6 +266,29 @@
         </div>
       </form>
     </dialog>
+
+    <dialog id="drill-modal" class="modal" aria-labelledby="drill-modal-title">
+      <form id="drill-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="drill-modal-title">Add skill drill</h3>
+        <p class="meta">Assign a skill-development drill with an optional link.</p>
+        <label>
+          Drill name
+          <input id="drill-name" name="name" maxlength="80" placeholder="Tee work — outside pitch" required>
+        </label>
+        <label>
+          Frequency of practice
+          <input id="drill-frequency" name="frequency" maxlength="60" placeholder="3x per week">
+        </label>
+        <label>
+          Link
+          <input id="drill-link" name="link" type="url" maxlength="300" placeholder="https://example.com/drill">
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save drill</button>
+          <button type="button" id="cancel-drill" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
   </div>
   <script src="/static/app.js"></script>
 </body>
