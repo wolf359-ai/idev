@@ -824,6 +824,20 @@ def hash_access_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+def parse_access_code(value: object) -> str:
+    """A coach-provided access code the player uses to sign in (4-64 chars)."""
+    if not isinstance(value, str):
+        raise ValueError("Enter an access code")
+    code = value.strip()
+    if len(code) < 4:
+        raise ValueError("Access code must be at least 4 characters")
+    if len(code) > 64:
+        raise ValueError("Access code must be 64 characters or fewer")
+    if any(ord(ch) < 32 for ch in code):
+        raise ValueError("Access code contains invalid characters")
+    return code
+
+
 class SessionManager:
     """In-memory server-side session store with idle/absolute expiry."""
 
@@ -1610,9 +1624,16 @@ class Store:
             record = self.data.get("auth", {}).get("admin")
         return verify_password(password, record)
 
-    def set_player_access_code(self, player_id: str) -> str:
-        """Generate a new access code for a player, store only its hash."""
-        code = secrets.token_urlsafe(ACCESS_CODE_BYTES)
+    def set_player_access_code(self, player_id: str, code: object = None) -> str:
+        """Set a player's access code, storing only its hash.
+
+        Uses the coach-provided ``code`` when given; otherwise generates a
+        high-entropy random one.
+        """
+        if code is None or (isinstance(code, str) and not code.strip()):
+            code = secrets.token_urlsafe(ACCESS_CODE_BYTES)
+        else:
+            code = parse_access_code(code)
         digest = hash_access_code(code)
         with self.lock:
             player = self._player_unlocked(player_id)
@@ -1990,7 +2011,12 @@ class IdevHandler(BaseHTTPRequestHandler):
                 r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
             )
             if access_match:
-                send_json(self, 201, {"code": self.store.set_player_access_code(access_match.group(1))})
+                code = payload.get("code") if isinstance(payload, dict) else None
+                send_json(
+                    self,
+                    201,
+                    {"code": self.store.set_player_access_code(access_match.group(1), code)},
+                )
                 return
             if path == "/api/players/import":
                 result = self.store.import_roster(payload)

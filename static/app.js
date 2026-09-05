@@ -45,6 +45,10 @@
   const editPlayerModal = document.getElementById("edit-player-modal");
   const editPlayerForm = document.getElementById("edit-player-form");
   const cancelEditPlayer = document.getElementById("cancel-edit-player");
+  const accessCodeModal = document.getElementById("access-code-modal");
+  const accessCodeForm = document.getElementById("access-code-form");
+  const accessCodeInput = document.getElementById("access-code-input");
+  const cancelAccessCode = document.getElementById("cancel-access-code");
   const brandTeam = document.getElementById("brand-team");
   const brandMeta = document.getElementById("brand-meta");
   let drillTargetId = null;
@@ -1787,31 +1791,37 @@
     editPlayerForm.reset();
   }
 
-  async function manageAccessCode() {
-    if (!state.selectedId || !state.detail) {
+  function manageAccessCode() {
+    if (!state.selectedId || !state.detail || !accessCodeModal) {
       return;
     }
     const has = state.detail.has_access_code;
-    const ok = window.confirm(
-      has
-        ? "Generate a NEW access code? The current code will stop working."
-        : "Create an access code so this player can sign in and see their development?",
-    );
-    if (!ok) {
-      return;
+    const title = document.getElementById("access-code-title");
+    const help = document.getElementById("access-code-help");
+    if (title) {
+      title.textContent = has ? "Reset access code" : "Set access code";
     }
-    try {
-      const result = await request(
-        `/api/players/${encodeURIComponent(state.selectedId)}/access-code`,
-        { method: "POST" },
-      );
-      window.prompt(
-        "Give this access code to the player. It is shown only once — copy it now:",
-        result.code,
-      );
-      await loadDetail(state.selectedId);
-    } catch (error) {
-      showError(error.message);
+    if (help) {
+      help.textContent = has
+        ? "Enter a new access code for this player. The current code will stop working. They'll use this to sign in and view their information. 4–64 characters."
+        : "Enter an access code for this player. They'll use it to sign in and view their information. 4–64 characters.";
+    }
+    accessCodeForm.reset();
+    if (typeof accessCodeModal.showModal === "function") {
+      accessCodeModal.showModal();
+    } else {
+      accessCodeModal.setAttribute("open", "");
+    }
+    if (accessCodeInput) {
+      accessCodeInput.focus();
+    }
+  }
+
+  function closeAccessCodeModal() {
+    if (accessCodeModal.open) {
+      accessCodeModal.close();
+    } else {
+      accessCodeModal.removeAttribute("open");
     }
   }
 
@@ -2158,6 +2168,36 @@
         });
         closeEditPlayer();
         await loadPlayers(state.selectedId);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelAccessCode) {
+    cancelAccessCode.addEventListener("click", closeAccessCodeModal);
+  }
+  if (accessCodeModal) {
+    accessCodeModal.addEventListener("click", (event) => {
+      if (event.target === accessCodeModal) {
+        closeAccessCodeModal();
+      }
+    });
+  }
+  if (accessCodeForm) {
+    accessCodeForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.selectedId) {
+        return;
+      }
+      const code = accessCodeInput.value.trim();
+      try {
+        await request(`/api/players/${encodeURIComponent(state.selectedId)}/access-code`, {
+          method: "POST",
+          body: JSON.stringify({ code }),
+        });
+        closeAccessCodeModal();
+        await loadDetail(state.selectedId);
       } catch (error) {
         showError(error.message);
       }

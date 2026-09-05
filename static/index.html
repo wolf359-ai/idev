@@ -371,6 +371,32 @@
         </div>
       </form>
     </dialog>
+    <dialog id="access-code-modal" class="modal" aria-labelledby="access-code-title">
+      <form id="access-code-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="access-code-title">Set access code</h3>
+        <p class="meta" id="access-code-help">
+          Enter an access code for this player. They'll use it to sign in and view
+          their information. 4–64 characters.
+        </p>
+        <label>
+          Access code
+          <input
+            id="access-code-input"
+            name="code"
+            minlength="4"
+            maxlength="64"
+            required
+            autocomplete="off"
+            spellcheck="false"
+            placeholder="e.g. rivera-2026"
+          >
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save code</button>
+          <button type="button" id="cancel-access-code" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
   </div>
   <script src="/static/app.js"></script>
 </body>

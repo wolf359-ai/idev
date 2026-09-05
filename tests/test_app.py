@@ -687,6 +687,24 @@ class StoreTests(unittest.TestCase):
         self.store.clear_player_access_code(player["id"])
         self.assertIsNone(self.store.find_player_by_access_code(code))
 
+    def test_access_code_accepts_coach_provided_value(self) -> None:
+        player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
+        # A coach-provided code is used verbatim (after trimming).
+        returned = self.store.set_player_access_code(player["id"], "  rivera-2026  ")
+        self.assertEqual(returned, "rivera-2026")
+        self.assertEqual(
+            self.store.find_player_by_access_code("rivera-2026"), player["id"]
+        )
+        # Too-short codes are rejected.
+        with self.assertRaises(ValueError):
+            self.store.set_player_access_code(player["id"], "ab")
+        # Blank falls back to a generated random code.
+        generated = self.store.set_player_access_code(player["id"], "   ")
+        self.assertTrue(len(generated) >= 8)
+        self.assertEqual(
+            self.store.find_player_by_access_code(generated), player["id"]
+        )
+
     def test_public_player_hides_access_code_hash(self) -> None:
         player = self.store.add_player({"name": "Pat", "position": "Utility"})
         self.store.set_player_access_code(player["id"])
