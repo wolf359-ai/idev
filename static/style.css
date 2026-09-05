@@ -108,7 +108,7 @@ h1, h2, h3, p {
   line-height: 1;
   /* Nudge down so the text top lines up with the "ALPHA" letters, not the
      top of the logo art (which includes the lightning icon above them). */
-  margin: 11px 0 0;
+  margin: 17px 0 0;
 }
 
 .session-controls {
