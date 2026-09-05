@@ -216,17 +216,17 @@ h1, h2, h3, p {
   }
 }
 
-.admin-actions {
-  display: flex;
-  gap: 0.5rem;
+/* Nested accordion rows (Import roster / Add player) sit flush inside Admin. */
+.admin-sub {
+  margin-bottom: 0;
 }
 
-.admin-actions .btn {
-  flex: 1;
+.admin-sub > .admin-body {
+  padding: 0.35rem 0 0.1rem;
 }
 
 /* Forms nested in the accordion don't need their own card frame. */
-.admin-body .card.form {
+.admin-body .form {
   border: none;
   background: none;
   padding: 0;

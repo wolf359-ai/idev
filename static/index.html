@@ -61,12 +61,13 @@
           <span class="admin-caret" aria-hidden="true"></span>
         </summary>
         <div class="admin-body">
-        <div class="row admin-actions">
-          <button type="button" id="show-import-roster" class="btn">Import roster</button>
-          <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
-        </div>
-      <form id="import-roster-form" class="card form hidden" autocomplete="off">
-        <h3>Import GameChanger roster</h3>
+        <details class="admin admin-sub" id="import-roster">
+          <summary class="admin-summary">
+            <span class="admin-title">Import roster</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+      <form id="import-roster-form" class="form" autocomplete="off">
         <p class="meta">
           In GameChanger, open Stats and choose Export Stats. Select that CSV here;
           the importer reads the # and Roster columns. You can also paste one player
@@ -91,7 +92,15 @@
           <button type="button" id="cancel-import-roster" class="btn">Cancel</button>
         </div>
       </form>
-      <form id="add-player-form" class="card form hidden" autocomplete="off">
+          </div>
+        </details>
+        <details class="admin admin-sub" id="add-player">
+          <summary class="admin-summary">
+            <span class="admin-title">Add player</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+      <form id="add-player-form" class="form" autocomplete="off">
         <label>
           Name
           <input id="player-name" name="name" maxlength="80" required>
@@ -122,6 +131,8 @@
           <button type="button" id="cancel-add-player" class="btn">Cancel</button>
         </div>
       </form>
+          </div>
+        </details>
         </div>
       </details>
       <ul id="player-list" class="player-list"></ul>

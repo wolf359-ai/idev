@@ -13,10 +13,10 @@
   const main = document.getElementById("main");
   const emptyState = document.getElementById("empty-state");
   const addForm = document.getElementById("add-player-form");
-  const showAdd = document.getElementById("show-add-player");
+  const addPanel = document.getElementById("add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
   const importForm = document.getElementById("import-roster-form");
-  const showImport = document.getElementById("show-import-roster");
+  const importPanel = document.getElementById("import-roster");
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
@@ -1125,26 +1125,29 @@
     showLogin();
   });
 
-  showAdd.addEventListener("click", () => {
-    importForm.classList.add("hidden");
-    addForm.classList.remove("hidden");
-    document.getElementById("player-name").focus();
+  // Open one admin panel at a time and focus its first field.
+  addPanel.addEventListener("toggle", () => {
+    if (addPanel.open) {
+      importPanel.open = false;
+      document.getElementById("player-name").focus();
+    }
+  });
+
+  importPanel.addEventListener("toggle", () => {
+    if (importPanel.open) {
+      addPanel.open = false;
+      rosterText.focus();
+    }
   });
 
   cancelAdd.addEventListener("click", () => {
     addForm.reset();
-    addForm.classList.add("hidden");
-  });
-
-  showImport.addEventListener("click", () => {
-    addForm.classList.add("hidden");
-    importForm.classList.remove("hidden");
-    rosterText.focus();
+    addPanel.open = false;
   });
 
   cancelImport.addEventListener("click", () => {
     importForm.reset();
-    importForm.classList.add("hidden");
+    importPanel.open = false;
     resetImportPreview();
   });
 
@@ -1192,7 +1195,7 @@
       });
       const imported = result.imported || [];
       importForm.reset();
-      importForm.classList.add("hidden");
+      importPanel.open = false;
       resetImportPreview();
       await loadPlayers(imported.length ? imported[0].id : undefined);
     } catch (error) {
@@ -1214,7 +1217,7 @@
         }),
       });
       addForm.reset();
-      addForm.classList.add("hidden");
+      addPanel.open = false;
       await loadPlayers(created.id);
     } catch (error) {
       showError(error.message);
