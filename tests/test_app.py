@@ -182,15 +182,63 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.import_roster({"text": "x" * (app.MAX_ROSTER_TEXT_BYTES + 1)})
 
+    def test_admin_password_is_hashed_not_stored_plaintext(self) -> None:
+        self.assertIsNone(self.store.ensure_admin_password("s3cret-pass"))
+        self.assertTrue(self.store.verify_admin_password("s3cret-pass"))
+        self.assertFalse(self.store.verify_admin_password("wrong"))
+        record = self.store.data["auth"]["admin"]
+        self.assertEqual(record["algo"], "pbkdf2_sha256")
+        self.assertGreaterEqual(record["iterations"], 600_000)
+        self.assertNotIn("s3cret-pass", json.dumps(record))
+
+    def test_generated_admin_password_returned_once(self) -> None:
+        generated = self.store.ensure_admin_password(None)
+        self.assertIsInstance(generated, str)
+        self.assertTrue(self.store.verify_admin_password(generated))
+        # Already set: no new password is generated.
+        self.assertIsNone(self.store.ensure_admin_password(None))
+
+    def test_access_code_roundtrip_and_not_leaked(self) -> None:
+        player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
+        self.assertNotIn("access_code_hash", player)
+        code = self.store.set_player_access_code(player["id"])
+        self.assertEqual(self.store.find_player_by_access_code(code), player["id"])
+        self.assertIsNone(self.store.find_player_by_access_code("nope"))
+        detail = self.store.get_player(player["id"])
+        self.assertTrue(detail["has_access_code"])
+        self.assertNotIn("access_code_hash", detail)
+        # Stored value is a SHA-256 hash, never the plaintext code.
+        stored = self.store.data["players"][0]["access_code_hash"]
+        self.assertEqual(len(stored), 64)
+        self.assertNotEqual(stored, code)
+        self.store.clear_player_access_code(player["id"])
+        self.assertIsNone(self.store.find_player_by_access_code(code))
+
+    def test_public_player_hides_access_code_hash(self) -> None:
+        player = self.store.add_player({"name": "Pat", "position": "Utility"})
+        self.store.set_player_access_code(player["id"])
+        listed = self.store.list_players()
+        self.assertTrue(all("access_code_hash" not in item for item in listed))
+
+
+COACH_PASSWORD = "coach-secret-pass"
+
 
 class HttpTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        store = app.Store(Path(self.tmp.name) / "data.json")
-        self.server = app.make_server(store, "127.0.0.1", 0)
+        self.store = app.Store(Path(self.tmp.name) / "data.json")
+        self.store.ensure_admin_password(COACH_PASSWORD)
+        self.server = app.make_server(
+            self.store, "127.0.0.1", 0, app.SessionManager(), app.LoginRateLimiter()
+        )
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.host, self.port = self.server.server_address[:2]
+        self.cookie: str | None = None
+        self.csrf: str | None = None
+        # Most tests exercise the full app, so start signed in as the coach.
+        self.login_coach()
 
     def tearDown(self) -> None:
         self.server.shutdown()
@@ -210,6 +258,10 @@ class HttpTests(unittest.TestCase):
         if body is not None:
             payload = json.dumps(body).encode("utf-8")
             headers["Content-Type"] = "application/json"
+        if self.cookie:
+            headers["Cookie"] = self.cookie
+        if self.csrf and method not in ("GET", "HEAD"):
+            headers["X-CSRF-Token"] = self.csrf
         conn.request(method, path, body=payload, headers=headers)
         response = conn.getresponse()
         data = response.read()
@@ -218,6 +270,30 @@ class HttpTests(unittest.TestCase):
             return response.status, json.loads(data.decode("utf-8"))
         except json.JSONDecodeError:
             return response.status, data.decode("utf-8", errors="replace")
+
+    def _login(self, body: dict) -> tuple[int, object]:
+        conn = HTTPConnection(self.host, self.port, timeout=5)
+        payload = json.dumps(body).encode("utf-8")
+        conn.request("POST", "/api/login", body=payload, headers={"Content-Type": "application/json"})
+        response = conn.getresponse()
+        data = response.read()
+        set_cookie = response.getheader("Set-Cookie")
+        conn.close()
+        parsed = json.loads(data.decode("utf-8") or "{}")
+        if response.status == 200 and set_cookie:
+            self.cookie = set_cookie.split(";", 1)[0]
+            self.csrf = parsed.get("csrf")
+        return response.status, parsed
+
+    def login_coach(self, password: str = COACH_PASSWORD) -> tuple[int, object]:
+        return self._login({"mode": "coach", "password": password})
+
+    def login_player(self, code: str) -> tuple[int, object]:
+        return self._login({"mode": "player", "code": code})
+
+    def sign_out(self) -> None:
+        self.cookie = None
+        self.csrf = None
 
     def test_health_and_home_page(self) -> None:
         status, payload = self.call("GET", "/api/health")
@@ -339,6 +415,108 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertIsInstance(payload, dict)
         self.assertEqual(payload["error"], "Not found")
+
+    def test_login_page_and_health_are_public(self) -> None:
+        self.sign_out()
+        status, _html = self.call("GET", "/")
+        self.assertEqual(status, 200)
+        status, payload = self.call("GET", "/api/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["app"], "idev")
+        status, session = self.call("GET", "/api/session")
+        self.assertEqual(status, 200)
+        self.assertFalse(session["authenticated"])
+
+    def test_unauthenticated_requests_are_blocked(self) -> None:
+        self.sign_out()
+        status, payload = self.call("GET", "/api/players")
+        self.assertEqual(status, 401)
+        self.assertIn("sign in", payload["error"].lower())
+        status, _payload = self.call(
+            "POST", "/api/players", {"name": "Sneaky", "position": "Utility"}
+        )
+        self.assertEqual(status, 401)
+
+    def test_invalid_login_is_rejected(self) -> None:
+        self.sign_out()
+        status, payload = self.login_coach(password="wrong-password")
+        self.assertEqual(status, 401)
+        self.assertIsNone(self.cookie)
+        status, _payload = self.login_player(code="not-a-real-code")
+        self.assertEqual(status, 401)
+
+    def test_coach_session_and_logout(self) -> None:
+        status, session = self.call("GET", "/api/session")
+        self.assertEqual(status, 200)
+        self.assertTrue(session["authenticated"])
+        self.assertEqual(session["role"], "coach")
+        status, _payload = self.call("GET", "/api/players")
+        self.assertEqual(status, 200)
+        status, _payload = self.call("POST", "/api/logout")
+        self.assertEqual(status, 200)
+        # The server-side session is gone even though we still send the cookie.
+        status, _payload = self.call("GET", "/api/players")
+        self.assertEqual(status, 401)
+
+    def test_csrf_token_required_for_mutations(self) -> None:
+        saved = self.csrf
+        self.csrf = None  # drop the CSRF header while keeping the session cookie
+        status, payload = self.call("POST", "/api/skills", {"name": "Slapping"})
+        self.assertEqual(status, 403)
+        self.assertIn("token", payload["error"].lower())
+        self.csrf = saved
+        status, _payload = self.call("POST", "/api/skills", {"name": "Slapping"})
+        self.assertEqual(status, 201)
+
+    def test_player_access_is_scoped_to_one_player(self) -> None:
+        _status, mine = self.call(
+            "POST", "/api/players", {"name": "Mine", "position": "Shortstop"}
+        )
+        _status, other = self.call(
+            "POST", "/api/players", {"name": "Other", "position": "Catcher"}
+        )
+        status, code_payload = self.call(
+            "POST", f"/api/players/{mine['id']}/access-code"
+        )
+        self.assertEqual(status, 201)
+        code = code_payload["code"]
+
+        self.sign_out()
+        status, session = self.login_player(code)
+        self.assertEqual(status, 200)
+        self.assertEqual(session["role"], "player")
+        self.assertEqual(session["player"]["id"], mine["id"])
+
+        # Can read only their own player.
+        status, detail = self.call("GET", f"/api/players/{mine['id']}")
+        self.assertEqual(status, 200)
+        self.assertEqual(detail["name"], "Mine")
+        self.assertNotIn("access_code_hash", detail)
+
+        # Cannot list the roster, read another player, or make changes.
+        status, _payload = self.call("GET", "/api/players")
+        self.assertEqual(status, 403)
+        status, _payload = self.call("GET", f"/api/players/{other['id']}")
+        self.assertEqual(status, 403)
+        status, _payload = self.call(
+            "POST", f"/api/players/{mine['id']}/notes", {"text": "no writes"}
+        )
+        self.assertEqual(status, 403)
+
+    def test_access_code_login_and_revocation(self) -> None:
+        _status, player = self.call(
+            "POST", "/api/players", {"name": "Rae", "position": "Pitcher"}
+        )
+        _status, code_payload = self.call(
+            "POST", f"/api/players/{player['id']}/access-code"
+        )
+        code = code_payload["code"]
+        # Revoke as coach.
+        status, _payload = self.call("DELETE", f"/api/players/{player['id']}/access-code")
+        self.assertEqual(status, 200)
+        self.sign_out()
+        status, _payload = self.login_player(code)
+        self.assertEqual(status, 401)
 
 
 if __name__ == "__main__":

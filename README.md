@@ -43,6 +43,48 @@ That address only works on the same computer that is running `app.py`. Leave the
 
 The first launch creates two sample players so you can click around. Your changes are saved in `data.json` in the same folder.
 
+## Signing in
+
+idev now has a sign-in page with two kinds of access:
+
+- **Coach** — full access to the roster, ratings, stats, and notes.
+- **Player** — read-only access to just one player's own development, using an
+  access code the coach hands out.
+
+### Coach password
+
+The **first** time you run `app.py`, idev creates a coach password for you and
+prints it once in the terminal, for example:
+
+```
+First-time setup: a coach password was created for you:
+    Qk7c-3fJ8s2A
+Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.
+```
+
+Copy that password and use it on the **Coach** tab. It is stored only as a
+salted hash in `data.json`, never in plain text. To choose your own password
+instead, set an environment variable before starting the app:
+
+```bash
+IDEV_ADMIN_PASSWORD="your-own-password" python3 app.py
+```
+
+### Giving a player access
+
+1. Sign in as Coach and open a player.
+2. Click **Access code**. idev shows a one-time code — copy it and give it to
+   that player (or their family).
+3. The player opens idev, chooses the **Player** tab, and enters the code. They
+   see only their own skills, ratings, stats, notes, and progress — they cannot
+   see or change anyone else.
+4. To turn off access, open the player and click **Remove access** (or **Reset
+   code** to issue a new one; the old code stops working).
+
+Access codes are stored only as hashes, never in plain text. If you serve idev
+over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is marked
+`Secure`.
+
 ## What you can do
 
 - **Players** — name, position, and jersey number
@@ -50,8 +92,10 @@ The first launch creates two sample players so you can click around. Your change
 - **Skills** — hitting, fielding, throwing, and other softball skills
 - **Ratings** — tap 1–5 on a skill; each tap is saved as a new rating
 - **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
+- **Skill radar** — a spider chart of every skill's current rating, so strengths and weaknesses stand out at a glance
 - **Notes** — short coaching notes for a player
 - **Progress** — see how a rating changed from the first score to the latest one
+- **Ratings colors** — the 1–5 dots shift from red (needs work) to green (strong) as a skill improves
 
 ## Import a GameChanger roster
 
