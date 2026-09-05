@@ -766,7 +766,7 @@ textarea {
 
 .radar {
   width: 100%;
-  max-width: 460px;
+  max-width: 300px;
   filter: drop-shadow(0 0 10px rgba(34, 211, 238, 0.15));
 }
 

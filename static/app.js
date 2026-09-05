@@ -329,7 +329,7 @@
           y: y.toFixed(1),
           "text-anchor": anchor,
           "dominant-baseline": "middle",
-          "font-size": "11",
+          "font-size": "9.5",
           fill: "#9fb0c0",
         },
         `${item.label} (${item.value || 0})`,
