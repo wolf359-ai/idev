@@ -325,19 +325,28 @@ class StoreTests(unittest.TestCase):
                 "name": "  Boston Caps  ",
                 "year": "2025",
                 "season": "Summer",
+                "age_bracket": "12u",
                 "play_year": "First year",
             }
         )
         self.assertEqual(saved["name"], "Boston Caps")
         self.assertEqual(saved["year"], "2025")
         self.assertEqual(saved["season"], "Summer")
+        self.assertEqual(saved["age_bracket"], "12u")
         self.assertEqual(saved["play_year"], "First year")
         self.assertEqual(self.store.get_team(), saved)
 
         # All fields are optional and may be cleared.
         cleared = self.store.set_team({})
         self.assertEqual(
-            cleared, {"name": "", "year": "", "season": "", "play_year": ""}
+            cleared,
+            {
+                "name": "",
+                "year": "",
+                "season": "",
+                "age_bracket": "",
+                "play_year": "",
+            },
         )
 
     def test_team_information_validation(self) -> None:
@@ -347,6 +356,8 @@ class StoreTests(unittest.TestCase):
             self.store.set_team({"play_year": "Third year"})
         with self.assertRaises(ValueError):
             self.store.set_team({"year": "x" * 21})
+        with self.assertRaises(ValueError):
+            self.store.set_team({"age_bracket": "9u"})
 
     def test_drills_add_list_delete(self) -> None:
         player = self.store.add_player({"name": "Sky", "position": "Shortstop"})

@@ -469,6 +469,7 @@
       ["Team", team.name],
       ["Year", team.year],
       ["Season", team.season],
+      ["Age bracket", team.age_bracket],
       ["Years of play", team.play_year],
     ];
     const hasAny = rows.some(([, value]) => value);
@@ -489,6 +490,7 @@
     document.getElementById("team-name").value = team.name || "";
     document.getElementById("team-year-input").value = team.year || "";
     document.getElementById("team-season").value = team.season || "";
+    document.getElementById("team-age-bracket").value = team.age_bracket || "";
     document.getElementById("team-play-year").value = team.play_year || "";
     if (typeof teamModal.showModal === "function") {
       teamModal.showModal();
@@ -2037,6 +2039,7 @@
             name: form.get("name"),
             year: form.get("year"),
             season: form.get("season"),
+            age_bracket: form.get("age_bracket"),
             play_year: form.get("play_year"),
           }),
         });

@@ -119,6 +119,15 @@ TEAM_PLAY_YEARS = (
     "Second year",
 )
 
+# Girls' softball age brackets a team competes in.
+TEAM_AGE_BRACKETS = (
+    "10u",
+    "12u",
+    "14u",
+    "16u",
+    "18u",
+)
+
 # Age-group / squad the player is playing with.
 TEAM_TYPES = (
     "10u-1",
@@ -452,14 +461,27 @@ def parse_optional_play_year(value: object) -> str:
     return text
 
 
+def parse_optional_age_bracket(value: object) -> str:
+    """Optional girls' softball age bracket (e.g. 12u); blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_AGE_BRACKETS:
+        raise ValueError("Choose an age bracket from the list")
+    return text
+
+
 def parse_team(payload: object) -> dict:
-    """Validate team information: name, year, season, and years of play."""
+    """Validate team information: name, year, season, age bracket, and years of play."""
     if not isinstance(payload, dict):
         raise ValueError("Send team details in the request body")
     return {
         "name": parse_optional_name(payload.get("name"), "Team name", 80),
         "year": parse_team_year(payload.get("year")),
         "season": parse_optional_season(payload.get("season")),
+        "age_bracket": parse_optional_age_bracket(payload.get("age_bracket")),
         "play_year": parse_optional_play_year(payload.get("play_year")),
     }
 
