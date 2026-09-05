@@ -710,6 +710,11 @@ textarea {
   margin-top: 1rem;
 }
 
+/* Give the Save stats button a little breathing room below the fields. */
+.stats-card .form > .btn-primary {
+  margin-top: 0.9rem;
+}
+
 .stat-group h3 {
   font-size: 0.78rem;
   letter-spacing: 0.12em;
