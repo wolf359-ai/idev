@@ -638,7 +638,7 @@ h1, h2, h3, p {
   gap: 0.5rem;
   padding: 0 0.1rem 0.28rem;
   border-bottom: 1px solid var(--line-soft);
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
@@ -661,7 +661,7 @@ h1, h2, h3, p {
   grid-template-columns: 1fr auto;
   gap: 0.5rem;
   align-items: baseline;
-  font-size: 0.78rem;
+  font-size: 0.95rem;
   line-height: 1.25;
   color: var(--ink);
 }
@@ -699,7 +699,7 @@ h1, h2, h3, p {
 }
 
 .drill-freq {
-  font-size: 0.72rem;
+  font-size: 0.85rem;
 }
 
 .drill-remove {
@@ -720,7 +720,7 @@ h1, h2, h3, p {
 }
 
 .drill-empty {
-  font-size: 0.78rem;
+  font-size: 0.9rem;
 }
 
 .drill-actions {
