@@ -119,6 +119,14 @@ h1, h2, h3, p {
   color: var(--muted);
 }
 
+.brand p.brand-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.8rem;
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: var(--muted);
+}
+
 .session-controls {
   display: flex;
   align-items: center;

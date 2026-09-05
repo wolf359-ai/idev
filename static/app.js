@@ -46,6 +46,7 @@
   const editPlayerForm = document.getElementById("edit-player-form");
   const cancelEditPlayer = document.getElementById("cancel-edit-player");
   const brandTeam = document.getElementById("brand-team");
+  const brandMeta = document.getElementById("brand-meta");
   let drillTargetId = null;
 
   const state = {
@@ -271,6 +272,7 @@
     const data = await request("/api/staff");
     state.staff = data.staff || [];
     renderStaff();
+    renderBrandMeta();
   }
 
   function renderStaff() {
@@ -457,6 +459,45 @@
       brandTeam.textContent = "";
       brandTeam.classList.add("hidden");
     }
+    renderBrandMeta();
+  }
+
+  // Head coaches, sorted alphabetically by last name.
+  function headCoachNames() {
+    const lastName = (name) => {
+      const parts = String(name || "").trim().split(/\s+/);
+      return (parts[parts.length - 1] || "").toLowerCase();
+    };
+    return (state.staff || [])
+      .filter(
+        (m) => typeof m.role === "string" && m.role.trim().toLowerCase() === "head coach",
+      )
+      .sort((a, b) => {
+        const la = lastName(a.name);
+        const lb = lastName(b.name);
+        if (la !== lb) {
+          return la < lb ? -1 : 1;
+        }
+        return String(a.name).localeCompare(String(b.name));
+      })
+      .map((m) => m.name);
+  }
+
+  // Roster size + head coach(es) below the team/season line (coach view only).
+  function renderBrandMeta() {
+    if (!brandMeta) {
+      return;
+    }
+    // Players don't load the full roster or staff list, so only coaches see this.
+    if (state.role !== "coach") {
+      brandMeta.textContent = "";
+      brandMeta.classList.add("hidden");
+      return;
+    }
+    const coaches = headCoachNames();
+    const coachText = coaches.length ? coaches.join(", ") : "Not set";
+    brandMeta.textContent = `Team Roster: ${state.players.length} \u00b7 Head Coach: ${coachText}`;
+    brandMeta.classList.remove("hidden");
   }
 
   function renderTeamSummary() {
@@ -1487,6 +1528,7 @@
     const exists = state.players.some((player) => player.id === nextId);
     state.selectedId = exists ? nextId : (state.players[0] && state.players[0].id) || null;
     renderRoster();
+    renderBrandMeta();
     if (state.selectedId) {
       await loadDetail(state.selectedId);
     } else {
@@ -1805,6 +1847,7 @@
     state.csrf = null;
     state.player = null;
     state.players = [];
+    state.staff = [];
     state.selectedId = null;
     state.detail = null;
     state.team = {};
