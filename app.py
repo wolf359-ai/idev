@@ -39,6 +39,9 @@ MAX_DRILLS = 10
 MAX_DRILL_NAME_LEN = 80
 MAX_DRILL_FREQ_LEN = 60
 MAX_DRILL_LINK_LEN = 300
+# Keep this many timestamped snapshots in data_backups/ so an accidental
+# deletion or corruption of the data file never loses the roster.
+MAX_BACKUPS = int(os.environ.get("IDEV_MAX_BACKUPS", "40"))
 HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
@@ -795,6 +798,7 @@ class Store:
 
     def __init__(self, path: Path):
         self.path = Path(path)
+        self.backup_dir = self.path.parent / "data_backups"
         self.lock = threading.Lock()
         self.data = self._load()
 
@@ -809,15 +813,10 @@ class Store:
             "auth": {},
         }
 
-    def _load(self) -> dict:
-        if not self.path.exists():
-            return self._empty()
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return self._empty()
+    def _normalize(self, raw: object) -> dict | None:
+        """Coerce a parsed JSON document into the store's data shape, or None."""
         if not isinstance(raw, dict):
-            return self._empty()
+            return None
         data = self._empty()
         for key in ("skills", "players", "ratings", "notes", "staff"):
             items = raw.get(key, [])
@@ -831,11 +830,66 @@ class Store:
             data["team"] = team
         return data
 
-    def _save(self) -> None:
+    def _read_file(self, path: Path) -> dict | None:
+        """Parse a data file into normalized data, or None if unreadable."""
+        try:
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return self._normalize(raw)
+
+    def _backup_files(self) -> list[Path]:
+        """Existing snapshots, newest first (timestamped names sort chronologically)."""
+        if not self.backup_dir.exists():
+            return []
+        files = [p for p in self.backup_dir.glob("data-*.json") if p.is_file()]
+        files.sort(key=lambda p: p.name, reverse=True)
+        return files
+
+    def _load(self) -> dict:
+        data = self._read_file(self.path) if self.path.exists() else None
+        if data is not None:
+            return data
+        # The main file is missing or corrupt. Recover from the newest good
+        # backup so a deleted or truncated data file never wipes the roster.
+        for backup in self._backup_files():
+            recovered = self._read_file(backup)
+            if recovered is not None:
+                self.data = recovered
+                try:
+                    self._write_main()
+                except OSError:
+                    pass
+                return recovered
+        return self._empty()
+
+    def _write_main(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(self.data, indent=2) + "\n", encoding="utf-8")
         tmp.replace(self.path)
+
+    def _write_backup(self) -> None:
+        """Write a timestamped snapshot and prune old ones. Best-effort."""
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+            dest = self.backup_dir / f"data-{stamp}.json"
+            tmp = self.backup_dir / f"data-{stamp}.json.tmp"
+            tmp.write_text(json.dumps(self.data, indent=2) + "\n", encoding="utf-8")
+            tmp.replace(dest)
+            for old in self._backup_files()[MAX_BACKUPS:]:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        except OSError:
+            # Never fail a save just because a backup could not be written.
+            pass
+
+    def _save(self) -> None:
+        self._write_main()
+        self._write_backup()
 
     def seed_demo_if_empty(self) -> None:
         with self.lock:

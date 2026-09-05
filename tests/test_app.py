@@ -212,6 +212,35 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_drill(player["id"], {"name": "Overflow"})
 
+    def test_save_writes_timestamped_backups(self) -> None:
+        self.store.add_player({"name": "Backup One", "position": "Catcher"})
+        self.store.add_player({"name": "Backup Two", "position": "Pitcher"})
+        backups = list((Path(self.tmp.name) / "data_backups").glob("data-*.json"))
+        # Each save creates a snapshot; two players means at least two snapshots.
+        self.assertGreaterEqual(len(backups), 2)
+
+    def test_recovers_roster_when_data_file_deleted(self) -> None:
+        self.store.add_player({"name": "Allison Harrop", "position": "Shortstop"})
+        self.store.add_player({"name": "Whitney Wallace", "position": "Center Field"})
+        # Simulate an accidental deletion of the main data file.
+        (Path(self.tmp.name) / "data.json").unlink()
+
+        # A fresh store must recover the roster from the newest backup instead
+        # of coming up empty.
+        recovered = app.Store(Path(self.tmp.name) / "data.json")
+        names = {p["name"] for p in recovered.list_players()}
+        self.assertIn("Allison Harrop", names)
+        self.assertIn("Whitney Wallace", names)
+        # Recovery also re-materializes the main data file.
+        self.assertTrue((Path(self.tmp.name) / "data.json").exists())
+
+    def test_recovers_from_corrupt_data_file(self) -> None:
+        self.store.add_player({"name": "Robin Vale", "position": "Utility"})
+        (Path(self.tmp.name) / "data.json").write_text("{ not valid json", encoding="utf-8")
+        recovered = app.Store(Path(self.tmp.name) / "data.json")
+        names = {p["name"] for p in recovered.list_players()}
+        self.assertIn("Robin Vale", names)
+
     def test_staff_password_set_and_clear(self) -> None:
         member = self.store.add_staff(
             {"name": "Pat", "role": "Coach", "access_level": "Full"}
