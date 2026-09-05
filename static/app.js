@@ -56,6 +56,7 @@
   const brandTeam = document.getElementById("brand-team");
   const brandMeta = document.getElementById("brand-meta");
   let drillTargetId = null;
+  let noteTargetCategory = "focus";
 
   const state = {
     players: [],
@@ -1064,10 +1065,18 @@
     return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
   }
 
+  // Notes for a given card. Legacy notes without a category belong to "focus".
+  function notesForCategory(player, category) {
+    const all = Array.isArray(player.notes) ? player.notes : [];
+    return all.filter((note) => (note.category || "focus") === category);
+  }
+
   // A running record of coach notes shown inside a tile: history + an
-  // "Add note" button (coaches only) that opens the note modal.
+  // "Add note" button (coaches only) that opens the note modal. Notes are
+  // grouped by category so each tile keeps its own record.
   function notesBlock(cfg) {
     const items = Array.isArray(cfg.items) ? cfg.items : [];
+    const category = cfg.category || "focus";
     const children = [
       el("div", { className: "note-block-head" }, "Coach notes"),
     ];
@@ -1112,7 +1121,7 @@
           { className: "note-actions" },
           el(
             "button",
-            { type: "button", className: "btn note-add", onClick: openNoteModal },
+            { type: "button", className: "btn note-add", onClick: () => openNoteModal(category) },
             "Add note",
           ),
         ),
@@ -1297,6 +1306,7 @@
         unit: m.top ? "/5" : "",
         accent: "green",
         foot: m.top ? m.top.name : "Rate a skill",
+        notes: { items: notesForCategory(player, "top"), canEdit: !isReadOnly(), category: "top" },
       }),
       metricTile({
         label: "Focus Area",
@@ -1304,7 +1314,7 @@
         unit: m.low ? "/5" : "",
         accent: m.low ? accentForScore(m.low.value) : "orange",
         foot: m.low ? m.low.name : "Rate a skill",
-        notes: { items: player.notes || [], canEdit: !isReadOnly() },
+        notes: { items: notesForCategory(player, "focus"), canEdit: !isReadOnly(), category: "focus" },
       }),
       drillsTile(player),
     );
@@ -1729,9 +1739,15 @@
     }
   }
 
-  function openNoteModal() {
+  function openNoteModal(category) {
     if (!state.selectedId || !noteModal) {
       return;
+    }
+    noteTargetCategory = category === "top" ? "top" : "focus";
+    const title = document.getElementById("note-title");
+    if (title) {
+      title.textContent =
+        noteTargetCategory === "top" ? "Add top skill note" : "Add focus area note";
     }
     noteForm.reset();
     if (typeof noteModal.showModal === "function") {
@@ -1761,7 +1777,7 @@
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}/notes`, {
         method: "POST",
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, category: noteTargetCategory }),
       });
       closeNoteModal();
       await loadDetail(state.selectedId);

@@ -32,6 +32,10 @@ STATIC_DIR = (ROOT / "static").resolve()
 MAX_BODY_BYTES = 256 * 1024
 MAX_NAME_LEN = 80
 MAX_NOTE_LEN = 2000
+# Coach notes are grouped by the dashboard card they belong to. Legacy notes
+# without a category are treated as "focus" (where notes first lived).
+NOTE_CATEGORIES = ("focus", "top")
+DEFAULT_NOTE_CATEGORY = "focus"
 MAX_ACTIVITY_LEN = 200
 MAX_ACTIVITY = 50
 MAX_SKILL_LEN = 40
@@ -1481,12 +1485,18 @@ class Store:
 
     def add_note(self, player_id: str, payload: dict) -> dict:
         text = clean_text(payload.get("text"), "Note", MAX_NOTE_LEN)
+        category = payload.get("category")
+        if category is None or (isinstance(category, str) and not category.strip()):
+            category = DEFAULT_NOTE_CATEGORY
+        elif category not in NOTE_CATEGORIES:
+            raise ValueError("Unknown note category")
         with self.lock:
             self._player_unlocked(player_id)
             note = {
                 "id": new_id("note"),
                 "player_id": player_id,
                 "text": text,
+                "category": category,
                 "created_at": utc_now(),
             }
             self.data["notes"].append(note)

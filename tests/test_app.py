@@ -552,10 +552,32 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(slap["delta"], 2)
         self.assertEqual(len(detail["notes"]), 1)
         self.assertEqual(detail["notes"][0]["text"], "Stay short to the ball.")
+        # Notes default to the "focus" category when none is given.
+        self.assertEqual(detail["notes"][0]["category"], "focus")
         self.store.delete_note(note["id"])
         self.store.delete_player(player["id"])
         with self.assertRaises(KeyError):
             self.store.get_player(player["id"])
+
+    def test_note_categories(self) -> None:
+        player = self.store.add_player({"name": "Sky", "position": "Utility"})
+        top = self.store.add_note(
+            player["id"], {"text": "Great glove work.", "category": "top"}
+        )
+        focus = self.store.add_note(
+            player["id"], {"text": "Work on plate discipline.", "category": "focus"}
+        )
+        self.assertEqual(top["category"], "top")
+        self.assertEqual(focus["category"], "focus")
+        detail = self.store.get_player(player["id"])
+        cats = {note["text"]: note["category"] for note in detail["notes"]}
+        self.assertEqual(cats["Great glove work."], "top")
+        self.assertEqual(cats["Work on plate discipline."], "focus")
+
+    def test_rejects_unknown_note_category(self) -> None:
+        player = self.store.add_player({"name": "Robin", "position": "Utility"})
+        with self.assertRaises(ValueError):
+            self.store.add_note(player["id"], {"text": "Hi", "category": "bogus"})
 
     def test_rejects_invalid_score(self) -> None:
         skill = self.store.add_skill("Pop time")
