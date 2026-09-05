@@ -119,6 +119,16 @@ TEAM_PLAY_YEARS = (
     "Second year",
 )
 
+# Age-group / squad the player is playing with.
+TEAM_TYPES = (
+    "10u-1",
+    "10u-2",
+    "12u-1y",
+    "12u-2y",
+    "14u-1y",
+    "14u-2y",
+)
+
 DEFAULT_SKILLS = (
     "Hitting",
     "Power",
@@ -270,6 +280,30 @@ def parse_team_year(value: object) -> str:
         return ""
     if len(text) > 20:
         raise ValueError("Team year must be 20 characters or fewer")
+    return text
+
+
+def parse_grad_year(value: object) -> str:
+    """Optional graduation year, e.g. "2028"; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 9:
+        raise ValueError("Graduation year must be 9 characters or fewer")
+    return text
+
+
+def parse_team_type(value: object) -> str:
+    """Optional squad/age-group type; blank means unset, else from TEAM_TYPES."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if text not in TEAM_TYPES:
+        raise ValueError("Choose a team type from the list")
     return text
 
 
@@ -710,6 +744,8 @@ PUBLIC_PLAYER_FIELDS = (
     "position",
     "secondary_position",
     "team_year",
+    "grad_year",
+    "team_type",
     "number",
     "exit_velo",
     "base_time",
@@ -1204,6 +1240,8 @@ class Store:
             "position": parse_position(payload.get("position")),
             "secondary_position": parse_optional_position(payload.get("secondary_position")),
             "team_year": parse_team_year(payload.get("team_year")),
+            "grad_year": parse_grad_year(payload.get("grad_year")),
+            "team_type": parse_team_type(payload.get("team_type")),
             "number": parse_number(payload.get("number")),
             "exit_velo": parse_exit_velo(payload.get("exit_velo")),
             "base_time": parse_base_time(payload.get("base_time")),
@@ -1281,6 +1319,10 @@ class Store:
                 )
             if "team_year" in payload:
                 player["team_year"] = parse_team_year(payload.get("team_year"))
+            if "grad_year" in payload:
+                player["grad_year"] = parse_grad_year(payload.get("grad_year"))
+            if "team_type" in payload:
+                player["team_type"] = parse_team_type(payload.get("team_type"))
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
             if "exit_velo" in payload:

@@ -95,6 +95,52 @@ class StoreTests(unittest.TestCase):
                 {"name": "Pat", "position": "Utility", "team_year": "x" * 21}
             )
 
+    def test_grad_year(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "grad_year": "2028"}
+        )
+        self.assertEqual(created["grad_year"], "2028")
+        # Omitted or blank graduation year stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["grad_year"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "grad_year": "  "}
+        )
+        self.assertEqual(blank["grad_year"], "")
+        numeric = self.store.add_player(
+            {"name": "Alexis", "position": "Utility", "grad_year": 2029}
+        )
+        self.assertEqual(numeric["grad_year"], "2029")
+        updated = self.store.update_player(created["id"], {"grad_year": "2030"})
+        self.assertEqual(updated["grad_year"], "2030")
+
+    def test_rejects_overlong_grad_year(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "grad_year": "2" * 10}
+            )
+
+    def test_team_type(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "team_type": "12u-1y"}
+        )
+        self.assertEqual(created["team_type"], "12u-1y")
+        # Omitted or blank team type stays empty, not an error.
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["team_type"], "")
+        blank = self.store.add_player(
+            {"name": "Quinn", "position": "Pitcher", "team_type": "  "}
+        )
+        self.assertEqual(blank["team_type"], "")
+        updated = self.store.update_player(created["id"], {"team_type": "14u-2y"})
+        self.assertEqual(updated["team_type"], "14u-2y")
+
+    def test_rejects_unknown_team_type(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Pat", "position": "Utility", "team_type": "16u-3"}
+            )
+
     def test_exit_velo(self) -> None:
         created = self.store.add_player(
             {"name": "Sky", "position": "Shortstop", "exit_velo": "72.5"}

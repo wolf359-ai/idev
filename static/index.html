@@ -95,66 +95,9 @@
       </form>
           </div>
         </details>
-        <details class="admin admin-sub" id="add-player">
-          <summary class="admin-summary">
-            <span class="admin-title">Add player</span>
-            <span class="admin-caret" aria-hidden="true"></span>
-          </summary>
-          <div class="admin-body">
-      <form id="add-player-form" class="form" autocomplete="off">
-        <label>
-          Name
-          <input id="player-name" name="name" maxlength="80" required>
-        </label>
-        <label>
-          Primary position
-          <select id="player-position" name="position" required>
-            <option value="">Choose one</option>
-            <option>Pitcher</option>
-            <option>Catcher</option>
-            <option>First Base</option>
-            <option>Second Base</option>
-            <option>Third Base</option>
-            <option>Shortstop</option>
-            <option>Left Field</option>
-            <option>Center Field</option>
-            <option>Right Field</option>
-            <option>Utility</option>
-            <option>DP/Flex</option>
-          </select>
-        </label>
-        <label>
-          Secondary position
-          <select id="player-secondary-position" name="secondary_position">
-            <option value="">None</option>
-            <option>Pitcher</option>
-            <option>Catcher</option>
-            <option>First Base</option>
-            <option>Second Base</option>
-            <option>Third Base</option>
-            <option>Shortstop</option>
-            <option>Left Field</option>
-            <option>Center Field</option>
-            <option>Right Field</option>
-            <option>Utility</option>
-            <option>DP/Flex</option>
-          </select>
-        </label>
-        <label>
-          Jersey number
-          <input id="player-number" name="number" type="number" min="0" max="99">
-        </label>
-        <label>
-          Team year
-          <input id="player-team-year" name="team_year" maxlength="20" placeholder="2025">
-        </label>
-        <div class="row">
-          <button type="submit" class="btn btn-primary">Save player</button>
-          <button type="button" id="cancel-add-player" class="btn">Cancel</button>
+        <div class="admin-sub admin-launch">
+          <button type="button" id="open-add-player" class="btn btn-primary">Add player</button>
         </div>
-      </form>
-          </div>
-        </details>
         <details class="admin admin-sub" id="staff-tools">
           <summary class="admin-summary">
             <span class="admin-title">Staff</span>
@@ -287,6 +230,77 @@
         <div class="row modal-actions">
           <button type="submit" class="btn btn-primary">Save drill</button>
           <button type="button" id="cancel-drill" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="add-player-modal" class="modal" aria-labelledby="add-player-title">
+      <form id="add-player-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="add-player-title">Add player</h3>
+        <label>
+          Name
+          <input id="player-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Primary position
+          <select id="player-position" name="position" required>
+            <option value="">Choose one</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Secondary position
+          <select id="player-secondary-position" name="secondary_position">
+            <option value="">None</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Jersey number
+          <input id="player-number" name="number" type="number" min="0" max="99">
+        </label>
+        <label>
+          Team year
+          <input id="player-team-year" name="team_year" maxlength="20" placeholder="2025">
+        </label>
+        <label>
+          Graduation year
+          <input id="player-grad-year" name="grad_year" maxlength="9" placeholder="2028">
+        </label>
+        <label>
+          Team type
+          <select id="player-team-type" name="team_type">
+            <option value="">Choose one</option>
+            <option>10u-1</option>
+            <option>10u-2</option>
+            <option>12u-1y</option>
+            <option>12u-2y</option>
+            <option>14u-1y</option>
+            <option>14u-2y</option>
+          </select>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save player</button>
+          <button type="button" id="cancel-add-player" class="btn">Cancel</button>
         </div>
       </form>
     </dialog>

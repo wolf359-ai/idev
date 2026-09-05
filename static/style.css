@@ -232,6 +232,15 @@ h1, h2, h3, p {
   margin-bottom: 0;
 }
 
+/* Launch row: a plain trigger button (Add player) that opens a modal. */
+.admin-launch {
+  padding: 0.1rem 0;
+}
+
+.admin-launch .btn {
+  width: 100%;
+}
+
 .admin-sub > .admin-body {
   padding: 0.35rem 0 0.1rem;
 }

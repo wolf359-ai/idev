@@ -13,7 +13,8 @@
   const main = document.getElementById("main");
   const emptyState = document.getElementById("empty-state");
   const addForm = document.getElementById("add-player-form");
-  const addPanel = document.getElementById("add-player");
+  const addPlayerModal = document.getElementById("add-player-modal");
+  const openAddPlayerBtn = document.getElementById("open-add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
   const importForm = document.getElementById("import-roster-form");
   const importPanel = document.getElementById("import-roster");
@@ -1891,18 +1892,8 @@
   });
 
   // Open one admin panel at a time and focus its first field.
-  addPanel.addEventListener("toggle", () => {
-    if (addPanel.open) {
-      importPanel.open = false;
-      staffPanel.open = false;
-      if (teamPanel) teamPanel.open = false;
-      document.getElementById("player-name").focus();
-    }
-  });
-
   importPanel.addEventListener("toggle", () => {
     if (importPanel.open) {
-      addPanel.open = false;
       staffPanel.open = false;
       if (teamPanel) teamPanel.open = false;
       rosterText.focus();
@@ -1911,7 +1902,6 @@
 
   staffPanel.addEventListener("toggle", () => {
     if (staffPanel.open) {
-      addPanel.open = false;
       importPanel.open = false;
       if (teamPanel) teamPanel.open = false;
     }
@@ -1920,12 +1910,43 @@
   if (teamPanel) {
     teamPanel.addEventListener("toggle", () => {
       if (teamPanel.open) {
-        addPanel.open = false;
         importPanel.open = false;
         staffPanel.open = false;
       }
     });
   }
+
+  // Add-player modal open/close.
+  function openAddPlayerModal() {
+    addForm.reset();
+    if (typeof addPlayerModal.showModal === "function") {
+      addPlayerModal.showModal();
+    } else {
+      addPlayerModal.setAttribute("open", "");
+    }
+    const nameField = document.getElementById("player-name");
+    if (nameField) {
+      nameField.focus();
+    }
+  }
+
+  function closeAddPlayerModal() {
+    if (addPlayerModal.open) {
+      addPlayerModal.close();
+    } else {
+      addPlayerModal.removeAttribute("open");
+    }
+  }
+
+  if (openAddPlayerBtn) {
+    openAddPlayerBtn.addEventListener("click", openAddPlayerModal);
+  }
+
+  addPlayerModal.addEventListener("click", (event) => {
+    if (event.target === addPlayerModal) {
+      closeAddPlayerModal();
+    }
+  });
 
   function openStaffModal() {
     staffForm.reset();
@@ -2089,7 +2110,7 @@
 
   cancelAdd.addEventListener("click", () => {
     addForm.reset();
-    addPanel.open = false;
+    closeAddPlayerModal();
   });
 
   cancelStaff.addEventListener("click", closeStaffModal);
@@ -2184,11 +2205,13 @@
           position: form.get("position"),
           secondary_position: form.get("secondary_position"),
           team_year: form.get("team_year"),
+          grad_year: form.get("grad_year"),
+          team_type: form.get("team_type"),
           number: form.get("number"),
         }),
       });
       addForm.reset();
-      addPanel.open = false;
+      closeAddPlayerModal();
       await loadPlayers(created.id);
     } catch (error) {
       showError(error.message);
