@@ -464,18 +464,11 @@ h1, h2, h3, p {
     grid-column: 2;
   }
 
-  /* Row 2: GameChanger stats spans the full width. */
-  .stats-card {
-    grid-column: 1 / -1;
-  }
-
-  /* Row 3: progress next to notes. */
-  .progress-card {
-    grid-column: 1;
-  }
-
+  /* Rows 2+: stats, progress, and notes each span the full width. */
+  .stats-card,
+  .progress-card,
   .notes-card {
-    grid-column: 2;
+    grid-column: 1 / -1;
   }
 
   /* Let the radar center vertically when its row is taller than the chart. */
