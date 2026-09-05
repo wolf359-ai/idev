@@ -903,6 +903,8 @@ h1, h2, h3, p {
 .note-actions {
   margin-top: auto;
   padding-top: 0.4rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .note-add {
