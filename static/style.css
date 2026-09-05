@@ -172,7 +172,7 @@ h1, h2, h3, p {
   align-items: center;
   gap: 0.65rem;
   text-align: left;
-  border: 1px solid var(--line-soft);
+  border: 1px solid rgba(251, 146, 60, 0.35);
   background: var(--panel);
   border-radius: 12px;
   padding: 0.6rem 0.7rem;
@@ -182,7 +182,7 @@ h1, h2, h3, p {
 }
 
 .player-btn:hover {
-  border-color: var(--line);
+  border-color: rgba(251, 146, 60, 0.6);
   background: #121826;
 }
 
@@ -221,9 +221,9 @@ h1, h2, h3, p {
 }
 
 .player-btn.active {
-  border-color: rgba(34, 211, 238, 0.5);
+  border-color: var(--orange);
   background: #0f1a22;
-  box-shadow: inset 3px 0 0 var(--cyan);
+  box-shadow: inset 3px 0 0 var(--orange);
 }
 
 .player-btn.active .player-score {
