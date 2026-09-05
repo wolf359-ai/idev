@@ -1056,11 +1056,15 @@
         children.push(prs);
       }
     }
+    // When a tile shows notes, keep the skill-name foot above the notes block
+    // so the bottom-aligned "Add note" button lands at the card's bottom edge
+    // (matching the "Add drill" tile).
+    if (opts.foot) {
+      const footClass = opts.notes ? "tile-foot tile-foot-inline" : "tile-foot";
+      children.push(el("div", { className: footClass }, opts.foot));
+    }
     if (opts.notes) {
       children.push(notesBlock(opts.notes));
-    }
-    if (opts.foot) {
-      children.push(el("div", { className: "tile-foot" }, opts.foot));
     }
     return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
   }

@@ -559,6 +559,12 @@ h1, h2, h3, p {
   letter-spacing: 0.04em;
 }
 
+/* When a tile also shows a notes block, the foot sits right under the value so
+   the notes block can fill the rest and pin its button to the card bottom. */
+.tile-foot-inline {
+  margin-top: 0.35rem;
+}
+
 /* Personal-record notes inside a metric tile. */
 .pr-list {
   list-style: none;
