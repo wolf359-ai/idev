@@ -11,13 +11,18 @@ Then open http://127.0.0.1:8765 in your browser.
 from __future__ import annotations
 
 import csv
+import hashlib
+import hmac
 import io
 import json
 import os
 import re
+import secrets
 import threading
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
+from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -33,6 +38,30 @@ MAX_ROSTER_TEXT_BYTES = 200 * 1024
 HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
+
+# --- Authentication / session configuration --------------------------------
+# The session cookie is not marked Secure by default because idev is served
+# over plain HTTP on localhost, where browsers refuse Secure cookies and login
+# would silently break. Set IDEV_HTTPS=1 when serving behind TLS to add Secure.
+SESSION_COOKIE = "id"
+SESSION_IDLE_SECONDS = 30 * 60
+SESSION_ABSOLUTE_SECONDS = 8 * 60 * 60
+COOKIE_SECURE = os.environ.get("IDEV_HTTPS", "").strip().lower() in {"1", "true", "yes", "on"}
+# Human-chosen coach password: slow, salted KDF (PBKDF2-HMAC-SHA256, >=600k).
+PBKDF2_ALGO = "pbkdf2_sha256"
+PBKDF2_ITERATIONS = 600_000
+# Player access codes are high-entropy random tokens, so a single SHA-256 is
+# appropriate (brute force is infeasible) and keeps per-login lookup cheap.
+ACCESS_CODE_BYTES = 18
+GENERATED_ADMIN_BYTES = 12
+LOGIN_MAX_FAILURES = 10
+LOGIN_WINDOW_SECONDS = 5 * 60
+LOGIN_BLOCK_SECONDS = 5 * 60
+ADMIN_PASSWORD_ENV = os.environ.get("IDEV_ADMIN_PASSWORD")
+
+PERM_PUBLIC = "public"
+PERM_COACH = "coach"
+PERM_PLAYER_OWN = "player_own"
 
 POSITIONS = (
     "Pitcher",
@@ -422,6 +451,156 @@ def build_stats_view(raw: object) -> dict:
     }
 
 
+PUBLIC_PLAYER_FIELDS = ("id", "name", "position", "number", "created_at", "stats")
+
+
+def public_player(player: dict) -> dict:
+    """Copy only non-sensitive player fields (never the access-code hash)."""
+    return {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+
+
+def hash_password(password: str, *, iterations: int = PBKDF2_ITERATIONS, salt: bytes | None = None) -> dict:
+    if not isinstance(password, str) or not password:
+        raise ValueError("Password is required")
+    if salt is None:
+        salt = secrets.token_bytes(16)
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return {
+        "algo": PBKDF2_ALGO,
+        "salt": salt.hex(),
+        "hash": derived.hex(),
+        "iterations": iterations,
+    }
+
+
+def verify_password(password: object, record: object) -> bool:
+    if not isinstance(password, str) or not isinstance(record, dict):
+        return False
+    try:
+        salt = bytes.fromhex(record["salt"])
+        expected = bytes.fromhex(record["hash"])
+        iterations = int(record["iterations"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    derived = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+    return hmac.compare_digest(derived, expected)
+
+
+def hash_access_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+class SessionManager:
+    """In-memory server-side session store with idle/absolute expiry."""
+
+    def __init__(self, idle: int = SESSION_IDLE_SECONDS, absolute: int = SESSION_ABSOLUTE_SECONDS):
+        self.idle = idle
+        self.absolute = absolute
+        self.lock = threading.Lock()
+        self.sessions: dict[str, dict] = {}
+
+    @staticmethod
+    def _fingerprint(user_agent: str) -> str:
+        return hashlib.sha256((user_agent or "").encode("utf-8")).hexdigest()
+
+    def create(self, role: str, player_id: str | None, user_agent: str) -> tuple[str, dict]:
+        sid = secrets.token_urlsafe(32)
+        now = time.time()
+        session = {
+            "role": role,
+            "player_id": player_id or "",
+            "created_at": now,
+            "last_seen": now,
+            "csrf": secrets.token_urlsafe(32),
+            "fingerprint": self._fingerprint(user_agent),
+        }
+        with self.lock:
+            self.sessions[sid] = session
+        return sid, dict(session)
+
+    def get(self, sid: str | None, user_agent: str) -> dict | None:
+        if not sid:
+            return None
+        now = time.time()
+        with self.lock:
+            session = self.sessions.get(sid)
+            if not session:
+                return None
+            if (now - session["created_at"] > self.absolute) or (now - session["last_seen"] > self.idle):
+                self.sessions.pop(sid, None)
+                return None
+            if not hmac.compare_digest(session["fingerprint"], self._fingerprint(user_agent)):
+                # Session context changed (possible theft); force re-auth.
+                self.sessions.pop(sid, None)
+                return None
+            session["last_seen"] = now
+            return dict(session)
+
+    def destroy(self, sid: str | None) -> None:
+        if not sid:
+            return
+        with self.lock:
+            self.sessions.pop(sid, None)
+
+
+class LoginRateLimiter:
+    """Per-client throttling to slow credential brute-forcing."""
+
+    def __init__(
+        self,
+        max_failures: int = LOGIN_MAX_FAILURES,
+        window: int = LOGIN_WINDOW_SECONDS,
+        block: int = LOGIN_BLOCK_SECONDS,
+    ):
+        self.max_failures = max_failures
+        self.window = window
+        self.block = block
+        self.lock = threading.Lock()
+        self.failures: dict[str, list[float]] = {}
+        self.blocked_until: dict[str, float] = {}
+
+    def is_blocked(self, key: str) -> bool:
+        now = time.time()
+        with self.lock:
+            until = self.blocked_until.get(key, 0.0)
+            if until > now:
+                return True
+            if until:
+                self.blocked_until.pop(key, None)
+            return False
+
+    def record_failure(self, key: str) -> None:
+        now = time.time()
+        with self.lock:
+            hits = [stamp for stamp in self.failures.get(key, []) if now - stamp < self.window]
+            hits.append(now)
+            self.failures[key] = hits
+            if len(hits) >= self.max_failures:
+                self.blocked_until[key] = now + self.block
+                self.failures[key] = []
+
+    def clear(self, key: str) -> None:
+        with self.lock:
+            self.failures.pop(key, None)
+            self.blocked_until.pop(key, None)
+
+
+def required_permission(method: str, path: str):
+    """Map an HTTP method + path to the access level required to reach it."""
+    if method in ("GET", "HEAD"):
+        if not path.startswith("/api/"):
+            return PERM_PUBLIC  # login page and static assets
+        if path in ("/api/health", "/api/session"):
+            return PERM_PUBLIC
+        match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
+        if match:
+            return (PERM_PLAYER_OWN, match.group(1))
+        return PERM_COACH
+    if method == "POST" and path in ("/api/login", "/api/logout"):
+        return PERM_PUBLIC
+    return PERM_COACH
+
+
 class Store:
     """JSON file store for players, skills, ratings, and notes."""
 
@@ -431,7 +610,7 @@ class Store:
         self.data = self._load()
 
     def _empty(self) -> dict:
-        return {"skills": [], "players": [], "ratings": [], "notes": []}
+        return {"skills": [], "players": [], "ratings": [], "notes": [], "auth": {}}
 
     def _load(self) -> dict:
         if not self.path.exists():
@@ -443,10 +622,13 @@ class Store:
         if not isinstance(raw, dict):
             return self._empty()
         data = self._empty()
-        for key in data:
+        for key in ("skills", "players", "ratings", "notes"):
             items = raw.get(key, [])
             if isinstance(items, list):
                 data[key] = [item for item in items if isinstance(item, dict)]
+        auth = raw.get("auth")
+        if isinstance(auth, dict):
+            data["auth"] = auth
         return data
 
     def _save(self) -> None:
@@ -596,7 +778,7 @@ class Store:
 
     def list_players(self) -> list[dict]:
         with self.lock:
-            players = [dict(player) for player in self.data["players"]]
+            players = [public_player(player) for player in self.data["players"]]
         players.sort(key=lambda player: player.get("name", "").casefold())
         return players
 
@@ -608,7 +790,10 @@ class Store:
 
     def get_player(self, player_id: str) -> dict:
         with self.lock:
-            player = dict(self._player_unlocked(player_id))
+            record = self._player_unlocked(player_id)
+            raw_stats = record.get("stats")
+            has_access_code = bool(record.get("access_code_hash"))
+            player = public_player(record)
             ratings = [
                 dict(item)
                 for item in self.data["ratings"]
@@ -622,10 +807,11 @@ class Store:
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        player["has_access_code"] = has_access_code
         player["ratings"] = ratings
         player["notes"] = notes
         player["progress"] = build_progress(skills, ratings)
-        player["stats"] = build_stats_view(player.get("stats"))
+        player["stats"] = build_stats_view(raw_stats)
         return player
 
     def add_player(self, payload: dict) -> dict:
@@ -640,7 +826,7 @@ class Store:
         with self.lock:
             self.data["players"].append(player)
             self._save()
-            return dict(player)
+            return public_player(player)
 
     def import_roster(self, payload: dict) -> dict:
         candidates, skipped = parse_roster_text(payload.get("text"))
@@ -679,7 +865,7 @@ class Store:
                         "stats": empty_stat_counts(),
                     }
                     self.data["players"].append(player)
-                    imported.append(dict(player))
+                    imported.append(public_player(player))
                 if imported:
                     self._save()
 
@@ -700,7 +886,7 @@ class Store:
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
             self._save()
-            return dict(player)
+            return public_player(player)
 
     def delete_player(self, player_id: str) -> None:
         with self.lock:
@@ -768,6 +954,66 @@ class Store:
                 raise KeyError("Note not found")
             self._save()
 
+    # -- authentication ----------------------------------------------------
+    def ensure_admin_password(self, env_password: str | None = None) -> str | None:
+        """Ensure a coach password hash exists.
+
+        If ``env_password`` is provided it always governs. Otherwise, if no
+        password has ever been set, a strong one is generated and returned once
+        (to print for first-time setup); only its hash is stored. Returns the
+        generated plaintext when one was created, else None. Never stores or
+        returns an existing plaintext.
+        """
+        with self.lock:
+            auth = self.data.setdefault("auth", {})
+            if isinstance(env_password, str) and env_password:
+                record = auth.get("admin")
+                if not verify_password(env_password, record):
+                    auth["admin"] = hash_password(env_password)
+                    self._save()
+                return None
+            if isinstance(auth.get("admin"), dict):
+                return None
+            generated = secrets.token_urlsafe(GENERATED_ADMIN_BYTES)
+            auth["admin"] = hash_password(generated)
+            self._save()
+            return generated
+
+    def verify_admin_password(self, password: object) -> bool:
+        with self.lock:
+            record = self.data.get("auth", {}).get("admin")
+        return verify_password(password, record)
+
+    def set_player_access_code(self, player_id: str) -> str:
+        """Generate a new access code for a player, store only its hash."""
+        code = secrets.token_urlsafe(ACCESS_CODE_BYTES)
+        digest = hash_access_code(code)
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            player["access_code_hash"] = digest
+            self._save()
+        return code
+
+    def clear_player_access_code(self, player_id: str) -> None:
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            if "access_code_hash" in player:
+                player.pop("access_code_hash", None)
+                self._save()
+
+    def find_player_by_access_code(self, code: object) -> str | None:
+        if not isinstance(code, str) or not code:
+            return None
+        digest = hash_access_code(code)
+        match = None
+        with self.lock:
+            for player in self.data["players"]:
+                stored = player.get("access_code_hash")
+                # Compare every player (no early break) for uniform timing.
+                if isinstance(stored, str) and hmac.compare_digest(stored, digest):
+                    match = player.get("id")
+        return match
+
 
 def build_progress(skills: list[dict], ratings: list[dict]) -> list[dict]:
     history_by_skill: dict[str, list[dict]] = {}
@@ -819,13 +1065,20 @@ def json_body(handler: BaseHTTPRequestHandler) -> dict:
     return payload
 
 
-def send_json(handler: BaseHTTPRequestHandler, status: int, payload: object) -> None:
+def send_json(
+    handler: BaseHTTPRequestHandler,
+    status: int,
+    payload: object,
+    extra_headers: list[tuple[str, str]] | None = None,
+) -> None:
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(status)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("Cache-Control", "no-store")
     handler.send_header("X-Content-Type-Options", "nosniff")
+    for name, value in extra_headers or []:
+        handler.send_header(name, value)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -841,6 +1094,12 @@ def send_bytes(
     handler.send_header("Content-Length", str(len(body)))
     handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("Cache-Control", "no-store")
+    if content_type.startswith("text/html"):
+        handler.send_header(
+            "Content-Security-Policy",
+            "default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'",
+        )
+        handler.send_header("Referrer-Policy", "no-referrer")
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -873,16 +1132,179 @@ CONTENT_TYPES = {
 
 class IdevHandler(BaseHTTPRequestHandler):
     store: Store
+    session_manager: SessionManager
+    rate_limiter: LoginRateLimiter
 
     def log_message(self, format: str, *args: object) -> None:
         message = format % args
         safe = message.replace("\r", " ").replace("\n", " ")
         print(f"{self.address_string()} {safe}", flush=True)
 
+    # -- session helpers ---------------------------------------------------
+    def _drain_body(self) -> None:
+        """Discard an unread request body so keep-alive stays in sync.
+
+        Rejecting a request (401/403/429) before json_body() runs would leave
+        the POST/PUT body in the socket, corrupting the next keep-alive
+        request on the connection.
+        """
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+        except (TypeError, ValueError):
+            length = 0
+        if length <= 0:
+            return
+        if length > MAX_BODY_BYTES:
+            self.close_connection = True
+            return
+        remaining = length
+        while remaining > 0:
+            chunk = self.rfile.read(min(remaining, 65536))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+
+    def _reject(self, status: int, error: str) -> None:
+        self._drain_body()
+        send_json(self, status, {"error": error})
+
+    def _client_key(self) -> str:
+        return self.client_address[0] if self.client_address else "unknown"
+
+    def _cookie_sid(self) -> str | None:
+        raw = self.headers.get("Cookie")
+        if not raw:
+            return None
+        try:
+            jar = SimpleCookie()
+            jar.load(raw)
+        except CookieError:
+            return None
+        morsel = jar.get(SESSION_COOKIE)
+        return morsel.value if morsel else None
+
+    def _load_session(self) -> dict | None:
+        sid = self._cookie_sid()
+        if not sid:
+            return None
+        return self.session_manager.get(sid, self.headers.get("User-Agent", ""))
+
+    def _session_cookie_header(self, sid: str) -> str:
+        parts = [f"{SESSION_COOKIE}={sid}", "Path=/", "HttpOnly", "SameSite=Strict"]
+        if COOKIE_SECURE:
+            parts.append("Secure")
+        return "; ".join(parts)
+
+    def _clear_cookie_header(self) -> str:
+        parts = [f"{SESSION_COOKIE}=", "Path=/", "HttpOnly", "SameSite=Strict", "Max-Age=0"]
+        if COOKIE_SECURE:
+            parts.append("Secure")
+        return "; ".join(parts)
+
+    def _csrf_ok(self, session: dict | None) -> bool:
+        expected = session.get("csrf", "") if session else ""
+        provided = self.headers.get("X-CSRF-Token", "")
+        return bool(expected) and hmac.compare_digest(provided, expected)
+
+    def _session_payload(self, session: dict | None) -> dict:
+        if not session:
+            return {"authenticated": False}
+        payload = {"authenticated": True, "role": session["role"], "csrf": session["csrf"]}
+        if session["role"] == "player" and session.get("player_id"):
+            try:
+                player = self.store.get_player(session["player_id"])
+                payload["player"] = {"id": player["id"], "name": player["name"]}
+            except KeyError:
+                payload["player"] = None
+        return payload
+
+    def _guard(self):
+        """Enforce deny-by-default access control. Returns (session, perm, ok)."""
+        session = self._load_session()
+        perm = required_permission(self.command, urlparse(self.path).path)
+        if perm == PERM_PUBLIC:
+            return session, perm, True
+        if session is None:
+            self._reject(401, "Please sign in")
+            return session, perm, False
+        if perm == PERM_COACH:
+            if session.get("role") != "coach":
+                self._reject(403, "Not allowed")
+                return session, perm, False
+            return session, perm, True
+        # (PERM_PLAYER_OWN, player_id): coach always; player only for own id.
+        player_id = perm[1]
+        if session.get("role") == "coach":
+            return session, perm, True
+        if session.get("role") == "player" and hmac.compare_digest(
+            session.get("player_id", ""), player_id
+        ):
+            return session, perm, True
+        self._reject(403, "Not allowed")
+        return session, perm, False
+
+    def _require_csrf(self, session: dict | None, perm: object) -> bool:
+        if perm == PERM_PUBLIC:
+            return True
+        if not self._csrf_ok(session):
+            self._reject(403, "Missing or invalid security token")
+            return False
+        return True
+
+    # -- auth actions ------------------------------------------------------
+    def _handle_login(self) -> None:
+        key = self._client_key()
+        if self.rate_limiter.is_blocked(key):
+            self._reject(429, "Too many attempts. Wait a few minutes and try again.")
+            return
+        payload = json_body(self)
+        mode = payload.get("mode")
+        role = None
+        player_id = None
+        if mode == "coach" or (mode is None and "password" in payload):
+            if self.store.verify_admin_password(payload.get("password")):
+                role = "coach"
+        elif mode == "player" or (mode is None and "code" in payload):
+            found = self.store.find_player_by_access_code(payload.get("code"))
+            if found:
+                role = "player"
+                player_id = found
+        if role is None:
+            self.rate_limiter.record_failure(key)
+            send_json(self, 401, {"error": "Invalid sign-in details"})
+            return
+        self.rate_limiter.clear(key)
+        # Regenerate the session identifier on login; drop any prior session.
+        self.session_manager.destroy(self._cookie_sid())
+        sid, created = self.session_manager.create(
+            role, player_id, self.headers.get("User-Agent", "")
+        )
+        send_json(
+            self,
+            200,
+            self._session_payload(created),
+            extra_headers=[("Set-Cookie", self._session_cookie_header(sid))],
+        )
+
+    def _handle_logout(self) -> None:
+        self.session_manager.destroy(self._cookie_sid())
+        send_json(
+            self,
+            200,
+            {"ok": True},
+            extra_headers=[("Set-Cookie", self._clear_cookie_header())],
+        )
+
     def do_GET(self) -> None:
+        session, _perm, ok = self._guard()
+        if not ok:
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/api/session":
+                send_json(self, 200, self._session_payload(session))
+                return
             if path == "/api/health":
                 send_json(self, 200, {"ok": True, "app": "idev"})
                 return
@@ -908,10 +1330,27 @@ class IdevHandler(BaseHTTPRequestHandler):
             send_json(self, 400, {"error": str(exc)})
 
     def do_POST(self) -> None:
+        session, perm, ok = self._guard()
+        if not ok:
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            if path == "/api/login":
+                self._handle_login()
+                return
+            if path == "/api/logout":
+                self._handle_logout()
+                return
+            if not self._require_csrf(session, perm):
+                return
             payload = json_body(self)
+            access_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
+            )
+            if access_match:
+                send_json(self, 201, {"code": self.store.set_player_access_code(access_match.group(1))})
+                return
             if path == "/api/players/import":
                 result = self.store.import_roster(payload)
                 send_json(self, 200 if result["preview"] else 201, result)
@@ -939,6 +1378,11 @@ class IdevHandler(BaseHTTPRequestHandler):
             send_json(self, 400, {"error": str(exc)})
 
     def do_PUT(self) -> None:
+        session, perm, ok = self._guard()
+        if not ok:
+            return
+        if not self._require_csrf(session, perm):
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         try:
@@ -958,9 +1402,21 @@ class IdevHandler(BaseHTTPRequestHandler):
             send_json(self, 400, {"error": str(exc)})
 
     def do_DELETE(self) -> None:
+        session, perm, ok = self._guard()
+        if not ok:
+            return
+        if not self._require_csrf(session, perm):
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         try:
+            access_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
+            )
+            if access_match:
+                self.store.clear_player_access_code(access_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 self.store.delete_player(player_match.group(1))
@@ -978,8 +1434,16 @@ class IdevHandler(BaseHTTPRequestHandler):
             send_json(self, 400, {"error": str(exc)})
 
 
-def make_server(store: Store, host: str = HOST, port: int = PORT) -> ThreadingHTTPServer:
+def make_server(
+    store: Store,
+    host: str = HOST,
+    port: int = PORT,
+    session_manager: SessionManager | None = None,
+    rate_limiter: LoginRateLimiter | None = None,
+) -> ThreadingHTTPServer:
     IdevHandler.store = store
+    IdevHandler.session_manager = session_manager or SessionManager()
+    IdevHandler.rate_limiter = rate_limiter or LoginRateLimiter()
     IdevHandler.protocol_version = "HTTP/1.1"
     return ThreadingHTTPServer((host, port), IdevHandler)
 
@@ -987,8 +1451,15 @@ def make_server(store: Store, host: str = HOST, port: int = PORT) -> ThreadingHT
 def main() -> None:
     store = Store(DATA_PATH)
     store.seed_demo_if_empty()
+    generated_password = store.ensure_admin_password(ADMIN_PASSWORD_ENV)
     server = make_server(store, HOST, PORT)
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
+    if generated_password:
+        print("", flush=True)
+        print("First-time setup: a coach password was created for you:", flush=True)
+        print(f"    {generated_password}", flush=True)
+        print("Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.", flush=True)
+        print("", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:
         server.serve_forever()
