@@ -57,9 +57,13 @@ h1, h2, h3, p {
 
 .logo {
   display: block;
-  width: 40px;
   height: 40px;
+  width: auto;
   flex: none;
+}
+
+.brand-dark .logo {
+  height: 44px;
 }
 
 .mark {
