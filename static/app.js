@@ -186,8 +186,6 @@
       : "Preview roster";
   }
 
-  const DOT_PALETTE = ["#22d3ee", "#f5566c", "#34d399", "#3b82f6", "#f6c552", "#a78bfa", "#fb923c"];
-
   // Rating colors shared with the skill dots: red (weak) to green (strong).
   const SCORE_COLORS = {
     1: "hsl(352, 85%, 60%)",
@@ -209,8 +207,7 @@
       return;
     }
     playerList.append(el("li", { className: "player-list-title" }, "Athletes"));
-    state.players.forEach((player, index) => {
-      const accent = DOT_PALETTE[index % DOT_PALETTE.length];
+    state.players.forEach((player) => {
       const badge = player.number === null || player.number === undefined ? "—" : `#${player.number}`;
       const button = el(
         "button",
@@ -219,7 +216,7 @@
           className: "player-btn" + (player.id === state.selectedId ? " active" : ""),
           onClick: () => selectPlayer(player.id),
         },
-        el("span", { className: "player-dot", style: `background:${accent};color:${accent}` }),
+        el("span", { className: "player-dot" }),
         el(
           "span",
           { className: "player-id" },
