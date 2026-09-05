@@ -1091,6 +1091,13 @@ textarea {
   color: var(--ink);
 }
 
+/* Keep the login card the same height on both tabs: the Player helper text
+   wraps to two lines while the Coach text is one line, so reserve two lines. */
+.login-form .meta {
+  min-height: 2.4rem;
+  line-height: 1.4;
+}
+
 /* ---------- Role: player (no roster) ---------- */
 .app.role-player {
   grid-template-columns: 1fr;
