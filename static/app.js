@@ -32,10 +32,17 @@
   const staffManageList = document.getElementById("staff-manage-list");
   const openManageStaffBtn = document.getElementById("open-manage-staff");
   const closeManageStaffBtn = document.getElementById("close-manage-staff");
+  const teamPanel = document.getElementById("team-tools");
+  const teamSummary = document.getElementById("team-summary");
+  const teamModal = document.getElementById("team-modal");
+  const teamForm = document.getElementById("team-form");
+  const openTeamBtn = document.getElementById("open-team-info");
+  const cancelTeam = document.getElementById("cancel-team-info");
 
   const state = {
     players: [],
     staff: [],
+    team: {},
     selectedId: null,
     detail: null,
     importReady: false,
@@ -414,6 +421,60 @@
         el("li", { className: "staff-manage-item" }, info, controlRow),
       );
     });
+  }
+
+  async function loadTeam() {
+    if (state.role !== "coach") {
+      return;
+    }
+    const data = await request("/api/team");
+    state.team = data.team || {};
+    renderTeamSummary();
+  }
+
+  function renderTeamSummary() {
+    if (!teamSummary) {
+      return;
+    }
+    teamSummary.replaceChildren();
+    const team = state.team || {};
+    const rows = [
+      ["Team", team.name],
+      ["Year", team.year],
+      ["Season", team.season],
+      ["Years of play", team.play_year],
+    ];
+    const hasAny = rows.some(([, value]) => value);
+    if (!hasAny) {
+      teamSummary.append(
+        el("div", { className: "team-empty meta" }, "No team information yet."),
+      );
+      return;
+    }
+    rows.forEach(([label, value]) => {
+      teamSummary.append(el("dt", {}, label));
+      teamSummary.append(el("dd", { className: value ? "" : "meta" }, value || "Not set"));
+    });
+  }
+
+  function openTeamModal() {
+    const team = state.team || {};
+    document.getElementById("team-name").value = team.name || "";
+    document.getElementById("team-year-input").value = team.year || "";
+    document.getElementById("team-season").value = team.season || "";
+    document.getElementById("team-play-year").value = team.play_year || "";
+    if (typeof teamModal.showModal === "function") {
+      teamModal.showModal();
+    } else {
+      teamModal.setAttribute("open", "");
+    }
+    document.getElementById("team-name").focus();
+  }
+
+  function closeTeamModal() {
+    if (teamModal.open) {
+      teamModal.close();
+    }
   }
 
   function scoreDots(skillId, current, readOnly) {
@@ -1276,6 +1337,7 @@
       sessionLabel.textContent = "Signed in as Coach";
       loadPlayers().catch((error) => showError(error.message));
       loadStaff().catch((error) => showError(error.message));
+      loadTeam().catch((error) => showError(error.message));
     }
   }
 
@@ -1341,6 +1403,7 @@
     if (addPanel.open) {
       importPanel.open = false;
       staffPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
       document.getElementById("player-name").focus();
     }
   });
@@ -1349,6 +1412,7 @@
     if (importPanel.open) {
       addPanel.open = false;
       staffPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
       rosterText.focus();
     }
   });
@@ -1357,8 +1421,19 @@
     if (staffPanel.open) {
       addPanel.open = false;
       importPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
     }
   });
+
+  if (teamPanel) {
+    teamPanel.addEventListener("toggle", () => {
+      if (teamPanel.open) {
+        addPanel.open = false;
+        importPanel.open = false;
+        staffPanel.open = false;
+      }
+    });
+  }
 
   function openStaffModal() {
     staffForm.reset();
@@ -1411,6 +1486,41 @@
     staffManageModal.addEventListener("click", (event) => {
       if (event.target === staffManageModal) {
         closeManageStaffModal();
+      }
+    });
+  }
+
+  if (openTeamBtn) {
+    openTeamBtn.addEventListener("click", openTeamModal);
+  }
+  if (cancelTeam) {
+    cancelTeam.addEventListener("click", closeTeamModal);
+  }
+  if (teamModal) {
+    teamModal.addEventListener("click", (event) => {
+      if (event.target === teamModal) {
+        closeTeamModal();
+      }
+    });
+  }
+  if (teamForm) {
+    teamForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(teamForm);
+      try {
+        await request("/api/team", {
+          method: "PUT",
+          body: JSON.stringify({
+            name: form.get("name"),
+            year: form.get("year"),
+            season: form.get("season"),
+            play_year: form.get("play_year"),
+          }),
+        });
+        closeTeamModal();
+        await loadTeam();
+      } catch (error) {
+        showError(error.message);
       }
     });
   }

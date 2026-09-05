@@ -89,6 +89,17 @@ STAFF_ACCESS_LEVELS = (
     "Read-only",
 )
 
+TEAM_SEASONS = (
+    "Spring",
+    "Summer",
+    "Fall",
+    "Winter",
+)
+TEAM_PLAY_YEARS = (
+    "First year",
+    "Second year",
+)
+
 DEFAULT_SKILLS = (
     "Hitting",
     "Power",
@@ -282,6 +293,54 @@ def parse_staff_password(value: object) -> str:
     if len(value) > 128:
         raise ValueError("Password must be 128 characters or fewer")
     return value
+
+
+def parse_optional_name(value: object, field: str, max_len: int) -> str:
+    """A free-text field that may be left blank."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > max_len:
+        raise ValueError(f"{field} must be {max_len} characters or fewer")
+    return text
+
+
+def parse_optional_season(value: object) -> str:
+    """Optional season, chosen from a fixed list; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_SEASONS:
+        raise ValueError("Choose a season from the list")
+    return text
+
+
+def parse_optional_play_year(value: object) -> str:
+    """Optional years-of-play designation (first or second year); blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_PLAY_YEARS:
+        raise ValueError("Choose first or second year of play")
+    return text
+
+
+def parse_team(payload: object) -> dict:
+    """Validate team information: name, year, season, and years of play."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send team details in the request body")
+    return {
+        "name": parse_optional_name(payload.get("name"), "Team name", 80),
+        "year": parse_team_year(payload.get("year")),
+        "season": parse_optional_season(payload.get("season")),
+        "play_year": parse_optional_play_year(payload.get("play_year")),
+    }
 
 
 def normalize_position(value: object) -> str:
@@ -714,6 +773,7 @@ class Store:
             "ratings": [],
             "notes": [],
             "staff": [],
+            "team": {},
             "auth": {},
         }
 
@@ -734,6 +794,9 @@ class Store:
         auth = raw.get("auth")
         if isinstance(auth, dict):
             data["auth"] = auth
+        team = raw.get("team")
+        if isinstance(team, dict):
+            data["team"] = team
         return data
 
     def _save(self) -> None:
@@ -1084,6 +1147,18 @@ class Store:
             self._save()
 
     # -- staff -------------------------------------------------------------
+    # -- team information --------------------------------------------------
+    def get_team(self) -> dict:
+        with self.lock:
+            return dict(self.data.get("team", {}))
+
+    def set_team(self, payload: dict) -> dict:
+        fields = parse_team(payload)
+        with self.lock:
+            self.data["team"] = fields
+            self._save()
+            return dict(fields)
+
     def _staff_unlocked(self, staff_id: str) -> dict:
         for member in self.data["staff"]:
             if member.get("id") == staff_id:
@@ -1499,6 +1574,9 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/staff":
                 send_json(self, 200, {"staff": self.store.list_staff()})
                 return
+            if path == "/api/team":
+                send_json(self, 200, {"team": self.store.get_team()})
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.get_player(player_match.group(1)))
@@ -1591,6 +1669,9 @@ class IdevHandler(BaseHTTPRequestHandler):
                     staff_pw_match.group(1), payload.get("password")
                 )
                 send_json(self, 200, member)
+                return
+            if path == "/api/team":
+                send_json(self, 200, {"team": self.store.set_team(payload)})
                 return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:

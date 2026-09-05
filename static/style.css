@@ -716,6 +716,8 @@ textarea {
 #add-staff-form .btn-primary,
 #open-add-staff,
 .staff-pw-set,
+#open-team-info,
+#team-form .btn-primary,
 #preview-roster {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
@@ -725,6 +727,8 @@ textarea {
 #add-staff-form .btn-primary:hover,
 #open-add-staff:hover,
 .staff-pw-set:hover,
+#open-team-info:hover,
+#team-form .btn-primary:hover,
 #preview-roster:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
 }
@@ -869,6 +873,37 @@ textarea {
 
 .staff-manage-item .staff-meta {
   white-space: normal;
+}
+
+/* Team information summary in the admin panel. */
+.team-summary {
+  margin: 0 0 0.6rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.6rem;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.team-summary dt {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.team-summary dd {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.team-empty {
+  grid-column: 1 / -1;
 }
 
 .btn-danger {

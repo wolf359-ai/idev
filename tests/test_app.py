@@ -130,6 +130,38 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_staff({"name": "Pat", "role": "Coach", "access_level": "Emperor"})
 
+    def test_team_information_set_and_get(self) -> None:
+        # Defaults to empty before anything is stored.
+        self.assertEqual(self.store.get_team(), {})
+
+        saved = self.store.set_team(
+            {
+                "name": "  Boston Caps  ",
+                "year": "2025",
+                "season": "Summer",
+                "play_year": "First year",
+            }
+        )
+        self.assertEqual(saved["name"], "Boston Caps")
+        self.assertEqual(saved["year"], "2025")
+        self.assertEqual(saved["season"], "Summer")
+        self.assertEqual(saved["play_year"], "First year")
+        self.assertEqual(self.store.get_team(), saved)
+
+        # All fields are optional and may be cleared.
+        cleared = self.store.set_team({})
+        self.assertEqual(
+            cleared, {"name": "", "year": "", "season": "", "play_year": ""}
+        )
+
+    def test_team_information_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.set_team({"season": "Monsoon"})
+        with self.assertRaises(ValueError):
+            self.store.set_team({"play_year": "Third year"})
+        with self.assertRaises(ValueError):
+            self.store.set_team({"year": "x" * 21})
+
     def test_staff_password_set_and_clear(self) -> None:
         member = self.store.add_staff(
             {"name": "Pat", "role": "Coach", "access_level": "Full"}
@@ -672,6 +704,42 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertFalse(cleared["has_password"])
+
+    def test_team_information_is_coach_only(self) -> None:
+        status, payload = self.call(
+            "PUT",
+            "/api/team",
+            {
+                "name": "Boston Caps",
+                "year": "2025",
+                "season": "Fall",
+                "play_year": "Second year",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["team"]["season"], "Fall")
+
+        status, listing = self.call("GET", "/api/team")
+        self.assertEqual(status, 200)
+        self.assertEqual(listing["team"]["name"], "Boston Caps")
+
+        # Invalid values are rejected.
+        status, _payload = self.call("PUT", "/api/team", {"season": "Monsoon"})
+        self.assertEqual(status, 400)
+
+        # A signed-in player cannot read or edit team information.
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Pat Lane", "position": "Utility"}
+        )
+        self.assertEqual(status, 201)
+        status, access = self.call("POST", f"/api/players/{player['id']}/access-code")
+        self.assertEqual(status, 201)
+        self.sign_out()
+        self.login_player(code=access["code"])
+        status, _payload = self.call("GET", "/api/team")
+        self.assertEqual(status, 403)
+        status, _payload = self.call("PUT", "/api/team", {"name": "Hijack"})
+        self.assertEqual(status, 403)
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf

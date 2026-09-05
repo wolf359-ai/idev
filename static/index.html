@@ -167,6 +167,18 @@
             </div>
           </div>
         </details>
+        <details class="admin admin-sub" id="team-tools">
+          <summary class="admin-summary">
+            <span class="admin-title">Team information</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+            <dl id="team-summary" class="team-summary"></dl>
+            <div class="row">
+              <button type="button" id="open-team-info" class="btn btn-primary">Edit team information</button>
+            </div>
+          </div>
+        </details>
         </div>
       </details>
       <ul id="player-list" class="player-list"></ul>
@@ -216,6 +228,43 @@
       <div class="row modal-actions">
         <button type="button" id="close-manage-staff" class="btn">Done</button>
       </div>
+    </dialog>
+
+    <dialog id="team-modal" class="modal" aria-labelledby="team-modal-title">
+      <form id="team-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="team-modal-title">Team information</h3>
+        <p class="meta">Set the team name, year, season, and years of play.</p>
+        <label>
+          Team name
+          <input id="team-name" name="name" maxlength="80" placeholder="Boston Caps">
+        </label>
+        <label>
+          Year
+          <input id="team-year-input" name="year" maxlength="20" placeholder="2025">
+        </label>
+        <label>
+          Season
+          <select id="team-season" name="season">
+            <option value="">Choose one</option>
+            <option>Spring</option>
+            <option>Summer</option>
+            <option>Fall</option>
+            <option>Winter</option>
+          </select>
+        </label>
+        <label>
+          Years of play
+          <select id="team-play-year" name="play_year">
+            <option value="">Choose one</option>
+            <option>First year</option>
+            <option>Second year</option>
+          </select>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" id="cancel-team-info" class="btn">Cancel</button>
+        </div>
+      </form>
     </dialog>
   </div>
   <script src="/static/app.js"></script>
