@@ -1254,14 +1254,13 @@ textarea {
 }
 
 .brand-dark .tagline {
-  font-size: 1.05rem;
+  font-size: 1.35rem;
   letter-spacing: 0.06em;
   line-height: 1.2;
   color: var(--ink);
   text-transform: uppercase;
-  /* Align the tagline's top with the top of the logo image (override the
-     header's downward nudge from the shared .brand p rule). */
-  margin: 0;
+  /* Nudge the tagline down so it sits lower against the logo art. */
+  margin: 0.6rem 0 0;
 }
 
 .login-tabs {
