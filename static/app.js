@@ -41,6 +41,9 @@
   const drillModal = document.getElementById("drill-modal");
   const drillForm = document.getElementById("drill-form");
   const cancelDrill = document.getElementById("cancel-drill");
+  const editPlayerModal = document.getElementById("edit-player-modal");
+  const editPlayerForm = document.getElementById("edit-player-form");
+  const cancelEditPlayer = document.getElementById("cancel-edit-player");
   const brandTeam = document.getElementById("brand-team");
   let drillTargetId = null;
 
@@ -1489,51 +1492,31 @@
     }
   }
 
-  async function editPlayer() {
-    if (!state.detail) {
+  function editPlayer() {
+    if (!state.detail || !editPlayerModal) {
       return;
     }
-    const name = window.prompt("Player name", state.detail.name);
-    if (name === null) {
-      return;
+    const p = state.detail;
+    editPlayerForm.reset();
+    editPlayerForm.elements.name.value = p.name || "";
+    editPlayerForm.elements.position.value = p.position || "";
+    editPlayerForm.elements.secondary_position.value = p.secondary_position || "";
+    editPlayerForm.elements.number.value =
+      p.number === null || p.number === undefined ? "" : p.number;
+    editPlayerForm.elements.team_year.value = p.team_year || "";
+    if (typeof editPlayerModal.showModal === "function") {
+      editPlayerModal.showModal();
+    } else {
+      editPlayerModal.setAttribute("open", "");
     }
-    const position = window.prompt("Primary position", state.detail.position);
-    if (position === null) {
-      return;
+    editPlayerForm.elements.name.focus();
+  }
+
+  function closeEditPlayer() {
+    if (editPlayerModal && editPlayerModal.open) {
+      editPlayerModal.close();
     }
-    const secondaryPosition = window.prompt(
-      "Secondary position (blank for none)",
-      state.detail.secondary_position || "",
-    );
-    if (secondaryPosition === null) {
-      return;
-    }
-    const number = window.prompt("Jersey number (blank to clear)", state.detail.number ?? "");
-    if (number === null) {
-      return;
-    }
-    const teamYear = window.prompt(
-      "Team year (blank to clear)",
-      state.detail.team_year || "",
-    );
-    if (teamYear === null) {
-      return;
-    }
-    try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          name,
-          position,
-          secondary_position: secondaryPosition,
-          team_year: teamYear,
-          number,
-        }),
-      });
-      await loadPlayers(state.selectedId);
-    } catch (error) {
-      showError(error.message);
-    }
+    editPlayerForm.reset();
   }
 
   async function manageAccessCode() {
@@ -1849,6 +1832,42 @@
         });
         closeDrillModal();
         await loadDetail(state.selectedId);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelEditPlayer) {
+    cancelEditPlayer.addEventListener("click", closeEditPlayer);
+  }
+  if (editPlayerModal) {
+    editPlayerModal.addEventListener("click", (event) => {
+      if (event.target === editPlayerModal) {
+        closeEditPlayer();
+      }
+    });
+  }
+  if (editPlayerForm) {
+    editPlayerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.selectedId) {
+        return;
+      }
+      const form = new FormData(editPlayerForm);
+      try {
+        await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: form.get("name"),
+            position: form.get("position"),
+            secondary_position: form.get("secondary_position"),
+            team_year: form.get("team_year"),
+            number: form.get("number"),
+          }),
+        });
+        closeEditPlayer();
+        await loadPlayers(state.selectedId);
       } catch (error) {
         showError(error.message);
       }
