@@ -278,7 +278,7 @@ def parse_exit_velo(value: object) -> object:
         raise ValueError("Exit velo must be a number")
     if mph < 0 or mph > 200:
         raise ValueError("Exit velo must be between 0 and 200 MPH")
-    return round(mph, 1)
+    return round(mph, 2)
 
 
 def parse_base_time(value: object) -> object:

@@ -1184,6 +1184,18 @@ textarea {
   border-color: var(--blue);
 }
 
+/* Hide the native number spinner arrows. */
+.skill-metric-input::-webkit-outer-spin-button,
+.skill-metric-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.skill-metric-input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 .skill-metric-unit {
   margin-top: 0.15rem;
   font-size: 0.9rem;

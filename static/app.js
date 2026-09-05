@@ -1441,7 +1441,7 @@
       unit: "MPH",
       min: 0,
       max: 200,
-      step: 0.1,
+      step: 0.01,
       aria: "Exit velocity in MPH",
     },
     "Base running": {
