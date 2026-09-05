@@ -49,6 +49,10 @@
   const accessCodeForm = document.getElementById("access-code-form");
   const accessCodeInput = document.getElementById("access-code-input");
   const cancelAccessCode = document.getElementById("cancel-access-code");
+  const noteModal = document.getElementById("note-modal");
+  const noteForm = document.getElementById("note-form");
+  const noteInput = document.getElementById("note-input");
+  const cancelNote = document.getElementById("cancel-note");
   const brandTeam = document.getElementById("brand-team");
   const brandMeta = document.getElementById("brand-meta");
   let drillTargetId = null;
@@ -769,7 +773,6 @@
     emptyState.classList.add("hidden");
 
     const rated = (player.progress || []).filter((item) => item.current);
-    const notes = player.notes || [];
 
     const actions = [];
     if (!readOnly) {
@@ -914,56 +917,8 @@
       activityBlock,
     );
 
-    let notesCard;
-    if (readOnly) {
-      const noteList = el(
-        "ul",
-        { className: "notes" },
-        notes.length
-          ? notes.map((note) =>
-              el(
-                "li",
-                {},
-                el("div", { className: "note-top" }, el("span", { className: "meta" }, formatWhen(note.created_at))),
-                el("p", {}, note.text || ""),
-              ),
-            )
-          : el("li", { className: "empty" }, "No notes yet."),
-      );
-      notesCard = el("section", { className: "card notes-card" }, el("h2", {}, "Notes"), noteList);
-    } else {
-      const noteForm = el(
-        "form",
-        { className: "form", onSubmit: saveNote },
-        el("label", {}, "New note", el("textarea", { name: "text", maxlength: "2000", required: true })),
-        el("button", { type: "submit", className: "btn btn-primary" }, "Save note"),
-      );
-      const noteList = el(
-        "ul",
-        { className: "notes" },
-        notes.length
-          ? notes.map((note) =>
-              el(
-                "li",
-                {},
-                el(
-                  "div",
-                  { className: "note-top" },
-                  el("span", { className: "meta" }, formatWhen(note.created_at)),
-                  el(
-                    "button",
-                    { type: "button", className: "btn btn-danger", onClick: () => removeNote(note.id) },
-                    "Delete",
-                  ),
-                ),
-                el("p", {}, note.text || ""),
-              ),
-            )
-          : el("li", { className: "empty" }, "No notes yet."),
-      );
-      notesCard = el("section", { className: "card notes-card" }, el("h2", {}, "Notes"), noteForm, noteList);
-    }
-
+    // Coach notes now live in the Focus Area tile (with modal entry), so the
+    // standalone Notes card is gone to avoid duplicating the same record.
     const dash = el(
       "div",
       { className: "dash" },
@@ -971,7 +926,6 @@
       radar,
       statsCard,
       progress,
-      notesCard,
     );
 
     const nodes = [hero];
@@ -1101,10 +1055,70 @@
         children.push(prs);
       }
     }
+    if (opts.notes) {
+      children.push(notesBlock(opts.notes));
+    }
     if (opts.foot) {
       children.push(el("div", { className: "tile-foot" }, opts.foot));
     }
     return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
+  }
+
+  // A running record of coach notes shown inside a tile: history + an
+  // "Add note" button (coaches only) that opens the note modal.
+  function notesBlock(cfg) {
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    const children = [
+      el("div", { className: "note-block-head" }, "Coach notes"),
+    ];
+    if (!items.length) {
+      children.push(el("div", { className: "note-empty meta" }, "No notes yet."));
+    } else {
+      const list = el("ul", { className: "note-list" });
+      items.forEach((note) => {
+        const del = cfg.canEdit
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "note-remove",
+                title: "Delete note",
+                "aria-label": "Delete note",
+                onClick: () => removeNote(note.id),
+              },
+              "\u00d7",
+            )
+          : null;
+        list.append(
+          el(
+            "li",
+            { className: "note-item" },
+            el(
+              "div",
+              { className: "note-item-top" },
+              el("span", { className: "note-when meta" }, formatWhen(note.created_at)),
+              del,
+            ),
+            el("p", { className: "note-text" }, note.text || ""),
+          ),
+        );
+      });
+      children.push(list);
+    }
+    if (cfg.canEdit) {
+      children.push(
+        el(
+          "div",
+          { className: "note-actions" },
+          el(
+            "button",
+            { type: "button", className: "btn note-add", onClick: openNoteModal },
+            "Add note",
+          ),
+        ),
+      );
+    }
+    return el("div", { className: "note-block" }, ...children);
   }
 
   // Render personal-record (PR) notes inside a metric tile, newest first.
@@ -1290,6 +1304,7 @@
         unit: m.low ? "/5" : "",
         accent: m.low ? accentForScore(m.low.value) : "orange",
         foot: m.low ? m.low.name : "Rate a skill",
+        notes: { items: player.notes || [], canEdit: !isReadOnly() },
       }),
       drillsTile(player),
     );
@@ -1714,19 +1729,41 @@
     }
   }
 
+  function openNoteModal() {
+    if (!state.selectedId || !noteModal) {
+      return;
+    }
+    noteForm.reset();
+    if (typeof noteModal.showModal === "function") {
+      noteModal.showModal();
+    } else {
+      noteModal.setAttribute("open", "");
+    }
+    if (noteInput) {
+      noteInput.focus();
+    }
+  }
+
+  function closeNoteModal() {
+    if (noteModal.open) {
+      noteModal.close();
+    } else {
+      noteModal.removeAttribute("open");
+    }
+  }
+
   async function saveNote(event) {
     event.preventDefault();
     if (!state.selectedId) {
       return;
     }
-    const form = event.currentTarget;
-    const text = new FormData(form).get("text");
+    const text = new FormData(noteForm).get("text");
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}/notes`, {
         method: "POST",
         body: JSON.stringify({ text }),
       });
-      form.reset();
+      closeNoteModal();
       await loadDetail(state.selectedId);
     } catch (error) {
       showError(error.message);
@@ -2214,6 +2251,20 @@
         showError(error.message);
       }
     });
+  }
+
+  if (cancelNote) {
+    cancelNote.addEventListener("click", closeNoteModal);
+  }
+  if (noteModal) {
+    noteModal.addEventListener("click", (event) => {
+      if (event.target === noteModal) {
+        closeNoteModal();
+      }
+    });
+  }
+  if (noteForm) {
+    noteForm.addEventListener("submit", saveNote);
   }
 
   cancelAdd.addEventListener("click", () => {

@@ -823,6 +823,99 @@ h1, h2, h3, p {
   cursor: default;
 }
 
+/* Coach notes inside the Focus Area tile: a running record + Add note button. */
+.note-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0.7rem;
+  min-height: 0;
+  flex: 1;
+}
+
+.note-block-head {
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.note-empty {
+  font-size: 0.82rem;
+}
+
+.note-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.note-item {
+  border-top: 1px solid var(--line-soft);
+  padding-top: 0.45rem;
+}
+
+.note-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.note-item-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+}
+
+.note-when {
+  font-size: 0.72rem;
+}
+
+.note-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.note-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  flex-shrink: 0;
+}
+
+.note-remove:hover {
+  color: var(--red);
+}
+
+.note-actions {
+  margin-top: auto;
+  padding-top: 0.4rem;
+}
+
+.note-add {
+  padding: 0.32rem 0.65rem;
+  font-size: 0.74rem;
+  background: linear-gradient(180deg, #fdba74, #fb923c);
+  color: #2a1405;
+}
+
+.note-add:hover {
+  background: linear-gradient(180deg, #fecb94, #fca44f);
+}
+
 /* ---------- Dashboard columns ---------- */
 .dash {
   display: grid;
@@ -856,10 +949,9 @@ h1, h2, h3, p {
     height: 100%;
   }
 
-  /* Rows 2+: stats, progress, and notes each span the full width. */
+  /* Rows 2+: stats and progress each span the full width. */
   .stats-card,
-  .progress-card,
-  .notes-card {
+  .progress-card {
     grid-column: 1 / -1;
   }
 
@@ -1456,30 +1548,6 @@ textarea {
 }
 
 /* ---------- Notes ---------- */
-.notes {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.notes li {
-  border-top: 1px solid var(--line-soft);
-  padding: 0.7rem 0;
-}
-
-.notes li:first-child {
-  border-top: 0;
-  padding-top: 0;
-}
-
-.note-top {
-  display: flex;
-  justify-content: space-between;
-  gap: 0.75rem;
-  align-items: center;
-  margin-bottom: 0.3rem;
-}
-
 .error {
   color: var(--red);
   font-size: 0.9rem;
