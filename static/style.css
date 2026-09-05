@@ -453,6 +453,46 @@ h1, h2, h3, p {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
   }
+
+  /* Skills and Performance Profile share the same height side by side. */
+  .skills-card,
+  .radar-card {
+    height: 430px;
+  }
+
+  .radar-card {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .radar-card .radar-wrap {
+    flex: 1;
+    align-items: center;
+  }
+
+  /* Compact the skill cells so all skills fit within the shared height. */
+  .skills-card .skills {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.45rem;
+  }
+
+  .skills-card .skill {
+    padding: 0.5rem 0.6rem;
+  }
+
+  .skills-card .skill h3 {
+    font-size: 0.78rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .skills-card .dot {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .skills-card .skill .meta {
+    font-size: 0.72rem;
+  }
 }
 
 /* ---------- Forms & buttons ---------- */

@@ -405,7 +405,7 @@
 
     const skills = el(
       "section",
-      { className: "card" },
+      { className: "card skills-card" },
       el("h2", {}, "Skills and ratings"),
       el(
         "p",
@@ -431,7 +431,7 @@
 
     const radar = el(
       "section",
-      { className: "card" },
+      { className: "card radar-card" },
       el("h2", {}, "Performance Profile"),
       el("p", { className: "meta" }, "Strengths and weaknesses across every skill at a glance."),
       el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
