@@ -1214,10 +1214,12 @@ class Store:
                 for item in record.get("drills", [])
                 if isinstance(item, dict)
             ]
+            # Only surface genuine PRs. A record without a delta is a legacy
+            # first-entry baseline (there was nothing to beat), not a real PR.
             records = [
                 dict(item)
                 for item in record.get("records", [])
-                if isinstance(item, dict)
+                if isinstance(item, dict) and item.get("delta") is not None
             ]
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))

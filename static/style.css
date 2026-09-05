@@ -576,8 +576,13 @@ h1, h2, h3, p {
   font-weight: 600;
 }
 
-.pr-delta {
+.pr-value {
   color: var(--green);
+  font-weight: 700;
+}
+
+.pr-delta {
+  color: var(--muted);
   font-weight: 700;
 }
 

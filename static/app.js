@@ -1074,7 +1074,9 @@
       const unit = rec.unit ? ` ${rec.unit}` : "";
       const num = Number(rec.delta);
       const sign = num > 0 ? "+" : num < 0 ? "\u2212" : "";
-      const delta = `${sign}${fmt(Math.abs(num))}${unit}`;
+      // The achieved value (e.g. "48 MPH") plus the change (e.g. "(+2)").
+      const value = `${fmt(rec.value)}${unit}`;
+      const change = `(${sign}${fmt(Math.abs(num))})`;
       return el(
         "li",
         { className: "pr-item" },
@@ -1086,7 +1088,9 @@
           " \u2014 ",
           el("span", { className: "pr-name" }, rec.label),
           " ",
-          el("span", { className: "pr-delta" }, delta),
+          el("span", { className: "pr-value" }, value),
+          " ",
+          el("span", { className: "pr-delta" }, change),
         ),
       );
     });
