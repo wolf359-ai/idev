@@ -284,9 +284,13 @@ h1, h2, h3, p {
   font-size: 4.6rem;
   line-height: 0.9;
   font-weight: 800;
-  color: var(--cyan);
   letter-spacing: -0.02em;
-  text-shadow: 0 0 24px rgba(34, 211, 238, 0.35);
+  color: var(--orange);
+  background: linear-gradient(95deg, #f7b23c 0%, #fb7a35 45%, #ef5138 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 22px rgba(251, 122, 53, 0.3));
 }
 
 .hero-name {
