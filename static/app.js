@@ -957,7 +957,57 @@
       }
       return null;
     };
-    return { rated: rated.length, total: items.length, avg, overall, top, low, spark, findStat };
+    const avgTrend = computeAvgTrend(weeklyAvgSeries(player));
+    return { rated: rated.length, total: items.length, avg, overall, top, low, spark, avgTrend, findStat };
+  }
+
+  // Reconstruct the player's average rating at the end of each week from the raw
+  // rating history (latest score per skill as of that moment, averaged).
+  function weeklyAvgSeries(player) {
+    const ratings = (player.ratings || [])
+      .map((r) => ({ skill: r.skill_id, score: Number(r.score) || 0, t: Date.parse(r.created_at) }))
+      .filter((r) => r.skill && !Number.isNaN(r.t))
+      .sort((a, b) => a.t - b.t);
+    if (ratings.length < 2) {
+      return [];
+    }
+    const WEEK = 7 * 24 * 3600 * 1000;
+    const tMin = ratings[0].t;
+    const tMax = Math.max(ratings[ratings.length - 1].t, Date.now());
+    const bounds = [tMin];
+    for (let t = tMin + WEEK; t < tMax; t += WEEK) {
+      bounds.push(t);
+    }
+    bounds.push(tMax);
+    const avgAsOf = (t) => {
+      const latest = new Map();
+      for (const r of ratings) {
+        if (r.t <= t) {
+          latest.set(r.skill, r.score);
+        } else {
+          break;
+        }
+      }
+      const vals = [...latest.values()];
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+    const series = bounds.map(avgAsOf).filter((v) => v !== null);
+    // Keep at most the last 10 weekly points for a compact sparkline.
+    return series.slice(-10);
+  }
+
+  // Compare the two most recent weekly averages to derive a direction + percent.
+  function computeAvgTrend(series) {
+    if (!series || series.length < 2) {
+      return { series: series || [], direction: "flat", pct: 0 };
+    }
+    const last = series[series.length - 1];
+    const prev = series[series.length - 2];
+    const delta = last - prev;
+    const eps = 0.049; // ratings move in 0.5 steps; ignore floating-point noise
+    const direction = delta > eps ? "up" : delta < -eps ? "down" : "flat";
+    const pct = prev > 0 ? Math.round((delta / prev) * 100) : last > 0 ? 100 : 0;
+    return { series, direction, pct };
   }
 
   function metricTile(opts) {
@@ -982,10 +1032,67 @@
         ),
       );
     }
+    if (opts.trend && opts.trend.series && opts.trend.series.length >= 2) {
+      children.push(trendTag(opts.trend), trendSpark(opts.trend));
+    }
     if (opts.foot) {
       children.push(el("div", { className: "tile-foot" }, opts.foot));
     }
     return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
+  }
+
+  // A small "week over week" indicator: arrow + percent change.
+  function trendTag(trend) {
+    const glyph = trend.direction === "up" ? "\u25B2" : trend.direction === "down" ? "\u25BC" : "\u2014";
+    const pct = `${trend.pct > 0 ? "+" : ""}${trend.pct}%`;
+    return el(
+      "div",
+      { className: `trend-tag ${trend.direction}` },
+      el("span", { className: "trend-arrow" }, glyph),
+      el("span", { className: "trend-pct" }, pct),
+      el("span", { className: "trend-note" }, "week over week"),
+    );
+  }
+
+  // A line sparkline of the weekly average rating that fills the tile body.
+  function trendSpark(trend) {
+    const s = trend.series;
+    const n = s.length;
+    let lo = Math.min(...s);
+    let hi = Math.max(...s);
+    if (hi - lo < 1) {
+      const mid = (hi + lo) / 2;
+      lo = mid - 0.5;
+      hi = mid + 0.5;
+    }
+    const W = 100;
+    const H = 100;
+    const pad = 8;
+    const xAt = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W);
+    const yAt = (v) => H - pad - ((v - lo) / (hi - lo)) * (H - pad * 2);
+    const linePts = s.map((v, i) => `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
+    const areaPts = `0,${H} ${linePts} ${W},${H}`;
+    const area = svgEl("polygon", { points: areaPts, class: "trend-area" });
+    const line = svgEl("polyline", {
+      points: linePts,
+      class: "trend-line",
+      fill: "none",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "vector-effect": "non-scaling-stroke",
+    });
+    return svgEl(
+      "svg",
+      {
+        viewBox: `0 0 ${W} ${H}`,
+        class: "trend-spark",
+        preserveAspectRatio: "none",
+        "aria-hidden": "true",
+      },
+      area,
+      line,
+    );
   }
 
   function renderHero(player, actions, m) {
@@ -1024,6 +1131,7 @@
         value: m.avg ? m.avg.toFixed(1) : "0.0",
         unit: "/5",
         accent: accentForScore(m.avg),
+        trend: m.avgTrend,
         foot: "Across rated skills",
       }),
       metricTile({

@@ -540,6 +540,61 @@ h1, h2, h3, p {
   display: block;
 }
 
+/* Week-over-week trend indicator + line sparkline (Avg Rating tile). */
+.trend-tag {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.4rem;
+  margin-top: 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.trend-tag .trend-arrow {
+  font-size: 0.78rem;
+}
+
+.trend-tag.up {
+  color: var(--green);
+}
+
+.trend-tag.down {
+  color: var(--red);
+}
+
+.trend-tag.flat {
+  color: var(--muted);
+}
+
+.trend-tag .trend-note {
+  font-weight: 500;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.trend-spark {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 42px;
+  margin-top: 0.4rem;
+  color: var(--muted);
+}
+
+.trend-spark .trend-line {
+  stroke: currentColor;
+}
+
+.trend-spark .trend-area {
+  fill: currentColor;
+  opacity: 0.12;
+  stroke: none;
+}
+
 /* Accent variants */
 .tile.cyan .ribbon { border-top-color: var(--cyan); }
 .tile.cyan .tile-value { color: var(--cyan); }
@@ -562,6 +617,15 @@ h1, h2, h3, p {
 .tile.red .ribbon { border-top-color: var(--red); }
 .tile.red .tile-value { color: var(--red); }
 .tile.red .spark i { background: var(--red); }
+
+/* The trend line/area follows each tile's accent color. */
+.tile.cyan .trend-spark { color: var(--cyan); }
+.tile.green .trend-spark { color: var(--green); }
+.tile.orange .trend-spark { color: var(--orange); }
+.tile.yellow .trend-spark { color: var(--yellow); }
+.tile.lime .trend-spark { color: var(--lime); }
+.tile.blue .trend-spark { color: var(--blue); }
+.tile.red .trend-spark { color: var(--red); }
 
 /* "Skills Assigned" drills tile: a bulleted list with optional links. */
 .drill-tile {
