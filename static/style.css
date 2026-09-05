@@ -805,6 +805,8 @@ h1, h2, h3, p {
 .drill-actions {
   margin-top: auto;
   padding-top: 0.3rem;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .drill-add {
