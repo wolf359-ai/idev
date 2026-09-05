@@ -48,7 +48,7 @@ PR_METRICS = {
     "exit_velo": {"label": "Exit Velo", "unit": "MPH", "higher_better": True},
     "pitch_velo": {"label": "Velocity", "unit": "MPH", "higher_better": True},
     "throw_speed": {"label": "Throw Speed", "unit": "MPH", "higher_better": True},
-    "base_time": {"label": "Time", "unit": "s", "higher_better": False},
+    "base_time": {"label": "Running speed", "unit": "s", "higher_better": False},
 }
 # Keep this many timestamped snapshots in data_backups/ so an accidental
 # deletion or corruption of the data file never loses the roster.
@@ -1348,16 +1348,21 @@ class Store:
         best_map = player.setdefault("metric_best", {})
         previous = best_map.get(key)
         higher = meta["higher_better"]
+        # The first value entered is only a baseline, not a personal record —
+        # there's nothing to beat yet, so record it silently.
+        if not isinstance(previous, (int, float)):
+            best_map[key] = value
+            return
         is_pr = False
         delta = None
-        if not isinstance(previous, (int, float)):
+        if higher and value > previous:
             is_pr = True
-        elif higher and value > previous:
-            is_pr = True
+            # Higher-is-better: positive gain (e.g. +2 MPH).
             delta = round(value - previous, 2)
         elif not higher and value < previous:
             is_pr = True
-            delta = round(previous - value, 2)
+            # Lower-is-better (time): negative change showing the drop (e.g. -0.20 s).
+            delta = round(value - previous, 2)
         if not is_pr:
             return
         best_map[key] = value

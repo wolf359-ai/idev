@@ -1049,7 +1049,10 @@
       children.push(trendTag(opts.trend), trendSpark(opts.trend));
     }
     if (opts.records && opts.records.length) {
-      children.push(prList(opts.records));
+      const prs = prList(opts.records);
+      if (prs) {
+        children.push(prs);
+      }
     }
     if (opts.foot) {
       children.push(el("div", { className: "tile-foot" }, opts.foot));
@@ -1063,15 +1066,15 @@
       const num = Number(n);
       return Number.isInteger(num) ? String(num) : num.toFixed(2);
     };
-    const items = records.slice(0, 6).map((rec) => {
+    const items = records
+      // A record without a delta is a legacy first-entry baseline, not a real PR.
+      .filter((rec) => rec.delta !== null && rec.delta !== undefined)
+      .slice(0, 6)
+      .map((rec) => {
       const unit = rec.unit ? ` ${rec.unit}` : "";
-      let delta;
-      if (rec.delta === null || rec.delta === undefined) {
-        delta = `${fmt(rec.value)}${unit}`;
-      } else {
-        const sign = rec.higher_better ? "+" : "\u2212";
-        delta = `${sign}${fmt(rec.delta)}${unit}`;
-      }
+      const num = Number(rec.delta);
+      const sign = num > 0 ? "+" : num < 0 ? "\u2212" : "";
+      const delta = `${sign}${fmt(Math.abs(num))}${unit}`;
       return el(
         "li",
         { className: "pr-item" },
@@ -1087,6 +1090,9 @@
         ),
       );
     });
+    if (!items.length) {
+      return null;
+    }
     return el(
       "ul",
       { className: "pr-list" },

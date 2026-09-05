@@ -246,37 +246,40 @@ class StoreTests(unittest.TestCase):
     def test_personal_record_higher_is_better(self) -> None:
         created = self.store.add_player({"name": "Sky", "position": "Shortstop"})
         pid = created["id"]
-        # First value establishes the record (no delta).
-        first = self.store.update_player(pid, {"exit_velo": "60"})
+        # First value only establishes a baseline; it is not a PR.
+        self.store.update_player(pid, {"exit_velo": "60"})
+        detail = self.store.get_player(pid)
+        self.assertEqual(len(detail["records"]), 0)
+        # A higher value is the first real PR, with a positive delta.
+        self.store.update_player(pid, {"exit_velo": "65.5"})
         detail = self.store.get_player(pid)
         self.assertEqual(len(detail["records"]), 1)
         self.assertEqual(detail["records"][0]["metric"], "exit_velo")
-        self.assertIsNone(detail["records"][0]["delta"])
-        # A higher value is a new PR with a positive delta.
-        self.store.update_player(pid, {"exit_velo": "65.5"})
-        detail = self.store.get_player(pid)
-        self.assertEqual(len(detail["records"]), 2)
         self.assertEqual(detail["records"][0]["delta"], 5.5)
         # A lower value is not a PR (no new note).
         self.store.update_player(pid, {"exit_velo": "62"})
         detail = self.store.get_player(pid)
-        self.assertEqual(len(detail["records"]), 2)
+        self.assertEqual(len(detail["records"]), 1)
 
     def test_personal_record_lower_time_is_better(self) -> None:
         created = self.store.add_player({"name": "Sky", "position": "Shortstop"})
         pid = created["id"]
+        # First time is only a baseline, not a PR.
         self.store.update_player(pid, {"base_time": "4.0"})
-        # A faster (lower) time is a new PR; delta is the improvement amount.
+        detail = self.store.get_player(pid)
+        self.assertEqual(len(detail["records"]), 0)
+        # A faster (lower) time is a new PR; delta is negative (the time drop).
         self.store.update_player(pid, {"base_time": "3.6"})
         detail = self.store.get_player(pid)
-        self.assertEqual(len(detail["records"]), 2)
+        self.assertEqual(len(detail["records"]), 1)
         self.assertEqual(detail["records"][0]["metric"], "base_time")
-        self.assertEqual(detail["records"][0]["delta"], 0.4)
+        self.assertEqual(detail["records"][0]["label"], "Running speed")
+        self.assertEqual(detail["records"][0]["delta"], -0.4)
         self.assertFalse(detail["records"][0]["higher_better"])
         # A slower (higher) time is not a PR.
         self.store.update_player(pid, {"base_time": "3.9"})
         detail = self.store.get_player(pid)
-        self.assertEqual(len(detail["records"]), 2)
+        self.assertEqual(len(detail["records"]), 1)
 
     def test_staff_add_list_delete(self) -> None:
         created = self.store.add_staff(
