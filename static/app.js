@@ -1771,7 +1771,7 @@
     editPlayerForm.elements.secondary_position.value = p.secondary_position || "";
     editPlayerForm.elements.number.value =
       p.number === null || p.number === undefined ? "" : p.number;
-    editPlayerForm.elements.team_year.value = p.team_year || "";
+    editPlayerForm.elements.grad_year.value = p.grad_year || "";
     if (typeof editPlayerModal.showModal === "function") {
       editPlayerModal.showModal();
     } else {
@@ -2152,7 +2152,7 @@
             name: form.get("name"),
             position: form.get("position"),
             secondary_position: form.get("secondary_position"),
-            team_year: form.get("team_year"),
+            grad_year: form.get("grad_year"),
             number: form.get("number"),
           }),
         });
