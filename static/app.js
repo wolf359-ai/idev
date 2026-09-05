@@ -1047,10 +1047,50 @@
     if (opts.trend && opts.trend.series && opts.trend.series.length >= 2) {
       children.push(trendTag(opts.trend), trendSpark(opts.trend));
     }
+    if (opts.records && opts.records.length) {
+      children.push(prList(opts.records));
+    }
     if (opts.foot) {
       children.push(el("div", { className: "tile-foot" }, opts.foot));
     }
     return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
+  }
+
+  // Render personal-record (PR) notes inside a metric tile, newest first.
+  function prList(records) {
+    const fmt = (n) => {
+      const num = Number(n);
+      return Number.isInteger(num) ? String(num) : num.toFixed(2);
+    };
+    const items = records.slice(0, 6).map((rec) => {
+      const unit = rec.unit ? ` ${rec.unit}` : "";
+      let delta;
+      if (rec.delta === null || rec.delta === undefined) {
+        delta = `${fmt(rec.value)}${unit}`;
+      } else {
+        const sign = rec.higher_better ? "+" : "\u2212";
+        delta = `${sign}${fmt(rec.delta)}${unit}`;
+      }
+      return el(
+        "li",
+        { className: "pr-item" },
+        el("span", { className: "pr-arrow" }, "\u25B2"),
+        el(
+          "span",
+          { className: "pr-text" },
+          el("span", { className: "pr-title" }, "New PR"),
+          " \u2014 ",
+          el("span", { className: "pr-name" }, rec.label),
+          " ",
+          el("span", { className: "pr-delta" }, delta),
+        ),
+      );
+    });
+    return el(
+      "ul",
+      { className: "pr-list" },
+      ...items,
+    );
   }
 
   // A small "week over week" indicator: arrow + percent change.
@@ -1165,6 +1205,7 @@
         unit: "%",
         accent: "cyan",
         spark: m.spark.length ? m.spark : null,
+        records: Array.isArray(player.records) ? player.records : null,
         foot: `${m.rated}/${m.total} skills rated`,
       }),
       metricTile({
@@ -1560,6 +1601,8 @@
         state.detail[key] = saved;
       }
       input.value = saved === "" || saved === null || saved === undefined ? "" : String(saved);
+      // Refresh so any new personal-record note shows in the Overall tile.
+      await loadDetail(state.selectedId);
     } catch (error) {
       showError(error.message);
     }

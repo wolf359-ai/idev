@@ -533,6 +533,45 @@ h1, h2, h3, p {
   letter-spacing: 0.04em;
 }
 
+/* Personal-record notes inside a metric tile. */
+.pr-list {
+  list-style: none;
+  margin: 0.9rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pr-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+
+.pr-arrow {
+  color: var(--green);
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+
+.pr-title {
+  color: var(--green);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.pr-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.pr-delta {
+  color: var(--green);
+  font-weight: 700;
+}
+
 .spark {
   display: flex;
   align-items: flex-end;

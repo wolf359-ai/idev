@@ -41,6 +41,15 @@ MAX_DRILLS = 10
 MAX_DRILL_NAME_LEN = 80
 MAX_DRILL_FREQ_LEN = 60
 MAX_DRILL_LINK_LEN = 300
+MAX_RECORDS = 50
+# Numeric performance metrics that track a personal record (PR). "higher_better"
+# marks speed/velocity (a new max is a PR); time metrics improve as they drop.
+PR_METRICS = {
+    "exit_velo": {"label": "Exit Velo", "unit": "MPH", "higher_better": True},
+    "pitch_velo": {"label": "Velocity", "unit": "MPH", "higher_better": True},
+    "throw_speed": {"label": "Throw Speed", "unit": "MPH", "higher_better": True},
+    "base_time": {"label": "Time", "unit": "s", "higher_better": False},
+}
 # Keep this many timestamped snapshots in data_backups/ so an accidental
 # deletion or corruption of the data file never loses the roster.
 MAX_BACKUPS = int(os.environ.get("IDEV_MAX_BACKUPS", "40"))
@@ -1169,6 +1178,11 @@ class Store:
                 for item in record.get("drills", [])
                 if isinstance(item, dict)
             ]
+            records = [
+                dict(item)
+                for item in record.get("records", [])
+                if isinstance(item, dict)
+            ]
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
@@ -1178,6 +1192,7 @@ class Store:
         player["notes"] = notes
         player["activity"] = activity[:MAX_ACTIVITY]
         player["drills"] = drills
+        player["records"] = records[:MAX_RECORDS]
         player["progress"] = build_progress(skills, ratings)
         player["stats"] = build_stats_view(raw_stats)
         return player
@@ -1270,14 +1285,54 @@ class Store:
                 player["number"] = parse_number(payload.get("number"))
             if "exit_velo" in payload:
                 player["exit_velo"] = parse_exit_velo(payload.get("exit_velo"))
+                self._record_pr(player, "exit_velo", player["exit_velo"])
             if "base_time" in payload:
                 player["base_time"] = parse_base_time(payload.get("base_time"))
+                self._record_pr(player, "base_time", player["base_time"])
             if "pitch_velo" in payload:
                 player["pitch_velo"] = parse_pitch_velo(payload.get("pitch_velo"))
+                self._record_pr(player, "pitch_velo", player["pitch_velo"])
             if "throw_speed" in payload:
                 player["throw_speed"] = parse_throw_speed(payload.get("throw_speed"))
+                self._record_pr(player, "throw_speed", player["throw_speed"])
             self._save()
             return public_player(player)
+
+    def _record_pr(self, player: dict, key: str, value: object) -> None:
+        """Log a personal-record note when a metric beats its previous best."""
+        if key not in PR_METRICS or not isinstance(value, (int, float)):
+            return
+        meta = PR_METRICS[key]
+        best_map = player.setdefault("metric_best", {})
+        previous = best_map.get(key)
+        higher = meta["higher_better"]
+        is_pr = False
+        delta = None
+        if not isinstance(previous, (int, float)):
+            is_pr = True
+        elif higher and value > previous:
+            is_pr = True
+            delta = round(value - previous, 2)
+        elif not higher and value < previous:
+            is_pr = True
+            delta = round(previous - value, 2)
+        if not is_pr:
+            return
+        best_map[key] = value
+        note = {
+            "id": new_id("pr"),
+            "metric": key,
+            "label": meta["label"],
+            "unit": meta["unit"],
+            "higher_better": higher,
+            "value": value,
+            "previous": previous if isinstance(previous, (int, float)) else None,
+            "delta": delta,
+            "created_at": utc_now(),
+        }
+        records = player.setdefault("records", [])
+        records.insert(0, note)
+        del records[MAX_RECORDS:]
 
     def delete_player(self, player_id: str) -> None:
         with self.lock:
