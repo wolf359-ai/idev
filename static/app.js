@@ -1488,7 +1488,7 @@
       "aria-label": spec.aria,
       value: value === "" || value === null || value === undefined ? "" : String(value),
     });
-    input.addEventListener("change", () => saveMetric(spec.key, input.value));
+    input.addEventListener("change", () => saveMetric(spec.key, input));
     input.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
@@ -1498,16 +1498,25 @@
     return input;
   }
 
-  async function saveMetric(key, raw) {
+  // Save a single metric without re-rendering the whole detail, so the value the
+  // coach entered stays put (and is replaced by the server's normalized value).
+  async function saveMetric(key, input) {
     if (!state.selectedId) {
       return;
     }
     try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
-        method: "PUT",
-        body: JSON.stringify({ [key]: String(raw).trim() }),
-      });
-      await loadDetail(state.selectedId);
+      const updated = await request(
+        `/api/players/${encodeURIComponent(state.selectedId)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ [key]: input.value.trim() }),
+        },
+      );
+      const saved = updated && key in updated ? updated[key] : input.value.trim();
+      if (state.detail) {
+        state.detail[key] = saved;
+      }
+      input.value = saved === "" || saved === null || saved === undefined ? "" : String(saved);
     } catch (error) {
       showError(error.message);
     }
