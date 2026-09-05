@@ -140,7 +140,83 @@ h1, h2, h3, p {
   justify-content: space-between;
   gap: 0.6rem;
   align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+/* Collapsible admin section (Import roster / Add player). */
+.admin {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #0d1420, #0a0f17);
   margin-bottom: 0.75rem;
+  overflow: hidden;
+}
+
+.admin-summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--muted);
+  user-select: none;
+  transition: color 0.15s, background 0.15s;
+}
+
+.admin-summary::-webkit-details-marker {
+  display: none;
+}
+
+.admin-summary:hover {
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.admin-caret {
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid currentColor;
+  transition: transform 0.18s ease;
+}
+
+.admin[open] .admin-caret {
+  transform: rotate(180deg);
+}
+
+.admin[open] .admin-summary {
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.admin-body {
+  padding: 0.7rem 0.75rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.admin-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.admin-actions .btn {
+  flex: 1;
+}
+
+/* Forms nested in the accordion don't need their own card frame. */
+.admin-body .card.form {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
 }
 
 .roster-head h2,

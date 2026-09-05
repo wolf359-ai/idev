@@ -54,11 +54,17 @@
     <aside class="roster" aria-label="Players">
       <div class="roster-head">
         <h2>Players</h2>
-        <div class="row">
+      </div>
+      <details class="admin" id="admin-tools">
+        <summary class="admin-summary">
+          <span class="admin-title">Admin</span>
+          <span class="admin-caret" aria-hidden="true"></span>
+        </summary>
+        <div class="admin-body">
+        <div class="row admin-actions">
           <button type="button" id="show-import-roster" class="btn">Import roster</button>
           <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
         </div>
-      </div>
       <form id="import-roster-form" class="card form hidden" autocomplete="off">
         <h3>Import GameChanger roster</h3>
         <p class="meta">
@@ -116,6 +122,8 @@
           <button type="button" id="cancel-add-player" class="btn">Cancel</button>
         </div>
       </form>
+        </div>
+      </details>
       <ul id="player-list" class="player-list"></ul>
     </aside>
 
