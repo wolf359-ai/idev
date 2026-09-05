@@ -102,8 +102,8 @@ h1, h2, h3, p {
 
 .brand p {
   color: var(--muted);
-  font-size: 0.82rem;
-  letter-spacing: 0.06em;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
