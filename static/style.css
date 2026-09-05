@@ -831,7 +831,7 @@ textarea {
 
 .radar {
   width: 100%;
-  max-width: 300px;
+  max-width: 380px;
   /* Let labels extend past the viewBox instead of being clipped at the edge. */
   overflow: visible;
   /* Neutral glow so the multi-colored score shape keeps its own colors. */
