@@ -25,6 +25,8 @@
   const staffForm = document.getElementById("add-staff-form");
   const staffPanel = document.getElementById("staff-tools");
   const staffList = document.getElementById("staff-list");
+  const staffModal = document.getElementById("staff-modal");
+  const openStaffBtn = document.getElementById("open-add-staff");
   const cancelStaff = document.getElementById("cancel-add-staff");
 
   const state = {
@@ -1241,7 +1243,32 @@
     if (staffPanel.open) {
       addPanel.open = false;
       importPanel.open = false;
-      document.getElementById("staff-name").focus();
+    }
+  });
+
+  function openStaffModal() {
+    staffForm.reset();
+    if (typeof staffModal.showModal === "function") {
+      staffModal.showModal();
+    } else {
+      staffModal.setAttribute("open", "");
+    }
+    document.getElementById("staff-name").focus();
+  }
+
+  function closeStaffModal() {
+    if (staffModal.open) {
+      staffModal.close();
+    }
+    staffForm.reset();
+  }
+
+  openStaffBtn.addEventListener("click", openStaffModal);
+
+  // Click on the backdrop (outside the form) closes the modal.
+  staffModal.addEventListener("click", (event) => {
+    if (event.target === staffModal) {
+      closeStaffModal();
     }
   });
 
@@ -1250,10 +1277,7 @@
     addPanel.open = false;
   });
 
-  cancelStaff.addEventListener("click", () => {
-    staffForm.reset();
-    staffPanel.open = false;
-  });
+  cancelStaff.addEventListener("click", closeStaffModal);
 
   staffForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1268,8 +1292,7 @@
           access_level: form.get("access_level"),
         }),
       });
-      staffForm.reset();
-      staffPanel.open = false;
+      closeStaffModal();
       await loadStaff();
     } catch (error) {
       showError(error.message);

@@ -714,6 +714,7 @@ textarea {
 /* Admin actions (Save player, Preview roster, Add staff) use the orange accent. */
 #add-player-form .btn-primary,
 #add-staff-form .btn-primary,
+#open-add-staff,
 #preview-roster {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
@@ -721,8 +722,34 @@ textarea {
 
 #add-player-form .btn-primary:hover,
 #add-staff-form .btn-primary:hover,
+#open-add-staff:hover,
 #preview-roster:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
+}
+
+/* Add staff modal dialog. */
+.modal {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--ink);
+  padding: 1.25rem;
+  width: min(420px, 92vw);
+  box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.85);
+}
+
+.modal::backdrop {
+  background: rgba(4, 8, 14, 0.62);
+}
+
+.modal-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.modal-actions {
+  margin-top: 0.9rem;
 }
 
 /* Staff management list. */
@@ -731,6 +758,7 @@ textarea {
   margin: 0 0 0.6rem;
   padding: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.4rem;
 }
 
@@ -746,6 +774,9 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel-2);
+  /* Keep the item within the fixed-width sidebar; long emails truncate. */
+  min-width: 0;
+  overflow: hidden;
 }
 
 .staff-info {
