@@ -95,6 +95,41 @@ class StoreTests(unittest.TestCase):
                 {"name": "Pat", "position": "Utility", "team_year": "x" * 21}
             )
 
+    def test_staff_add_list_delete(self) -> None:
+        created = self.store.add_staff(
+            {
+                "name": "  Jamie Fox  ",
+                "role": "Assistant Coach",
+                "contact": "jamie@example.com",
+                "access_level": "Manager",
+            }
+        )
+        self.assertTrue(created["id"].startswith("staff-"))
+        self.assertEqual(created["name"], "Jamie Fox")
+        self.assertEqual(created["role"], "Assistant Coach")
+        self.assertEqual(created["contact"], "jamie@example.com")
+        self.assertEqual(created["access_level"], "Manager")
+        # Contact is optional.
+        plain = self.store.add_staff(
+            {"name": "Sam", "role": "Trainer", "access_level": "Read-only"}
+        )
+        self.assertEqual(plain["contact"], "")
+        self.assertEqual(len(self.store.list_staff()), 2)
+        self.store.delete_staff(created["id"])
+        remaining = self.store.list_staff()
+        self.assertEqual(len(remaining), 1)
+        self.assertEqual(remaining[0]["name"], "Sam")
+        with self.assertRaises(KeyError):
+            self.store.delete_staff("staff-does-not-exist")
+
+    def test_staff_validation(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_staff({"name": "  ", "role": "Coach", "access_level": "Full"})
+        with self.assertRaises(ValueError):
+            self.store.add_staff({"name": "Pat", "role": "", "access_level": "Full"})
+        with self.assertRaises(ValueError):
+            self.store.add_staff({"name": "Pat", "role": "Coach", "access_level": "Emperor"})
+
     def test_rejects_bad_jersey(self) -> None:
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "Pat", "position": "Utility", "number": 100})
@@ -535,6 +570,49 @@ class HttpTests(unittest.TestCase):
         # The server-side session is gone even though we still send the cookie.
         status, _payload = self.call("GET", "/api/players")
         self.assertEqual(status, 401)
+
+    def test_staff_management_is_coach_only(self) -> None:
+        status, created = self.call(
+            "POST",
+            "/api/staff",
+            {
+                "name": "Robin Vale",
+                "role": "Team Manager",
+                "contact": "555-0100",
+                "access_level": "Assistant",
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["access_level"], "Assistant")
+        status, listing = self.call("GET", "/api/staff")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(m["id"] == created["id"] for m in listing["staff"]))
+
+        # A signed-in player cannot see or modify staff.
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Pat Lane", "position": "Utility"}
+        )
+        self.assertEqual(status, 201)
+        status, access = self.call("POST", f"/api/players/{player['id']}/access-code")
+        self.assertEqual(status, 201)
+        self.sign_out()
+        self.login_player(code=access["code"])
+        status, _payload = self.call("GET", "/api/staff")
+        self.assertEqual(status, 403)
+        status, _payload = self.call(
+            "POST",
+            "/api/staff",
+            {"name": "Sneaky", "role": "x", "access_level": "Full"},
+        )
+        self.assertEqual(status, 403)
+
+        # Back as coach, deletion works.
+        self.sign_out()
+        self.login_coach()
+        status, _payload = self.call("DELETE", f"/api/staff/{created['id']}")
+        self.assertEqual(status, 200)
+        status, listing = self.call("GET", "/api/staff")
+        self.assertFalse(any(m["id"] == created["id"] for m in listing["staff"]))
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf

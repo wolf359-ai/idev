@@ -154,6 +154,43 @@
       </form>
           </div>
         </details>
+        <details class="admin admin-sub" id="staff-tools">
+          <summary class="admin-summary">
+            <span class="admin-title">Staff</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+      <ul id="staff-list" class="staff-list"></ul>
+      <form id="add-staff-form" class="form" autocomplete="off">
+        <label>
+          Name
+          <input id="staff-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Role
+          <input id="staff-role" name="role" maxlength="60" placeholder="Head Coach" required>
+        </label>
+        <label>
+          Contact information
+          <input id="staff-contact" name="contact" maxlength="120" placeholder="Email or phone">
+        </label>
+        <label>
+          Admin access
+          <select id="staff-access" name="access_level" required>
+            <option value="">Choose one</option>
+            <option>Full</option>
+            <option>Manager</option>
+            <option>Assistant</option>
+            <option>Read-only</option>
+          </select>
+        </label>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">Add staff</button>
+          <button type="button" id="cancel-add-staff" class="btn">Cancel</button>
+        </div>
+      </form>
+          </div>
+        </details>
         </div>
       </details>
       <ul id="player-list" class="player-list"></ul>

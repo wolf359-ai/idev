@@ -711,16 +711,77 @@ textarea {
   background: linear-gradient(180deg, #38dcf3, #17c1e0);
 }
 
-/* Admin actions (Save player, Preview roster) use the app's orange accent. */
+/* Admin actions (Save player, Preview roster, Add staff) use the orange accent. */
 #add-player-form .btn-primary,
+#add-staff-form .btn-primary,
 #preview-roster {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
 }
 
 #add-player-form .btn-primary:hover,
+#add-staff-form .btn-primary:hover,
 #preview-roster:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
+}
+
+/* Staff management list. */
+.staff-list {
+  list-style: none;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.staff-empty {
+  padding: 0.2rem 0.1rem;
+}
+
+.staff-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.staff-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.staff-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: space-between;
+}
+
+.staff-access {
+  flex: none;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--orange);
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  border-radius: 999px;
+  padding: 0.1rem 0.45rem;
+}
+
+.staff-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-remove {
+  flex: none;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.7rem;
 }
 
 .btn-danger {

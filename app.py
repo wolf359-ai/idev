@@ -81,6 +81,14 @@ POSITIONS = (
     "DP/Flex",
 )
 
+# Levels of admin access a staff member can be granted.
+STAFF_ACCESS_LEVELS = (
+    "Full",
+    "Manager",
+    "Assistant",
+    "Read-only",
+)
+
 DEFAULT_SKILLS = (
     "Hitting",
     "Power",
@@ -233,6 +241,36 @@ def parse_team_year(value: object) -> str:
     if len(text) > 20:
         raise ValueError("Team year must be 20 characters or fewer")
     return text
+
+
+def parse_optional_contact(value: object) -> str:
+    """Contact info (email or phone) is optional; blank means none."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 120:
+        raise ValueError("Contact must be 120 characters or fewer")
+    return text
+
+
+def parse_staff(payload: object) -> dict:
+    """Validate a staff member: name, role, contact, and admin access level."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send staff details in the request body")
+    name = clean_text(payload.get("name"), "Staff name", 80)
+    role = clean_text(payload.get("role"), "Role", 60)
+    access_level = clean_text(payload.get("access_level"), "Access level", 40)
+    if access_level not in STAFF_ACCESS_LEVELS:
+        raise ValueError("Choose an access level from the list")
+    contact = parse_optional_contact(payload.get("contact"))
+    return {
+        "name": name,
+        "role": role,
+        "contact": contact,
+        "access_level": access_level,
+    }
 
 
 def normalize_position(value: object) -> str:
@@ -649,7 +687,14 @@ class Store:
         self.data = self._load()
 
     def _empty(self) -> dict:
-        return {"skills": [], "players": [], "ratings": [], "notes": [], "auth": {}}
+        return {
+            "skills": [],
+            "players": [],
+            "ratings": [],
+            "notes": [],
+            "staff": [],
+            "auth": {},
+        }
 
     def _load(self) -> dict:
         if not self.path.exists():
@@ -661,7 +706,7 @@ class Store:
         if not isinstance(raw, dict):
             return self._empty()
         data = self._empty()
-        for key in ("skills", "players", "ratings", "notes"):
+        for key in ("skills", "players", "ratings", "notes", "staff"):
             items = raw.get(key, [])
             if isinstance(items, list):
                 data[key] = [item for item in items if isinstance(item, dict)]
@@ -795,6 +840,16 @@ class Store:
                     "id": new_id("note"),
                     "player_id": jordan["id"],
                     "text": "Changeup is landing. Next: hold the same arm speed.",
+                    "created_at": now,
+                },
+            ]
+            self.data["staff"] = [
+                {
+                    "id": new_id("staff"),
+                    "name": "Casey Morgan",
+                    "role": "Head Coach",
+                    "contact": "casey.morgan@example.com",
+                    "access_level": "Full",
                     "created_at": now,
                 },
             ]
@@ -1005,6 +1060,29 @@ class Store:
             ]
             if len(self.data["notes"]) == before:
                 raise KeyError("Note not found")
+            self._save()
+
+    # -- staff -------------------------------------------------------------
+    def list_staff(self) -> list[dict]:
+        with self.lock:
+            return [dict(member) for member in self.data["staff"]]
+
+    def add_staff(self, payload: dict) -> dict:
+        fields = parse_staff(payload)
+        member = {"id": new_id("staff"), **fields, "created_at": utc_now()}
+        with self.lock:
+            self.data["staff"].append(member)
+            self._save()
+            return dict(member)
+
+    def delete_staff(self, staff_id: str) -> None:
+        with self.lock:
+            before = len(self.data["staff"])
+            self.data["staff"] = [
+                member for member in self.data["staff"] if member.get("id") != staff_id
+            ]
+            if len(self.data["staff"]) == before:
+                raise KeyError("Staff member not found")
             self._save()
 
     # -- authentication ----------------------------------------------------
@@ -1374,6 +1452,9 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/players":
                 send_json(self, 200, {"players": self.store.list_players()})
                 return
+            if path == "/api/staff":
+                send_json(self, 200, {"staff": self.store.list_staff()})
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.get_player(player_match.group(1)))
@@ -1417,6 +1498,9 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/players":
                 send_json(self, 201, self.store.add_player(payload))
+                return
+            if path == "/api/staff":
+                send_json(self, 201, self.store.add_staff(payload))
                 return
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))
@@ -1485,6 +1569,11 @@ class IdevHandler(BaseHTTPRequestHandler):
             note_match = re.fullmatch(r"/api/notes/([a-zA-Z0-9_-]{8,64})", path)
             if note_match:
                 self.store.delete_note(note_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
+            if staff_match:
+                self.store.delete_staff(staff_match.group(1))
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})

@@ -22,9 +22,14 @@
   const rosterText = document.getElementById("roster-text");
   const rosterPreview = document.getElementById("roster-preview");
   const previewRosterButton = document.getElementById("preview-roster");
+  const staffForm = document.getElementById("add-staff-form");
+  const staffPanel = document.getElementById("staff-tools");
+  const staffList = document.getElementById("staff-list");
+  const cancelStaff = document.getElementById("cancel-add-staff");
 
   const state = {
     players: [],
+    staff: [],
     selectedId: null,
     detail: null,
     importReady: false,
@@ -235,6 +240,64 @@
       );
       playerList.append(el("li", {}, button));
     });
+  }
+
+  async function loadStaff() {
+    if (state.role !== "coach") {
+      return;
+    }
+    const data = await request("/api/staff");
+    state.staff = data.staff || [];
+    renderStaff();
+  }
+
+  function renderStaff() {
+    if (!staffList) {
+      return;
+    }
+    staffList.replaceChildren();
+    if (!state.staff.length) {
+      staffList.append(el("li", { className: "staff-empty meta" }, "No staff added yet."));
+      return;
+    }
+    state.staff.forEach((member) => {
+      const meta = [member.role, member.contact].filter(Boolean).join(" · ");
+      const remove = el(
+        "button",
+        {
+          type: "button",
+          className: "btn btn-danger staff-remove",
+          title: `Remove ${member.name}`,
+          "aria-label": `Remove ${member.name}`,
+          onClick: () => removeStaff(member),
+        },
+        "Remove",
+      );
+      const info = el(
+        "div",
+        { className: "staff-info" },
+        el(
+          "div",
+          { className: "staff-top" },
+          el("strong", {}, member.name),
+          el("span", { className: "staff-access" }, member.access_level || ""),
+        ),
+        meta ? el("div", { className: "meta staff-meta" }, meta) : null,
+      );
+      staffList.append(el("li", { className: "staff-item" }, info, remove));
+    });
+  }
+
+  async function removeStaff(member) {
+    if (!window.confirm(`Remove ${member.name} from staff?`)) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, { method: "DELETE" });
+      await loadStaff();
+    } catch (error) {
+      showError(error.message);
+    }
   }
 
   function scoreDots(skillId, current, readOnly) {
@@ -1096,6 +1159,7 @@
       appView.classList.remove("role-player");
       sessionLabel.textContent = "Signed in as Coach";
       loadPlayers().catch((error) => showError(error.message));
+      loadStaff().catch((error) => showError(error.message));
     }
   }
 
@@ -1160,6 +1224,7 @@
   addPanel.addEventListener("toggle", () => {
     if (addPanel.open) {
       importPanel.open = false;
+      staffPanel.open = false;
       document.getElementById("player-name").focus();
     }
   });
@@ -1167,13 +1232,48 @@
   importPanel.addEventListener("toggle", () => {
     if (importPanel.open) {
       addPanel.open = false;
+      staffPanel.open = false;
       rosterText.focus();
+    }
+  });
+
+  staffPanel.addEventListener("toggle", () => {
+    if (staffPanel.open) {
+      addPanel.open = false;
+      importPanel.open = false;
+      document.getElementById("staff-name").focus();
     }
   });
 
   cancelAdd.addEventListener("click", () => {
     addForm.reset();
     addPanel.open = false;
+  });
+
+  cancelStaff.addEventListener("click", () => {
+    staffForm.reset();
+    staffPanel.open = false;
+  });
+
+  staffForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(staffForm);
+    try {
+      await request("/api/staff", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.get("name"),
+          role: form.get("role"),
+          contact: form.get("contact"),
+          access_level: form.get("access_level"),
+        }),
+      });
+      staffForm.reset();
+      staffPanel.open = false;
+      await loadStaff();
+    } catch (error) {
+      showError(error.message);
+    }
   });
 
   cancelImport.addEventListener("click", () => {
