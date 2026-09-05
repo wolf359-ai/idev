@@ -1447,7 +1447,7 @@
     "Base running": {
       key: "base_time",
       heading: "Time",
-      unit: "seconds",
+      unit: "(s)",
       min: 0,
       max: 60,
       step: 0.01,
