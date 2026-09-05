@@ -359,6 +359,11 @@ h1, h2, h3, p {
   align-content: stretch;
 }
 
+/* Separate the secondary stat tiles row from the hero row above it. */
+.main > .tiles {
+  margin-top: 1rem;
+}
+
 .tile {
   position: relative;
   overflow: hidden;
