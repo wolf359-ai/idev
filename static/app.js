@@ -1237,7 +1237,10 @@
   function renderHero(player, actions, m) {
     const tags = [el("span", { className: "tag on" }, `Overall ${m.overall}%`)];
     if (player.team_year) {
-      tags.push(el("span", { className: "tag" }, `${player.team_year} season`));
+      tags.push(el("span", { className: "tag" }, `${player.team_year} team year`));
+    }
+    if (player.grad_year) {
+      tags.push(el("span", { className: "tag" }, `Class of ${player.grad_year}`));
     }
     if (player.has_access_code) {
       tags.push(el("span", { className: "tag on" }, "Access on"));
