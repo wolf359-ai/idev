@@ -1073,11 +1073,12 @@
     const pad = 8;
     const xAt = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W);
     const yAt = (v) => H - pad - ((v - lo) / (hi - lo)) * (H - pad * 2);
-    const linePts = s.map((v, i) => `${xAt(i).toFixed(1)},${yAt(v).toFixed(1)}`).join(" ");
-    const areaPts = `0,${H} ${linePts} ${W},${H}`;
-    const area = svgEl("polygon", { points: areaPts, class: "trend-area" });
-    const line = svgEl("polyline", {
-      points: linePts,
+    const pts = s.map((v, i) => [xAt(i), yAt(v)]);
+    const lineD = smoothPathD(pts);
+    const areaD = `${lineD} L ${W},${H} L 0,${H} Z`;
+    const area = svgEl("path", { d: areaD, class: "trend-area" });
+    const line = svgEl("path", {
+      d: lineD,
       class: "trend-line",
       fill: "none",
       "stroke-width": "2",
@@ -1096,6 +1097,34 @@
       area,
       line,
     );
+  }
+
+  // Build a smoothed (Catmull-Rom -> cubic Bezier) SVG path through the points
+  // so the trendline curves gently instead of forming sharp peaks and valleys.
+  function smoothPathD(pts) {
+    if (!pts.length) {
+      return "";
+    }
+    if (pts.length < 3) {
+      return "M " + pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" L ");
+    }
+    const t = 1 / 6; // tension; lower = tighter to the points
+    const d = [`M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`];
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) * t;
+      const c1y = p1[1] + (p2[1] - p0[1]) * t;
+      const c2x = p2[0] - (p3[0] - p1[0]) * t;
+      const c2y = p2[1] - (p3[1] - p1[1]) * t;
+      d.push(
+        `C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ` +
+          `${p2[0].toFixed(1)},${p2[1].toFixed(1)}`,
+      );
+    }
+    return d.join(" ");
   }
 
   function renderHero(player, actions, m) {
