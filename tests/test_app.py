@@ -212,6 +212,33 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_drill(player["id"], {"name": "Overflow"})
 
+    def test_activity_add_list_and_cap(self) -> None:
+        player = self.store.add_player({"name": "Riley", "position": "Pitcher"})
+        entry = self.store.add_activity(
+            player["id"], {"text": "  Reviewed drill: Tee work  "}
+        )
+        self.assertTrue(entry["id"].startswith("act-"))
+        self.assertEqual(entry["text"], "Reviewed drill: Tee work")
+        detail = self.store.get_player(player["id"])
+        self.assertEqual(len(detail["activity"]), 1)
+        self.assertEqual(detail["activity"][0]["text"], "Reviewed drill: Tee work")
+
+        # Text is required.
+        with self.assertRaises(ValueError):
+            self.store.add_activity(player["id"], {"text": "   "})
+
+        # The log is capped at MAX_ACTIVITY most-recent entries per player.
+        for i in range(app.MAX_ACTIVITY + 5):
+            self.store.add_activity(player["id"], {"text": f"open {i}"})
+        detail = self.store.get_player(player["id"])
+        self.assertEqual(len(detail["activity"]), app.MAX_ACTIVITY)
+
+    def test_activity_removed_with_player(self) -> None:
+        player = self.store.add_player({"name": "Sam", "position": "Catcher"})
+        self.store.add_activity(player["id"], {"text": "open a"})
+        self.store.delete_player(player["id"])
+        self.assertEqual(self.store.data["activity"], [])
+
     def test_save_writes_timestamped_backups(self) -> None:
         self.store.add_player({"name": "Backup One", "position": "Catcher"})
         self.store.add_player({"name": "Backup Two", "position": "Pitcher"})
@@ -874,6 +901,60 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         status, detail = self.call("GET", f"/api/players/{pid}")
         self.assertFalse(any(d["id"] == drill["id"] for d in detail["drills"]))
+
+    def test_activity_logged_by_coach_and_owning_player(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Jamie Fox", "position": "Center Field"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+
+        # A coach can log activity for a player.
+        status, entry = self.call(
+            "POST",
+            f"/api/players/{pid}/activity",
+            {"text": "Reviewed drill: Long toss"},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(entry["text"], "Reviewed drill: Long toss")
+
+        # Give the player an access code and sign in as them.
+        status, access = self.call("POST", f"/api/players/{pid}/access-code")
+        self.assertEqual(status, 201)
+        self.sign_out()
+        self.login_player(code=access["code"])
+
+        # The owning player can log their own activity and see it in Progress.
+        status, _entry = self.call(
+            "POST",
+            f"/api/players/{pid}/activity",
+            {"text": "Reviewed drill: Soft toss"},
+        )
+        self.assertEqual(status, 201)
+        status, detail = self.call("GET", f"/api/players/{pid}")
+        self.assertEqual(status, 200)
+        texts = [a["text"] for a in detail["activity"]]
+        self.assertIn("Reviewed drill: Soft toss", texts)
+        self.assertIn("Reviewed drill: Long toss", texts)
+
+    def test_player_cannot_log_activity_for_another_player(self) -> None:
+        _status, mine = self.call(
+            "POST", "/api/players", {"name": "Owner", "position": "Shortstop"}
+        )
+        _status, other = self.call(
+            "POST", "/api/players", {"name": "Stranger", "position": "Catcher"}
+        )
+        status, access = self.call("POST", f"/api/players/{mine['id']}/access-code")
+        self.assertEqual(status, 201)
+        self.sign_out()
+        self.login_player(code=access["code"])
+        # Logging to a different player's profile is forbidden.
+        status, _payload = self.call(
+            "POST",
+            f"/api/players/{other['id']}/activity",
+            {"text": "Reviewed drill: X"},
+        )
+        self.assertEqual(status, 403)
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf

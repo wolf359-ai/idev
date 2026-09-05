@@ -32,6 +32,8 @@ STATIC_DIR = (ROOT / "static").resolve()
 MAX_BODY_BYTES = 256 * 1024
 MAX_NAME_LEN = 80
 MAX_NOTE_LEN = 2000
+MAX_ACTIVITY_LEN = 200
+MAX_ACTIVITY = 50
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
 MAX_ROSTER_TEXT_BYTES = 200 * 1024
@@ -794,6 +796,14 @@ def required_permission(method: str, path: str):
         return PERM_COACH
     if method == "POST" and path in ("/api/login", "/api/logout"):
         return PERM_PUBLIC
+    if method == "POST":
+        act_match = re.fullmatch(
+            r"/api/players/([a-zA-Z0-9_-]{8,64})/activity", path
+        )
+        if act_match:
+            # A player may log activity (e.g. opening a drill link) on their own
+            # profile; a coach may log it for anyone.
+            return (PERM_PLAYER_OWN, act_match.group(1))
     return PERM_COACH
 
 
@@ -812,6 +822,7 @@ class Store:
             "players": [],
             "ratings": [],
             "notes": [],
+            "activity": [],
             "staff": [],
             "team": {},
             "auth": {},
@@ -822,7 +833,7 @@ class Store:
         if not isinstance(raw, dict):
             return None
         data = self._empty()
-        for key in ("skills", "players", "ratings", "notes", "staff"):
+        for key in ("skills", "players", "ratings", "notes", "activity", "staff"):
             items = raw.get(key, [])
             if isinstance(items, list):
                 data[key] = [item for item in items if isinstance(item, dict)]
@@ -1076,6 +1087,11 @@ class Store:
                 for item in self.data["notes"]
                 if item.get("player_id") == player_id
             ]
+            activity = [
+                dict(item)
+                for item in self.data["activity"]
+                if item.get("player_id") == player_id
+            ]
             drills = [
                 dict(item)
                 for item in record.get("drills", [])
@@ -1084,9 +1100,11 @@ class Store:
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+        activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         player["has_access_code"] = has_access_code
         player["ratings"] = ratings
         player["notes"] = notes
+        player["activity"] = activity[:MAX_ACTIVITY]
         player["drills"] = drills
         player["progress"] = build_progress(skills, ratings)
         player["stats"] = build_stats_view(raw_stats)
@@ -1189,6 +1207,9 @@ class Store:
             self.data["notes"] = [
                 item for item in self.data["notes"] if item.get("player_id") != player_id
             ]
+            self.data["activity"] = [
+                item for item in self.data["activity"] if item.get("player_id") != player_id
+            ]
             self._save()
 
     def add_rating(self, player_id: str, payload: dict) -> dict:
@@ -1224,6 +1245,32 @@ class Store:
             self.data["notes"].append(note)
             self._save()
             return dict(note)
+
+    def add_activity(self, player_id: str, payload: dict) -> dict:
+        text = clean_text(payload.get("text"), "Activity", MAX_ACTIVITY_LEN)
+        with self.lock:
+            self._player_unlocked(player_id)
+            entry = {
+                "id": new_id("act"),
+                "player_id": player_id,
+                "text": text,
+                "created_at": utc_now(),
+            }
+            self.data["activity"].append(entry)
+            # Keep only the most recent entries per player so the log stays bounded.
+            own = [a for a in self.data["activity"] if a.get("player_id") == player_id]
+            if len(own) > MAX_ACTIVITY:
+                stale = {
+                    id(a)
+                    for a in sorted(own, key=lambda a: a.get("created_at", ""))[
+                        : len(own) - MAX_ACTIVITY
+                    ]
+                }
+                self.data["activity"] = [
+                    a for a in self.data["activity"] if id(a) not in stale
+                ]
+            self._save()
+            return dict(entry)
 
     def update_stats(self, player_id: str, payload: dict) -> dict:
         counts = parse_stat_counts(payload)
@@ -1757,6 +1804,14 @@ class IdevHandler(BaseHTTPRequestHandler):
             note_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/notes", path)
             if note_match:
                 send_json(self, 201, self.store.add_note(note_match.group(1), payload))
+                return
+            activity_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/activity", path
+            )
+            if activity_match:
+                send_json(
+                    self, 201, self.store.add_activity(activity_match.group(1), payload)
+                )
                 return
             drill_match = re.fullmatch(
                 r"/api/players/([a-zA-Z0-9_-]{8,64})/drills", path

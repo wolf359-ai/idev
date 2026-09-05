@@ -809,6 +809,27 @@
           ),
         );
 
+    const activity = player.activity || [];
+    const activityBlock = activity.length
+      ? el(
+          "div",
+          { className: "activity" },
+          el("h3", { className: "activity-title" }, "Drill activity"),
+          el(
+            "ul",
+            { className: "activity-list" },
+            activity.map((entry) =>
+              el(
+                "li",
+                { className: "activity-item" },
+                el("span", { className: "activity-text" }, entry.text || ""),
+                el("span", { className: "activity-when meta" }, formatWhen(entry.created_at)),
+              ),
+            ),
+          ),
+        )
+      : null;
+
     const progress = el(
       "section",
       { className: "card progress-card" },
@@ -830,6 +851,7 @@
             ),
           )
         : el("p", { className: "empty" }, "Rate a skill to start a progress history."),
+      activityBlock,
     );
 
     let notesCard;
@@ -1058,6 +1080,7 @@
                 href: drill.link,
                 target: "_blank",
                 rel: "noopener noreferrer",
+                onClick: () => logDrillOpen(player.id, drill.name),
               },
               drill.name,
             )
@@ -1319,6 +1342,22 @@
     try {
       await request(`/api/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
       await loadDetail(state.selectedId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // Log an entry in the Progress section whenever a drill link is opened. The
+  // link still opens in a new tab; logging is best-effort and never blocks it.
+  async function logDrillOpen(playerId, name) {
+    try {
+      await request(`/api/players/${encodeURIComponent(playerId)}/activity`, {
+        method: "POST",
+        body: JSON.stringify({ text: `Reviewed drill: ${name}` }),
+      });
+      if (state.selectedId === playerId) {
+        await loadDetail(playerId);
+      }
     } catch (error) {
       showError(error.message);
     }
