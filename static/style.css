@@ -75,7 +75,7 @@ h1, h2, h3, p {
 
 .logo {
   display: block;
-  height: 40px;
+  height: 60px;
   width: auto;
   flex: none;
 }
