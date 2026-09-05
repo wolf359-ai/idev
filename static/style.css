@@ -1181,6 +1181,8 @@ textarea {
 
 .skill-metric-input:focus {
   outline: none;
+  border: none;
+  box-shadow: none;
 }
 
 /* Hide the native number spinner arrows. */
