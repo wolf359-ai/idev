@@ -546,6 +546,15 @@ h1, h2, h3, p {
   pointer-events: none;
 }
 
+/* Gold trophy pinned to the upper-right corner (Top Skill tile). */
+.tile-trophy {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  color: var(--yellow);
+  pointer-events: none;
+}
+
 .tile-value {
   font-size: 2.05rem;
   line-height: 1.05;

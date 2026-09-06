@@ -1439,10 +1439,58 @@
     );
   }
 
+  // A gold trophy, pinned to the upper-right corner (used on the Top Skill tile).
+  function trophyIcon() {
+    return svgEl(
+      "svg",
+      {
+        class: "tile-trophy",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Top skill",
+      },
+      svgEl("title", {}, "Top skill"),
+      // Cup bowl.
+      svgEl("path", {
+        d: "M6 4 H18 V6 C18 9.3 15.3 12 12 12 C8.7 12 6 9.3 6 6 Z",
+        fill: "currentColor",
+      }),
+      // Left and right handles.
+      svgEl("path", {
+        d: "M6 5.2 C3.4 5.2 3.4 9 6.3 9.3",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.4",
+        "stroke-linecap": "round",
+      }),
+      svgEl("path", {
+        d: "M18 5.2 C20.6 5.2 20.6 9 17.7 9.3",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.4",
+        "stroke-linecap": "round",
+      }),
+      // Stem, base trapezoid, and foot bar.
+      svgEl("line", {
+        x1: "12",
+        y1: "12",
+        x2: "12",
+        y2: "16",
+        stroke: "currentColor",
+        "stroke-width": "2",
+      }),
+      svgEl("path", { d: "M10 16 H14 L15 19 H9 Z", fill: "currentColor" }),
+      svgEl("rect", { x: "8", y: "19", width: "8", height: "2", rx: "0.6", fill: "currentColor" }),
+    );
+  }
+
   function metricTile(opts) {
     const children = [
       el("span", { className: "ribbon" }),
       opts.alarm ? warningIcon() : null,
+      opts.trophy ? trophyIcon() : null,
       el("div", { className: "tile-label" }, opts.label),
       el(
         "div",
@@ -1743,6 +1791,8 @@
         value: m.top ? m.top.value : "—",
         unit: m.top ? "/5" : "",
         accent: "green",
+        // A gold trophy marks the player's strongest skill.
+        trophy: Boolean(m.top),
         foot: m.top ? m.top.name : "Rate a skill",
         notes: { items: notesForCategory(player, "top"), canEdit: !isReadOnly(), category: "top" },
       }),
