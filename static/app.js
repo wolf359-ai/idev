@@ -288,7 +288,6 @@
     if (!state.players.length) {
       return;
     }
-    playerList.append(el("li", { className: "player-list-title" }, "Athletes"));
     state.players.forEach((player) => {
       const badge = player.number === null || player.number === undefined ? "—" : `#${player.number}`;
       const button = el(
