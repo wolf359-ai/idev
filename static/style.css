@@ -723,7 +723,7 @@ h1, h2, h3, p {
   gap: 0.5rem;
   padding: 0 0.1rem 0.28rem;
   border-bottom: 1px solid var(--line-soft);
-  font-size: 0.88rem;
+  font-size: 0.72rem;
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
