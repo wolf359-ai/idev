@@ -1553,12 +1553,42 @@
     );
   }
 
+  // An up/down trend arrow pinned to the upper-right corner: green when the
+  // metric increased week over week, red when it decreased. Returns null for a
+  // flat/absent trend so no icon is drawn.
+  function trendIcon(trend) {
+    const dir = trend && trend.direction;
+    if (dir !== "up" && dir !== "down") return null;
+    const up = dir === "up";
+    return svgEl(
+      "svg",
+      {
+        class: `tile-trend ${dir}`,
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": up ? "Trending up" : "Trending down",
+      },
+      svgEl("title", {}, up ? "Trending up" : "Trending down"),
+      svgEl("path", {
+        d: up ? "M12 19 V7 M6.5 12.5 L12 7 L17.5 12.5" : "M12 5 V17 M6.5 11.5 L12 17 L17.5 11.5",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2.2",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      }),
+    );
+  }
+
   function metricTile(opts) {
     const children = [
       el("span", { className: "ribbon" }),
       opts.alarm ? warningIcon() : null,
       opts.trophy ? trophyIcon() : null,
       opts.bars ? barsIcon() : null,
+      opts.trend ? trendIcon(opts.trend) : null,
       el("div", { className: "tile-label" }, opts.label),
       el(
         "div",
