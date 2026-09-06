@@ -1367,9 +1367,13 @@ textarea {
   padding: 0.1rem 0.45rem;
 }
 
-/* Editable access-level dropdown in the Manage staff modal. */
+/* Editable access-level dropdown in the Manage staff modal. Override the
+   global full-width select rule so it sizes to its content and never spills
+   past the modal/window edge. */
 .staff-access-select {
-  flex: none;
+  flex: 0 0 auto;
+  width: auto;
+  max-width: 100%;
   font: inherit;
   font-size: 0.78rem;
   color: var(--ink);
