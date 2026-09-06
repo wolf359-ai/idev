@@ -1387,9 +1387,47 @@
     return { series, direction, pct };
   }
 
+  // A warning triangle with an exclamation point. The stroke/mark inherit the
+  // tile's accent color (via currentColor), so it matches the metric number.
+  function warningIcon() {
+    return svgEl(
+      "svg",
+      {
+        className: "tile-alarm",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Needs attention",
+      },
+      svgEl("title", {}, "Needs attention"),
+      // Rounded triangle outline.
+      svgEl("path", {
+        d: "M12 3.2 L21.4 19.4 A1.4 1.4 0 0 1 20.2 21.4 H3.8 A1.4 1.4 0 0 1 2.6 19.4 Z",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.8",
+        "stroke-linejoin": "round",
+      }),
+      // Exclamation stem.
+      svgEl("line", {
+        x1: "12",
+        y1: "9.5",
+        x2: "12",
+        y2: "14.5",
+        stroke: "currentColor",
+        "stroke-width": "1.9",
+        "stroke-linecap": "round",
+      }),
+      // Exclamation dot.
+      svgEl("circle", { cx: "12", cy: "17.4", r: "1.15", fill: "currentColor" }),
+    );
+  }
+
   function metricTile(opts) {
     const children = [
       el("span", { className: "ribbon" }),
+      opts.alarm ? warningIcon() : null,
       el("div", { className: "tile-label" }, opts.label),
       el(
         "div",
@@ -1698,6 +1736,8 @@
         value: m.low ? m.low.value : "—",
         unit: m.low ? "/5" : "",
         accent: m.low ? accentForScore(m.low.value) : "orange",
+        // A focus score of 2.5 or lower flags the card as needing attention.
+        alarm: m.low && Number(m.low.value) <= 2.5,
         foot: m.low ? m.low.name : "Rate a skill",
         notes: { items: notesForCategory(player, "focus"), canEdit: !isReadOnly(), category: "focus" },
       }),
