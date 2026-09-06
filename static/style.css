@@ -1015,6 +1015,13 @@ h1, h2, h3, p {
   margin-bottom: 0.65rem;
 }
 
+/* Subheading that groups optional fields (e.g. login) within a modal form. */
+.form-section {
+  margin: 0.4rem 0 0.65rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+
 .form h3 {
   font-size: 0.9rem;
   margin-bottom: 0.35rem;

@@ -1413,7 +1413,27 @@ class Store:
             "stats": empty_stat_counts(),
             "drills": [],
         }
+        # Optionally set a sign-in username + password at creation time.
+        raw_username = payload.get("username") if isinstance(payload, dict) else None
+        raw_password = payload.get("password") if isinstance(payload, dict) else None
+        want_login = bool(
+            (isinstance(raw_username, str) and raw_username.strip())
+            or (isinstance(raw_password, str) and raw_password)
+        )
+        clean_username = ""
+        if want_login:
+            clean_username = parse_login_username(raw_username)
+            secret = parse_login_password(raw_password)
+            if clean_username.casefold() == ADMIN_USERNAME.casefold():
+                raise ValueError("That username is reserved")
         with self.lock:
+            if want_login:
+                folded = clean_username.casefold()
+                for other in self.data["players"]:
+                    if str(other.get("username", "")).casefold() == folded:
+                        raise ValueError("That username is already taken")
+                player["username"] = clean_username
+                player["password_hash"] = hash_password(secret)
             self.data["players"].append(player)
             self._save()
             return public_player(player)
@@ -1710,6 +1730,10 @@ class Store:
     def add_staff(self, payload: dict) -> dict:
         fields = parse_staff(payload)
         member = {"id": new_id("staff"), **fields, "created_at": utc_now()}
+        # Optionally set a sign-in password at creation time.
+        raw_password = payload.get("password") if isinstance(payload, dict) else None
+        if isinstance(raw_password, str) and raw_password:
+            member["password_hash"] = hash_password(parse_login_password(raw_password))
         with self.lock:
             self.data["staff"].append(member)
             self._save()

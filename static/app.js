@@ -2765,15 +2765,20 @@
   staffForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(staffForm);
+    const body = {
+      name: form.get("name"),
+      role: form.get("role"),
+      contact: form.get("contact"),
+      access_level: form.get("access_level"),
+    };
+    const password = (form.get("password") || "").trim();
+    if (password) {
+      body.password = password;
+    }
     try {
       await request("/api/staff", {
         method: "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          role: form.get("role"),
-          contact: form.get("contact"),
-          access_level: form.get("access_level"),
-        }),
+        body: JSON.stringify(body),
       });
       closeStaffModal();
       await loadStaff();
@@ -2844,18 +2849,25 @@
   addForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(addForm);
+    const body = {
+      name: form.get("name"),
+      position: form.get("position"),
+      secondary_position: form.get("secondary_position"),
+      team_year: form.get("team_year"),
+      grad_year: form.get("grad_year"),
+      team_type: form.get("team_type"),
+      number: form.get("number"),
+    };
+    const username = (form.get("username") || "").trim();
+    const password = (form.get("password") || "").trim();
+    if (username || password) {
+      body.username = username;
+      body.password = password;
+    }
     try {
       const created = await request("/api/players", {
         method: "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          position: form.get("position"),
-          secondary_position: form.get("secondary_position"),
-          team_year: form.get("team_year"),
-          grad_year: form.get("grad_year"),
-          team_type: form.get("team_type"),
-          number: form.get("number"),
-        }),
+        body: JSON.stringify(body),
       });
       addForm.reset();
       closeAddPlayerModal();

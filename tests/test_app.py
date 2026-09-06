@@ -882,6 +882,51 @@ class StoreTests(unittest.TestCase):
         listed = self.store.list_players()
         self.assertTrue(all("password_hash" not in item for item in listed))
 
+    def test_add_player_with_login_credentials(self) -> None:
+        player = self.store.add_player(
+            {
+                "name": "New Kid",
+                "position": "Pitcher",
+                "username": "newkid",
+                "password": "kid-pass",
+            }
+        )
+        self.assertTrue(player["has_login"])
+        self.assertEqual(player["username"], "newkid")
+        self.assertEqual(
+            self.store.find_player_by_login("newkid", "kid-pass"), player["id"]
+        )
+        # A username with no password (or vice versa) is rejected.
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {"name": "Half", "position": "Catcher", "username": "halfonly"}
+            )
+        # Duplicate usernames are rejected at creation time.
+        with self.assertRaises(ValueError):
+            self.store.add_player(
+                {
+                    "name": "Clash",
+                    "position": "Catcher",
+                    "username": "NEWKID",
+                    "password": "other-pass",
+                }
+            )
+
+    def test_add_staff_with_password(self) -> None:
+        member = self.store.add_staff(
+            {
+                "name": "Coach Kim",
+                "role": "Head Coach",
+                "access_level": "Full",
+                "password": "kim-pass",
+            }
+        )
+        self.assertTrue(member["has_password"])
+        self.assertNotIn("password_hash", member)
+        found = self.store.find_staff_by_credentials("Coach Kim", "kim-pass")
+        self.assertIsNotNone(found)
+        self.assertEqual(found["id"], member["id"])
+
 
 COACH_PASSWORD = "coach-secret-pass"
 
