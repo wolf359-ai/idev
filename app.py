@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parent
 STATIC_DIR = (ROOT / "static").resolve()
 MAX_BODY_BYTES = 256 * 1024
 MAX_NAME_LEN = 80
+MAX_USERNAME_LEN = 32
 MAX_NOTE_LEN = 2000
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
@@ -91,6 +92,7 @@ DEFAULT_SKILLS = (
 )
 
 SAFE_ID = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
+USERNAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{2,31}$")
 
 # Standard GameChanger batting and fielding totals coaches copy from a season page.
 OFFENSE_COUNT_FIELDS = (
@@ -174,6 +176,15 @@ def clean_text(value: object, field: str, max_len: int) -> str:
     if len(text) > max_len:
         raise ValueError(f"{field} must be {max_len} characters or fewer")
     return text
+
+
+def parse_username(value: object) -> str:
+    username = clean_text(value, "Username", MAX_USERNAME_LEN).casefold()
+    if not USERNAME_PATTERN.fullmatch(username):
+        raise ValueError(
+            "Username must be 3–32 characters using lowercase letters, numbers, dots, hyphens, or underscores"
+        )
+    return username
 
 
 def parse_number(value: object) -> int | None:
@@ -503,7 +514,13 @@ class SessionManager:
     def _fingerprint(user_agent: str) -> str:
         return hashlib.sha256((user_agent or "").encode("utf-8")).hexdigest()
 
-    def create(self, role: str, player_id: str | None, user_agent: str) -> tuple[str, dict]:
+    def create(
+        self,
+        role: str,
+        player_id: str | None,
+        user_agent: str,
+        staff: dict | None = None,
+    ) -> tuple[str, dict]:
         sid = secrets.token_urlsafe(32)
         now = time.time()
         session = {
@@ -514,6 +531,10 @@ class SessionManager:
             "csrf": secrets.token_urlsafe(32),
             "fingerprint": self._fingerprint(user_agent),
         }
+        if role == "coach" and staff:
+            session["staff_id"] = staff.get("id", "")
+            session["staff_name"] = staff.get("name", "")
+            session["staff_username"] = staff.get("username", "")
         with self.lock:
             self.sessions[sid] = session
         return sid, dict(session)
@@ -955,6 +976,41 @@ class Store:
             self._save()
 
     # -- authentication ----------------------------------------------------
+    @staticmethod
+    def _public_staff(user: dict) -> dict:
+        return {
+            key: user.get(key)
+            for key in ("id", "name", "username", "created_at")
+            if key in user
+        }
+
+    def _staff_unlocked(self) -> list[dict]:
+        auth = self.data.setdefault("auth", {})
+        staff = auth.setdefault("staff", [])
+        if not isinstance(staff, list):
+            staff = []
+            auth["staff"] = staff
+        return staff
+
+    def _sync_admin_staff_unlocked(self, password_record: dict) -> None:
+        staff = self._staff_unlocked()
+        admin = next(
+            (user for user in staff if user.get("username") == "admin"),
+            None,
+        )
+        if admin is None:
+            staff.append(
+                {
+                    "id": new_id("staff"),
+                    "name": "Administrator",
+                    "username": "admin",
+                    "password": dict(password_record),
+                    "created_at": utc_now(),
+                }
+            )
+        else:
+            admin["password"] = dict(password_record)
+
     def ensure_admin_password(self, env_password: str | None = None) -> str | None:
         """Ensure a coach password hash exists.
 
@@ -970,16 +1026,69 @@ class Store:
                 record = auth.get("admin")
                 if not verify_password(env_password, record):
                     auth["admin"] = hash_password(env_password)
-                    self._save()
+                self._sync_admin_staff_unlocked(auth["admin"])
+                self._save()
                 return None
             if isinstance(auth.get("admin"), dict):
+                self._sync_admin_staff_unlocked(auth["admin"])
+                self._save()
                 return None
             generated = secrets.token_urlsafe(GENERATED_ADMIN_BYTES)
             auth["admin"] = hash_password(generated)
+            self._sync_admin_staff_unlocked(auth["admin"])
             self._save()
             return generated
 
+    def list_staff(self) -> list[dict]:
+        with self.lock:
+            users = [self._public_staff(user) for user in self._staff_unlocked()]
+        users.sort(key=lambda user: user.get("name", "").casefold())
+        return users
+
+    def add_staff(self, payload: dict) -> dict:
+        name = clean_text(payload.get("name"), "Name", MAX_NAME_LEN)
+        username = parse_username(payload.get("username"))
+        password = payload.get("password")
+        if not isinstance(password, str) or len(password) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if len(password) > 128:
+            raise ValueError("Password must be 128 characters or fewer")
+        password_record = hash_password(password)
+        with self.lock:
+            staff = self._staff_unlocked()
+            if any(user.get("username", "").casefold() == username for user in staff):
+                raise ValueError("That username is already in use")
+            user = {
+                "id": new_id("staff"),
+                "name": name,
+                "username": username,
+                "password": password_record,
+                "created_at": utc_now(),
+            }
+            staff.append(user)
+            self._save()
+            return self._public_staff(user)
+
+    def verify_staff_login(self, username: object, password: object) -> dict | None:
+        try:
+            normalized = parse_username(username)
+        except ValueError:
+            normalized = ""
+        with self.lock:
+            users = list(self._staff_unlocked())
+            admin_record = self.data.get("auth", {}).get("admin")
+        user = next(
+            (candidate for candidate in users if candidate.get("username") == normalized),
+            None,
+        )
+        record = user.get("password") if user else admin_record
+        valid = verify_password(password, record)
+        if not user or not valid:
+            return None
+        return self._public_staff(user)
+
     def verify_admin_password(self, password: object) -> bool:
+        """Retained for setup checks; interactive login uses staff credentials."""
         with self.lock:
             record = self.data.get("auth", {}).get("admin")
         return verify_password(password, record)
@@ -1215,6 +1324,12 @@ class IdevHandler(BaseHTTPRequestHandler):
         if not session:
             return {"authenticated": False}
         payload = {"authenticated": True, "role": session["role"], "csrf": session["csrf"]}
+        if session["role"] == "coach":
+            payload["staff"] = {
+                "id": session.get("staff_id", ""),
+                "name": session.get("staff_name", ""),
+                "username": session.get("staff_username", ""),
+            }
         if session["role"] == "player" and session.get("player_id"):
             try:
                 player = self.store.get_player(session["player_id"])
@@ -1266,8 +1381,12 @@ class IdevHandler(BaseHTTPRequestHandler):
         mode = payload.get("mode")
         role = None
         player_id = None
+        staff = None
         if mode == "coach" or (mode is None and "password" in payload):
-            if self.store.verify_admin_password(payload.get("password")):
+            staff = self.store.verify_staff_login(
+                payload.get("username"), payload.get("password")
+            )
+            if staff:
                 role = "coach"
         elif mode == "player" or (mode is None and "code" in payload):
             found = self.store.find_player_by_access_code(payload.get("code"))
@@ -1282,7 +1401,7 @@ class IdevHandler(BaseHTTPRequestHandler):
         # Regenerate the session identifier on login; drop any prior session.
         self.session_manager.destroy(self._cookie_sid())
         sid, created = self.session_manager.create(
-            role, player_id, self.headers.get("User-Agent", "")
+            role, player_id, self.headers.get("User-Agent", ""), staff
         )
         send_json(
             self,
@@ -1318,6 +1437,9 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/players":
                 send_json(self, 200, {"players": self.store.list_players()})
+                return
+            if path == "/api/staff":
+                send_json(self, 200, {"staff": self.store.list_staff()})
                 return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
@@ -1362,6 +1484,9 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/players":
                 send_json(self, 201, self.store.add_player(payload))
+                return
+            if path == "/api/staff":
+                send_json(self, 201, self.store.add_staff(payload))
                 return
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))

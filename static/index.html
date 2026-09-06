@@ -28,7 +28,11 @@
       <form id="coach-login-form" class="form login-form hidden" autocomplete="off">
         <p class="meta">Coaches manage the full roster, ratings, stats, and notes.</p>
         <label>
-          Coach password
+          Username
+          <input id="coach-username" name="username" maxlength="32" autocomplete="username" required>
+        </label>
+        <label>
+          Password
           <input id="coach-password" name="password" type="password" autocomplete="current-password" required>
         </label>
         <button type="submit" class="btn btn-primary">Sign in</button>
@@ -57,6 +61,7 @@
         <h2>Players</h2>
         <div class="row">
           <button type="button" id="show-import-roster" class="btn">Import roster</button>
+          <button type="button" id="show-add-staff" class="btn">Add staff</button>
           <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
         </div>
       </div>
@@ -84,6 +89,42 @@
         <div class="row">
           <button type="submit" id="preview-roster" class="btn btn-primary">Preview roster</button>
           <button type="button" id="cancel-import-roster" class="btn">Cancel</button>
+        </div>
+      </form>
+      <form id="add-staff-form" class="card form hidden" autocomplete="off">
+        <h3>Add staff user</h3>
+        <label>
+          Name
+          <input id="staff-name" name="name" maxlength="80" autocomplete="name" required>
+        </label>
+        <label>
+          Username
+          <input
+            id="staff-username"
+            name="username"
+            minlength="3"
+            maxlength="32"
+            pattern="[a-z0-9][a-z0-9._-]{2,31}"
+            autocomplete="username"
+            required
+          >
+        </label>
+        <label>
+          Password
+          <input
+            id="staff-password"
+            name="password"
+            type="password"
+            minlength="8"
+            maxlength="128"
+            autocomplete="new-password"
+            required
+          >
+        </label>
+        <p class="meta">The staff member will use their username and password to sign in.</p>
+        <div class="row">
+          <button type="submit" class="btn btn-primary">Save staff user</button>
+          <button type="button" id="cancel-add-staff" class="btn">Cancel</button>
         </div>
       </form>
       <form id="add-player-form" class="card form hidden" autocomplete="off">
