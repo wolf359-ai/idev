@@ -62,13 +62,25 @@ First-time setup: a coach password was created for you:
 Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.
 ```
 
-Copy that password and use it on the **Coach** tab. It is stored only as a
+Copy that password and use it with the username **admin** on the **Coach** tab.
+It is stored only as a
 salted hash in `data.json`, never in plain text. To choose your own password
 instead, set an environment variable before starting the app:
 
 ```bash
 IDEV_ADMIN_PASSWORD="your-own-password" python3 app.py
 ```
+
+### Adding staff users
+
+After signing in, click **Add staff**. Every staff user must have:
+
+- a name, shown in the app;
+- a unique username, used to sign in; and
+- a password of at least eight characters.
+
+Passwords are stored only as salted hashes. Staff usernames are normalized to
+lowercase and cannot be shared by two users.
 
 ### Giving a player access
 

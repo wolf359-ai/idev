@@ -15,6 +15,9 @@
   const addForm = document.getElementById("add-player-form");
   const showAdd = document.getElementById("show-add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
+  const addStaffForm = document.getElementById("add-staff-form");
+  const showAddStaff = document.getElementById("show-add-staff");
+  const cancelAddStaff = document.getElementById("cancel-add-staff");
   const importForm = document.getElementById("import-roster-form");
   const showImport = document.getElementById("show-import-roster");
   const cancelImport = document.getElementById("cancel-import-roster");
@@ -825,7 +828,10 @@
       }
     } else {
       appView.classList.remove("role-player");
-      sessionLabel.textContent = "Signed in as Coach";
+      sessionLabel.textContent =
+        session.staff && session.staff.name
+          ? `Signed in: ${session.staff.name}`
+          : "Signed in as Coach";
       loadPlayers().catch((error) => showError(error.message));
     }
   }
@@ -875,7 +881,11 @@
 
   coachLoginForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    doLogin({ mode: "coach", password: document.getElementById("coach-password").value });
+    doLogin({
+      mode: "coach",
+      username: document.getElementById("coach-username").value,
+      password: document.getElementById("coach-password").value,
+    });
   });
 
   logoutBtn.addEventListener("click", async () => {
@@ -889,6 +899,7 @@
 
   showAdd.addEventListener("click", () => {
     importForm.classList.add("hidden");
+    addStaffForm.classList.add("hidden");
     addForm.classList.remove("hidden");
     document.getElementById("player-name").focus();
   });
@@ -900,6 +911,7 @@
 
   showImport.addEventListener("click", () => {
     addForm.classList.add("hidden");
+    addStaffForm.classList.add("hidden");
     importForm.classList.remove("hidden");
     rosterText.focus();
   });
@@ -911,6 +923,38 @@
   });
 
   rosterText.addEventListener("input", resetImportPreview);
+
+  showAddStaff.addEventListener("click", () => {
+    addForm.classList.add("hidden");
+    importForm.classList.add("hidden");
+    addStaffForm.classList.remove("hidden");
+    document.getElementById("staff-name").focus();
+  });
+
+  cancelAddStaff.addEventListener("click", () => {
+    addStaffForm.reset();
+    addStaffForm.classList.add("hidden");
+  });
+
+  addStaffForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(addStaffForm);
+    try {
+      const created = await request("/api/staff", {
+        method: "POST",
+        body: JSON.stringify({
+          name: form.get("name"),
+          username: form.get("username"),
+          password: form.get("password"),
+        }),
+      });
+      addStaffForm.reset();
+      addStaffForm.classList.add("hidden");
+      window.alert(`${created.name} can now sign in as ${created.username}.`);
+    } catch (error) {
+      showError(error.message);
+    }
+  });
 
   rosterFile.addEventListener("change", async () => {
     resetImportPreview();

@@ -195,8 +195,45 @@ class StoreTests(unittest.TestCase):
         generated = self.store.ensure_admin_password(None)
         self.assertIsInstance(generated, str)
         self.assertTrue(self.store.verify_admin_password(generated))
+        admin = self.store.verify_staff_login("admin", generated)
+        self.assertEqual(admin["name"], "Administrator")
+        self.assertEqual(admin["username"], "admin")
         # Already set: no new password is generated.
         self.assertIsNone(self.store.ensure_admin_password(None))
+
+    def test_staff_requires_name_and_unique_username_for_login(self) -> None:
+        self.store.ensure_admin_password("admin-password")
+        created = self.store.add_staff(
+            {
+                "name": "  Taylor Morgan ",
+                "username": "Taylor.M",
+                "password": "staff-password",
+            }
+        )
+        self.assertEqual(created["name"], "Taylor Morgan")
+        self.assertEqual(created["username"], "taylor.m")
+        self.assertNotIn("password", created)
+        self.assertEqual(
+            self.store.verify_staff_login("TAYLOR.M", "staff-password"),
+            created,
+        )
+        self.assertIsNone(self.store.verify_staff_login("taylor.m", "wrong-password"))
+        with self.assertRaises(ValueError):
+            self.store.add_staff(
+                {
+                    "name": "Other Person",
+                    "username": "taylor.m",
+                    "password": "another-password",
+                }
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_staff(
+                {"name": "", "username": "valid-user", "password": "valid-password"}
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_staff(
+                {"name": "No Username", "password": "valid-password"}
+            )
 
     def test_access_code_roundtrip_and_not_leaked(self) -> None:
         player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
@@ -285,8 +322,12 @@ class HttpTests(unittest.TestCase):
             self.csrf = parsed.get("csrf")
         return response.status, parsed
 
-    def login_coach(self, password: str = COACH_PASSWORD) -> tuple[int, object]:
-        return self._login({"mode": "coach", "password": password})
+    def login_coach(
+        self, password: str = COACH_PASSWORD, username: str = "admin"
+    ) -> tuple[int, object]:
+        return self._login(
+            {"mode": "coach", "username": username, "password": password}
+        )
 
     def login_player(self, code: str) -> tuple[int, object]:
         return self._login({"mode": "player", "code": code})
@@ -450,6 +491,7 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertTrue(session["authenticated"])
         self.assertEqual(session["role"], "coach")
+        self.assertEqual(session["staff"]["username"], "admin")
         status, _payload = self.call("GET", "/api/players")
         self.assertEqual(status, 200)
         status, _payload = self.call("POST", "/api/logout")
@@ -457,6 +499,37 @@ class HttpTests(unittest.TestCase):
         # The server-side session is gone even though we still send the cookie.
         status, _payload = self.call("GET", "/api/players")
         self.assertEqual(status, 401)
+
+    def test_add_staff_and_login_with_username(self) -> None:
+        status, created = self.call(
+            "POST",
+            "/api/staff",
+            {
+                "name": "Jamie Coach",
+                "username": "jamie",
+                "password": "jamie-password",
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["name"], "Jamie Coach")
+        self.assertEqual(created["username"], "jamie")
+        self.assertNotIn("password", created)
+        status, listed = self.call("GET", "/api/staff")
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            {user["username"] for user in listed["staff"]},
+            {"admin", "jamie"},
+        )
+
+        self.sign_out()
+        status, session = self.login_coach(
+            username="jamie", password="jamie-password"
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(session["staff"]["name"], "Jamie Coach")
+        status, players = self.call("GET", "/api/players")
+        self.assertEqual(status, 200)
+        self.assertIn("players", players)
 
     def test_csrf_token_required_for_mutations(self) -> None:
         saved = self.csrf
