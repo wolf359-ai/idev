@@ -159,6 +159,13 @@ h1, h2, h3, p {
   margin-bottom: 0.5rem;
 }
 
+/* Simple divider between the player list and the Admin section below it. */
+.roster-sep {
+  border: none;
+  border-top: 1px solid var(--line);
+  margin: 0.75rem 0;
+}
+
 /* Collapsible admin section styled like a Cursor hover-highlight row:
    no frame by default, a soft rounded highlight on hover, expands on click. */
 .admin {
@@ -1854,7 +1861,8 @@ textarea {
 }
 
 /* Managers and view-only staff can browse the roster but not the admin tools. */
-.app.no-admin #admin-tools {
+.app.no-admin #admin-tools,
+.app.no-admin .roster-sep {
   display: none;
 }
 
