@@ -1480,6 +1480,47 @@ textarea {
   font-size: 0.78rem;
 }
 
+/* Editable email + username row in the Manage staff modal. */
+.staff-manage-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.staff-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1 1 8rem;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.staff-edit-input {
+  width: 100%;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.82rem;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.staff-edit-save {
+  flex: none;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+}
+
 .staff-manage-item .staff-meta {
   white-space: normal;
 }

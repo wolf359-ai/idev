@@ -1017,6 +1017,58 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(KeyError):
             self.store.update_staff_access("staff-does-not-exist", "Full")
 
+    def test_update_staff_contact_and_username(self) -> None:
+        member = self.store.add_staff(
+            {
+                "name": "Morgan",
+                "role": "Coach",
+                "access_level": "Manager",
+                "username": "morgan",
+                "password": "pw1234",
+            }
+        )
+        # Email (contact), username, and access level can all be edited in place.
+        updated = self.store.update_staff(
+            member["id"],
+            {
+                "contact": "morgan@example.com",
+                "username": "mriley",
+                "access_level": "Full",
+            },
+        )
+        self.assertEqual(updated["contact"], "morgan@example.com")
+        self.assertEqual(updated["username"], "mriley")
+        self.assertEqual(updated["access_level"], "Full")
+        # The member can now sign in with the new username.
+        self.assertIsNotNone(
+            self.store.find_staff_by_credentials("mriley", "pw1234")
+        )
+        self.assertIsNone(self.store.find_staff_by_credentials("morgan", "pw1234"))
+        # Only supplied keys change: omit username and it is left untouched.
+        again = self.store.update_staff(member["id"], {"contact": "new@example.com"})
+        self.assertEqual(again["username"], "mriley")
+        self.assertEqual(again["contact"], "new@example.com")
+        # Clearing the username falls back to name-based login.
+        cleared = self.store.update_staff(member["id"], {"username": ""})
+        self.assertNotIn("username", cleared)
+
+    def test_update_staff_username_must_be_unique(self) -> None:
+        self.store.add_player(
+            {
+                "name": "Rowan",
+                "position": "Center Field",
+                "username": "takenname",
+                "password": "pw12",
+            }
+        )
+        member = self.store.add_staff(
+            {"name": "Sky", "role": "Coach", "access_level": "Full"}
+        )
+        with self.assertRaises(ValueError):
+            self.store.update_staff(member["id"], {"username": "takenname"})
+        with self.assertRaises(ValueError):
+            self.store.update_staff(member["id"], {"username": app.ADMIN_USERNAME})
+
 
 COACH_PASSWORD = "coach-secret-pass"
 
@@ -1722,6 +1774,22 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         member = next(m for m in listing["staff"] if m["id"] == target)
         self.assertEqual(member["access_level"], "Manager")
+
+    def test_full_access_can_edit_staff_contact_and_username(self) -> None:
+        target = self.make_staff("Jamie Reed", "Assistant", "reed-pass")
+        status, updated = self.call(
+            "PUT",
+            f"/api/staff/{target}",
+            {"contact": "jamie@example.com", "username": "jreed"},
+        )
+        self.assertEqual(status, 200, updated)
+        self.assertEqual(updated["contact"], "jamie@example.com")
+        self.assertEqual(updated["username"], "jreed")
+        # The edited username is what the member now signs in with.
+        self.sign_out()
+        self.login_staff("jreed", "reed-pass")
+        status, me = self.call("GET", "/api/session")
+        self.assertEqual(status, 200, me)
 
     def test_manager_cannot_change_staff_access_level(self) -> None:
         target = self.make_staff("Alex Stone", "Assistant", "stone-pass")

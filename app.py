@@ -1781,6 +1781,51 @@ class Store:
             self._save()
             return public_staff(member)
 
+    def update_staff(self, staff_id: str, payload: object) -> dict:
+        """Update a staff member's access level, contact (email), and/or username.
+
+        Only keys present in the payload are changed (a Full-access action from
+        the Manage staff modal). Setting ``username`` to an empty string clears
+        it, so the member falls back to name-based login. A non-empty username is
+        validated for format, reserved names, and uniqueness across the shared
+        login namespace (excluding this same member).
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("Send staff details in the request body")
+        updates: dict = {}
+        if "access_level" in payload:
+            level = clean_text(payload.get("access_level"), "Access level", 40)
+            if level not in STAFF_ACCESS_LEVELS:
+                raise ValueError("Choose an access level from the list")
+            updates["access_level"] = level
+        if "contact" in payload:
+            updates["contact"] = parse_optional_contact(payload.get("contact"))
+        change_username = "username" in payload
+        new_username = ""
+        if change_username:
+            raw = payload.get("username")
+            text = raw.strip() if isinstance(raw, str) else ""
+            if text:
+                new_username = parse_login_username(text)
+                if new_username.casefold() == ADMIN_USERNAME.casefold():
+                    raise ValueError("That username is reserved")
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            if change_username and new_username:
+                if self._login_username_taken(
+                    new_username.casefold(), exclude_staff=staff_id
+                ):
+                    raise ValueError("That username is already taken")
+            for key, value in updates.items():
+                member[key] = value
+            if change_username:
+                if new_username:
+                    member["username"] = new_username
+                else:
+                    member.pop("username", None)
+            self._save()
+            return public_staff(member)
+
     def set_staff_password(self, staff_id: str, password: object) -> dict:
         """Store only a salted hash of the staff member's access password."""
         secret = parse_staff_password(password)
@@ -2672,9 +2717,7 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
             if staff_match:
-                member = self.store.update_staff_access(
-                    staff_match.group(1), payload.get("access_level")
-                )
+                member = self.store.update_staff(staff_match.group(1), payload)
                 send_json(self, 200, member)
                 return
             if path == "/api/team":

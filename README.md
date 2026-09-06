@@ -98,6 +98,11 @@ controls what they can see and change. Leave the login blank to add someone to
 the staff list without sign-in access. Staff added before usernames existed can
 still sign in with their name until you set a username for them.
 
+A Full-access user can edit an existing staff member from **Manage staff
+access**: change their access level, update their **email/phone** and
+**username**, set or clear a password, or remove them — all without deleting and
+re-adding the person. Clearing the username reverts them to name-based login.
+
 Passwords are stored only as salted hashes, never in plain text. If you serve
 idev over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is
 marked `Secure`.

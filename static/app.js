@@ -385,6 +385,27 @@
     }
   }
 
+  async function updateStaffIdentity(member, patch, btn) {
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      await loadStaff();
+      renderManageStaff();
+      if (btn) {
+        btn.textContent = "Saved";
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 1200);
+      }
+    } catch (error) {
+      showError(error.message);
+      // Restore the fields to their stored values on failure.
+      renderManageStaff();
+    }
+  }
+
   async function setStaffPassword(member, password) {
     const value = (password || "").trim();
     if (value.length < 4) {
@@ -471,6 +492,51 @@
         ),
       );
 
+      // Editable email + username for this member (Full-access action).
+      const emailInput = el("input", {
+        type: "text",
+        className: "staff-edit-input",
+        value: member.contact || "",
+        placeholder: "Email or phone",
+        maxLength: 120,
+        autocomplete: "off",
+        "aria-label": `Email or phone for ${member.name}`,
+      });
+      const usernameInput = el("input", {
+        type: "text",
+        className: "staff-edit-input",
+        value: member.username || "",
+        placeholder: "Username",
+        minLength: 3,
+        maxLength: 32,
+        autocomplete: "off",
+        autocapitalize: "none",
+        spellcheck: false,
+        "aria-label": `Username for ${member.name}`,
+      });
+      const saveIdentityBtn = el(
+        "button",
+        { type: "button", className: "btn btn-primary staff-edit-save" },
+        "Save",
+      );
+      saveIdentityBtn.addEventListener("click", () => {
+        updateStaffIdentity(
+          member,
+          {
+            contact: emailInput.value.trim(),
+            username: usernameInput.value.trim(),
+          },
+          saveIdentityBtn,
+        );
+      });
+      const identityRow = el(
+        "div",
+        { className: "staff-manage-edit" },
+        el("label", { className: "staff-edit-field" }, "Email", emailInput),
+        el("label", { className: "staff-edit-field" }, "Username", usernameInput),
+        saveIdentityBtn,
+      );
+
       const pwInput = el("input", {
         type: "password",
         className: "staff-pw-input",
@@ -519,7 +585,7 @@
 
       const controlRow = el("div", { className: "staff-manage-controls" }, ...controls);
       staffManageList.append(
-        el("li", { className: "staff-manage-item" }, info, controlRow),
+        el("li", { className: "staff-manage-item" }, info, identityRow, controlRow),
       );
     });
   }
