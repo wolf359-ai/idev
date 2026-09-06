@@ -579,6 +579,103 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.add_note(player["id"], {"text": "Hi", "category": "bogus"})
 
+    def test_alarm_targets_all_or_specific_player(self) -> None:
+        one = self.store.add_player({"name": "Ann", "position": "Pitcher"})
+        two = self.store.add_player({"name": "Bea", "position": "Catcher"})
+        broadcast = self.store.add_alarm({"text": "Practice at 5", "target": "all"})
+        direct = self.store.add_alarm({"text": "See me", "target": one["id"]})
+        self.assertEqual(broadcast["target"], "all")
+        self.assertEqual(direct["target_name"], "Ann")
+
+        # Everyone sees the broadcast; only Ann sees the direct alarm.
+        ann = self.store.alarms_for_player(one["id"])
+        bea = self.store.alarms_for_player(two["id"])
+        self.assertEqual({a["text"] for a in ann}, {"Practice at 5", "See me"})
+        self.assertEqual({a["text"] for a in bea}, {"Practice at 5"})
+        self.assertTrue(all(a["read"] is False for a in ann))
+
+        # Marking read is per player and does not leak into stored payloads.
+        self.store.mark_alarm_read(broadcast["id"], one["id"])
+        ann = self.store.alarms_for_player(one["id"])
+        by_text = {a["text"]: a for a in ann}
+        self.assertTrue(by_text["Practice at 5"]["read"])
+        self.assertFalse(by_text["See me"]["read"])
+        # Bea's copy of the broadcast is still unread.
+        self.assertFalse(self.store.alarms_for_player(two["id"])[0]["read"])
+        for a in self.store.list_alarms():
+            self.assertNotIn("read", a)
+
+    def test_alarm_rejects_unknown_target(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_alarm({"text": "Hi", "target": "player-does-not-exist"})
+
+    def test_mark_all_alarms_read(self) -> None:
+        player = self.store.add_player({"name": "Cy", "position": "Utility"})
+        self.store.add_alarm({"text": "A", "target": "all"})
+        self.store.add_alarm({"text": "B", "target": player["id"]})
+        self.store.mark_all_alarms_read(player["id"])
+        self.assertTrue(all(a["read"] for a in self.store.alarms_for_player(player["id"])))
+
+    def test_message_audiences(self) -> None:
+        player = self.store.add_player({"name": "Dee", "position": "Shortstop"})
+        other = self.store.add_player({"name": "Eve", "position": "Catcher"})
+        staff = self.store.add_staff(
+            {"name": "Coach Kay", "role": "Assistant", "access_level": "Full"}
+        )
+        self.store.add_message({"body": "Go team", "audience": "team"})
+        self.store.add_message({"body": "Staff sync", "audience": "staff"})
+        self.store.add_message(
+            {"body": "For Dee", "audience": "player", "recipient_id": player["id"]}
+        )
+        self.store.add_message(
+            {"body": "Hi Kay", "audience": "staff_member", "recipient_id": staff["id"]}
+        )
+        # Dee sees the team message and her direct message; not staff or Eve's.
+        dee = {m["body"] for m in self.store.messages_for_player(player["id"])}
+        self.assertEqual(dee, {"Go team", "For Dee"})
+        eve = {m["body"] for m in self.store.messages_for_player(other["id"])}
+        self.assertEqual(eve, {"Go team"})
+        # Coach outbox has all four.
+        self.assertEqual(len(self.store.list_messages()), 4)
+
+    def test_message_rejects_invalid(self) -> None:
+        with self.assertRaises(ValueError):
+            self.store.add_message({"body": "x", "audience": "nobody"})
+        with self.assertRaises(ValueError):
+            self.store.add_message(
+                {"body": "x", "audience": "player", "recipient_id": "player-missing0"}
+            )
+
+    def test_deleting_player_removes_their_alarms_and_messages(self) -> None:
+        player = self.store.add_player({"name": "Fin", "position": "Utility"})
+        keep = self.store.add_player({"name": "Gus", "position": "Pitcher"})
+        broadcast = self.store.add_alarm({"text": "All", "target": "all"})
+        self.store.add_alarm({"text": "Direct", "target": player["id"]})
+        self.store.mark_alarm_read(broadcast["id"], player["id"])
+        self.store.add_message(
+            {"body": "For Fin", "audience": "player", "recipient_id": player["id"]}
+        )
+        self.store.add_message({"body": "Team", "audience": "team"})
+        self.store.delete_player(player["id"])
+        # The direct alarm/message are gone; broadcasts remain for others.
+        alarms = self.store.list_alarms()
+        self.assertEqual({a["text"] for a in alarms}, {"All"})
+        self.assertNotIn(player["id"], alarms[0].get("reads", []))
+        messages = self.store.list_messages()
+        self.assertEqual({m["body"] for m in messages}, {"Team"})
+        self.assertEqual(self.store.messages_for_player(keep["id"]), self.store.messages_for_player(keep["id"]))
+
+    def test_deleting_staff_removes_their_messages(self) -> None:
+        staff = self.store.add_staff(
+            {"name": "Hal", "role": "Assistant", "access_level": "Full"}
+        )
+        self.store.add_message(
+            {"body": "Hi Hal", "audience": "staff_member", "recipient_id": staff["id"]}
+        )
+        self.store.add_message({"body": "All staff", "audience": "staff"})
+        self.store.delete_staff(staff["id"])
+        self.assertEqual({m["body"] for m in self.store.list_messages()}, {"All staff"})
+
     def test_rejects_invalid_score(self) -> None:
         skill = self.store.add_skill("Pop time")
         player = self.store.add_player({"name": "Casey", "position": "Catcher"})
@@ -1277,6 +1374,75 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 403)
         status, _payload = self.call(
             "POST", f"/api/players/{mine['id']}/notes", {"text": "no writes"}
+        )
+        self.assertEqual(status, 403)
+
+    def test_alarms_coach_creates_player_reads(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Nova", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+        status, _alarm = self.call(
+            "POST", "/api/alarms", {"text": "Bring cleats", "target": "all"}
+        )
+        self.assertEqual(status, 201)
+        status, access = self.call("POST", f"/api/players/{pid}/access-code")
+        self.assertEqual(status, 201)
+
+        self.sign_out()
+        self.login_player(code=access["code"])
+        # The player sees the alarm as unread and cannot create alarms.
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        self.assertEqual(len(listing["alarms"]), 1)
+        self.assertFalse(listing["alarms"][0]["read"])
+        status, _payload = self.call(
+            "POST", "/api/alarms", {"text": "Sneaky", "target": "all"}
+        )
+        self.assertEqual(status, 403)
+        # Marking all read clears the unread flag.
+        status, _payload = self.call("POST", "/api/alarms/read")
+        self.assertEqual(status, 200)
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertTrue(listing["alarms"][0]["read"])
+
+        # Coach can delete the alarm.
+        self.sign_out()
+        self.login_coach()
+        alarm_id = self.store.list_alarms()[0]["id"]
+        status, _payload = self.call("DELETE", f"/api/alarms/{alarm_id}")
+        self.assertEqual(status, 200)
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(len(listing["alarms"]), 0)
+
+    def test_messages_coach_sends_player_inbox(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Oak", "position": "Catcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+        status, _team_msg = self.call(
+            "POST", "/api/messages", {"body": "Great game", "audience": "team"}
+        )
+        self.assertEqual(status, 201)
+        status, _direct = self.call(
+            "POST",
+            "/api/messages",
+            {"body": "See coach", "audience": "player", "recipient_id": pid},
+        )
+        self.assertEqual(status, 201)
+        status, access = self.call("POST", f"/api/players/{pid}/access-code")
+        self.assertEqual(status, 201)
+
+        self.sign_out()
+        self.login_player(code=access["code"])
+        status, listing = self.call("GET", "/api/messages")
+        self.assertEqual(status, 200)
+        self.assertEqual({m["body"] for m in listing["messages"]}, {"Great game", "See coach"})
+        # A player cannot send messages.
+        status, _payload = self.call(
+            "POST", "/api/messages", {"body": "Nope", "audience": "team"}
         )
         self.assertEqual(status, 403)
 

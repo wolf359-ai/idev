@@ -59,6 +59,24 @@
   const closeNoteView = document.getElementById("close-note-view");
   const brandTeam = document.getElementById("brand-team");
   const brandMeta = document.getElementById("brand-meta");
+  const alarmBtn = document.getElementById("alarm-btn");
+  const alarmBadge = document.getElementById("alarm-badge");
+  const alarmModal = document.getElementById("alarm-modal");
+  const alarmForm = document.getElementById("alarm-form");
+  const alarmTarget = document.getElementById("alarm-target");
+  const alarmText = document.getElementById("alarm-text");
+  const alarmList = document.getElementById("alarm-list");
+  const closeAlarm = document.getElementById("close-alarm");
+  const messageBtn = document.getElementById("message-btn");
+  const messageBadge = document.getElementById("message-badge");
+  const messageModal = document.getElementById("message-modal");
+  const messageForm = document.getElementById("message-form");
+  const messageAudience = document.getElementById("message-audience");
+  const messageRecipientLabel = document.getElementById("message-recipient-label");
+  const messageRecipient = document.getElementById("message-recipient");
+  const messageBody = document.getElementById("message-body");
+  const messageList = document.getElementById("message-list");
+  const closeMessage = document.getElementById("close-message");
   let drillTargetId = null;
   let noteTargetCategory = "focus";
 
@@ -66,6 +84,8 @@
     players: [],
     staff: [],
     team: {},
+    alarms: [],
+    messages: [],
     selectedId: null,
     detail: null,
     importReady: false,
@@ -445,6 +465,327 @@
         el("li", { className: "staff-manage-item" }, info, controlRow),
       );
     });
+  }
+
+  // ---------- Coach alarms + messages (header bell / envelope) ----------
+  function showDialog(modal) {
+    if (!modal) return;
+    if (typeof modal.showModal === "function") {
+      modal.showModal();
+    } else {
+      modal.setAttribute("open", "");
+    }
+  }
+
+  function hideDialog(modal) {
+    if (!modal) return;
+    if (modal.open) {
+      modal.close();
+    } else {
+      modal.removeAttribute("open");
+    }
+  }
+
+  function unreadCount(items) {
+    return (items || []).filter((item) => item && item.read === false).length;
+  }
+
+  function setBadge(badge, count) {
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? "99+" : String(count);
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  // Only players have an unread inbox; coaches are the senders.
+  function renderCommBadges() {
+    if (state.role === "player") {
+      setBadge(alarmBadge, unreadCount(state.alarms));
+      setBadge(messageBadge, unreadCount(state.messages));
+    } else {
+      setBadge(alarmBadge, 0);
+      setBadge(messageBadge, 0);
+    }
+  }
+
+  function showCommIcons() {
+    if (!alarmBtn || !messageBtn) return;
+    const show = Boolean(state.role);
+    alarmBtn.classList.toggle("hidden", !show);
+    messageBtn.classList.toggle("hidden", !show);
+  }
+
+  async function loadAlarms() {
+    if (!state.role) return;
+    try {
+      const data = await request("/api/alarms");
+      state.alarms = data.alarms || [];
+    } catch (_error) {
+      state.alarms = [];
+    }
+    renderCommBadges();
+  }
+
+  async function loadMessages() {
+    if (!state.role) return;
+    try {
+      const data = await request("/api/messages");
+      state.messages = data.messages || [];
+    } catch (_error) {
+      state.messages = [];
+    }
+    renderCommBadges();
+  }
+
+  function populateAlarmTargets() {
+    if (!alarmTarget) return;
+    const current = alarmTarget.value;
+    alarmTarget.replaceChildren();
+    alarmTarget.append(el("option", { value: "all" }, "All players"));
+    state.players.forEach((player) => {
+      alarmTarget.append(el("option", { value: player.id }, player.name));
+    });
+    alarmTarget.value = current || "all";
+  }
+
+  function renderAlarmList() {
+    if (!alarmList) return;
+    alarmList.replaceChildren();
+    const items = state.alarms || [];
+    if (!items.length) {
+      alarmList.append(
+        el(
+          "li",
+          { className: "comm-empty meta" },
+          state.role === "coach" ? "No alarms yet. Add one above." : "No alarms yet.",
+        ),
+      );
+      return;
+    }
+    items.forEach((alarm) => {
+      const audience =
+        alarm.target_name || (alarm.target === "all" ? "All players" : "");
+      const meta = [
+        formatWhen(alarm.created_at),
+        state.role === "coach" && audience ? `To: ${audience}` : null,
+      ]
+        .filter(Boolean)
+        .join(" \u00b7 ");
+      const del =
+        state.role === "coach"
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "comm-remove",
+                title: "Delete alarm",
+                "aria-label": "Delete alarm",
+                onClick: () => removeAlarm(alarm.id),
+              },
+              "\u00d7",
+            )
+          : null;
+      alarmList.append(
+        el(
+          "li",
+          { className: `comm-item${alarm.read === false ? " unread" : ""}` },
+          el(
+            "div",
+            { className: "comm-item-body" },
+            el("div", { className: "comm-meta meta" }, meta),
+            el("p", { className: "comm-text" }, alarm.text || ""),
+          ),
+          del,
+        ),
+      );
+    });
+  }
+
+  function openAlarmModal() {
+    if (!alarmModal) return;
+    const isCoach = state.role === "coach";
+    if (alarmForm) alarmForm.classList.toggle("hidden", !isCoach);
+    if (isCoach) populateAlarmTargets();
+    renderAlarmList();
+    showDialog(alarmModal);
+    if (state.role === "player") {
+      request("/api/alarms/read", { method: "POST" })
+        .then(() => loadAlarms())
+        .catch(() => {});
+    }
+  }
+
+  async function submitAlarm(event) {
+    event.preventDefault();
+    const text = (alarmText.value || "").trim();
+    if (!text) return;
+    try {
+      await request("/api/alarms", {
+        method: "POST",
+        body: JSON.stringify({ text, target: alarmTarget.value || "all" }),
+      });
+      alarmForm.reset();
+      if (alarmTarget) alarmTarget.value = "all";
+      await loadAlarms();
+      renderAlarmList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function removeAlarm(id) {
+    if (!window.confirm("Delete this alarm?")) return;
+    try {
+      await request(`/api/alarms/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadAlarms();
+      renderAlarmList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function updateMessageRecipient() {
+    if (!messageAudience || !messageRecipient || !messageRecipientLabel) return;
+    const audience = messageAudience.value;
+    const showRecipient = audience === "player" || audience === "staff_member";
+    messageRecipientLabel.classList.toggle("hidden", !showRecipient);
+    if (!showRecipient) return;
+    const source = audience === "player" ? state.players : state.staff;
+    messageRecipient.replaceChildren();
+    if (!source.length) {
+      messageRecipient.append(
+        el(
+          "option",
+          { value: "" },
+          audience === "player" ? "No players yet" : "No staff yet",
+        ),
+      );
+      return;
+    }
+    source.forEach((item) => {
+      messageRecipient.append(el("option", { value: item.id }, item.name));
+    });
+  }
+
+  function messageAudienceLabel(message) {
+    switch (message.audience) {
+      case "team":
+        return "Entire team";
+      case "staff":
+        return "All staff";
+      default:
+        return message.recipient_name || "";
+    }
+  }
+
+  function renderMessageList() {
+    if (!messageList) return;
+    messageList.replaceChildren();
+    const items = state.messages || [];
+    if (!items.length) {
+      messageList.append(
+        el(
+          "li",
+          { className: "comm-empty meta" },
+          state.role === "coach"
+            ? "No messages yet. Send one above."
+            : "No messages yet.",
+        ),
+      );
+      return;
+    }
+    items.forEach((message) => {
+      let tag;
+      if (state.role === "coach") {
+        const to = messageAudienceLabel(message);
+        tag = to ? `To: ${to}` : null;
+      } else {
+        tag = message.audience === "team" ? "Team message" : "Direct message";
+      }
+      const meta = [formatWhen(message.created_at), tag].filter(Boolean).join(" \u00b7 ");
+      const del =
+        state.role === "coach"
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "comm-remove",
+                title: "Delete message",
+                "aria-label": "Delete message",
+                onClick: () => removeMessage(message.id),
+              },
+              "\u00d7",
+            )
+          : null;
+      messageList.append(
+        el(
+          "li",
+          { className: `comm-item${message.read === false ? " unread" : ""}` },
+          el(
+            "div",
+            { className: "comm-item-body" },
+            el("div", { className: "comm-meta meta" }, meta),
+            el("p", { className: "comm-text" }, message.body || ""),
+          ),
+          del,
+        ),
+      );
+    });
+  }
+
+  function openMessageModal() {
+    if (!messageModal) return;
+    const isCoach = state.role === "coach";
+    if (messageForm) messageForm.classList.toggle("hidden", !isCoach);
+    if (isCoach) updateMessageRecipient();
+    renderMessageList();
+    showDialog(messageModal);
+    if (state.role === "player") {
+      request("/api/messages/read", { method: "POST" })
+        .then(() => loadMessages())
+        .catch(() => {});
+    }
+  }
+
+  async function submitMessage(event) {
+    event.preventDefault();
+    const body = (messageBody.value || "").trim();
+    if (!body) return;
+    const audience = messageAudience.value;
+    const payload = { body, audience };
+    if (audience === "player" || audience === "staff_member") {
+      payload.recipient_id = messageRecipient.value;
+      if (!payload.recipient_id) {
+        showError("Choose a recipient");
+        return;
+      }
+    }
+    try {
+      await request("/api/messages", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      messageForm.reset();
+      updateMessageRecipient();
+      await loadMessages();
+      renderMessageList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function removeMessage(id) {
+    if (!window.confirm("Delete this message?")) return;
+    try {
+      await request(`/api/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadMessages();
+      renderMessageList();
+    } catch (error) {
+      showError(error.message);
+    }
   }
 
   async function loadTeam() {
@@ -1982,7 +2323,11 @@
     state.selectedId = null;
     state.detail = null;
     state.team = {};
+    state.alarms = [];
+    state.messages = [];
     renderBrandTeam();
+    showCommIcons();
+    renderCommBadges();
     appView.classList.add("hidden");
     appView.classList.remove("role-player");
     loginView.classList.remove("hidden");
@@ -2018,6 +2363,10 @@
     }
     // Team + season appears in the header for both roles.
     loadTeam().catch((error) => showError(error.message));
+    // Alarms + messages are available to both roles (compose vs inbox).
+    showCommIcons();
+    loadAlarms().catch(() => {});
+    loadMessages().catch(() => {});
   }
 
   async function doLogin(body) {
@@ -2345,6 +2694,42 @@
     noteViewModal.addEventListener("click", (event) => {
       if (event.target === noteViewModal) {
         closeNoteViewModal();
+      }
+    });
+  }
+
+  if (alarmBtn) {
+    alarmBtn.addEventListener("click", openAlarmModal);
+  }
+  if (closeAlarm) {
+    closeAlarm.addEventListener("click", () => hideDialog(alarmModal));
+  }
+  if (alarmForm) {
+    alarmForm.addEventListener("submit", submitAlarm);
+  }
+  if (alarmModal) {
+    alarmModal.addEventListener("click", (event) => {
+      if (event.target === alarmModal) {
+        hideDialog(alarmModal);
+      }
+    });
+  }
+  if (messageBtn) {
+    messageBtn.addEventListener("click", openMessageModal);
+  }
+  if (closeMessage) {
+    closeMessage.addEventListener("click", () => hideDialog(messageModal));
+  }
+  if (messageForm) {
+    messageForm.addEventListener("submit", submitMessage);
+  }
+  if (messageAudience) {
+    messageAudience.addEventListener("change", updateMessageRecipient);
+  }
+  if (messageModal) {
+    messageModal.addEventListener("click", (event) => {
+      if (event.target === messageModal) {
+        hideDialog(messageModal);
       }
     });
   }

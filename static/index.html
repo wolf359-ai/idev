@@ -48,6 +48,20 @@
         </div>
       </div>
       <div class="session-controls">
+        <button type="button" id="alarm-btn" class="icon-btn hidden" title="Alarms" aria-label="Alarms">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span id="alarm-badge" class="icon-badge hidden">0</span>
+        </button>
+        <button type="button" id="message-btn" class="icon-btn hidden" title="Messages" aria-label="Messages">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+            <path d="m22 6-10 7L2 6"></path>
+          </svg>
+          <span id="message-badge" class="icon-badge hidden">0</span>
+        </button>
         <span id="session-label" class="session-label"></span>
         <button type="button" id="logout-btn" class="btn">Sign out</button>
       </div>
@@ -421,6 +435,59 @@
       <p class="note-view-text" id="note-view-text"></p>
       <div class="row modal-actions">
         <button type="button" id="close-note-view" class="btn btn-primary">Close</button>
+      </div>
+    </dialog>
+    <dialog id="alarm-modal" class="modal" aria-labelledby="alarm-title">
+      <h3 class="modal-title" id="alarm-title">Alarms</h3>
+      <form id="alarm-form" class="form comm-compose hidden" autocomplete="off">
+        <label>
+          Send to
+          <select id="alarm-target" name="target">
+            <option value="all">All players</option>
+          </select>
+        </label>
+        <label>
+          Alarm
+          <textarea id="alarm-text" name="text" maxlength="500" rows="2" required
+            placeholder="e.g. Practice moved to 5pm Thursday."></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Add alarm</button>
+        </div>
+      </form>
+      <ul id="alarm-list" class="comm-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-alarm" class="btn">Close</button>
+      </div>
+    </dialog>
+    <dialog id="message-modal" class="modal" aria-labelledby="message-title">
+      <h3 class="modal-title" id="message-title">Messages</h3>
+      <form id="message-form" class="form comm-compose hidden" autocomplete="off">
+        <label>
+          Send to
+          <select id="message-audience" name="audience">
+            <option value="team">Entire team</option>
+            <option value="staff">All staff</option>
+            <option value="player">Specific player</option>
+            <option value="staff_member">Specific staff member</option>
+          </select>
+        </label>
+        <label id="message-recipient-label" class="hidden">
+          Recipient
+          <select id="message-recipient" name="recipient_id"></select>
+        </label>
+        <label>
+          Message
+          <textarea id="message-body" name="body" maxlength="2000" rows="3" required
+            placeholder="e.g. Great effort at practice today, team!"></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Send message</button>
+        </div>
+      </form>
+      <ul id="message-list" class="comm-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-message" class="btn">Close</button>
       </div>
     </dialog>
   </div>

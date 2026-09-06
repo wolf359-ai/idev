@@ -38,6 +38,12 @@ NOTE_CATEGORIES = ("focus", "top")
 DEFAULT_NOTE_CATEGORY = "focus"
 MAX_ACTIVITY_LEN = 200
 MAX_ACTIVITY = 50
+# Coach-to-player alarms (reminders/alerts) and coach messages. Both are
+# broadcast from a coach; recipients (players) track per-item read state.
+MAX_ALARM_LEN = 500
+MAX_MESSAGE_LEN = 2000
+MAX_BROADCASTS = 500
+MESSAGE_AUDIENCES = ("team", "staff", "player", "staff_member")
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
 MAX_ROSTER_TEXT_BYTES = 200 * 1024
@@ -966,6 +972,9 @@ def required_permission(method: str, path: str):
         if path == "/api/team":
             # Team name/season is shown in the header for any signed-in user.
             return PERM_AUTHED
+        if path in ("/api/alarms", "/api/messages"):
+            # Coaches see all; players see their own inbox (handled in do_GET).
+            return PERM_AUTHED
         match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
         if match:
             return (PERM_PLAYER_OWN, match.group(1))
@@ -980,6 +989,13 @@ def required_permission(method: str, path: str):
             # A player may log activity (e.g. opening a drill link) on their own
             # profile; a coach may log it for anyone.
             return (PERM_PLAYER_OWN, act_match.group(1))
+        # Any signed-in player may mark their own alarms/messages read.
+        if path in ("/api/alarms/read", "/api/messages/read"):
+            return PERM_AUTHED
+        if re.fullmatch(
+            r"/api/(?:alarms|messages)/([a-zA-Z0-9_-]{8,64})/read", path
+        ):
+            return PERM_AUTHED
     return PERM_COACH
 
 
@@ -1000,6 +1016,8 @@ class Store:
             "notes": [],
             "activity": [],
             "staff": [],
+            "alarms": [],
+            "messages": [],
             "team": {},
             "auth": {},
         }
@@ -1009,7 +1027,16 @@ class Store:
         if not isinstance(raw, dict):
             return None
         data = self._empty()
-        for key in ("skills", "players", "ratings", "notes", "activity", "staff"):
+        for key in (
+            "skills",
+            "players",
+            "ratings",
+            "notes",
+            "activity",
+            "staff",
+            "alarms",
+            "messages",
+        ):
             items = raw.get(key, [])
             if isinstance(items, list):
                 data[key] = [item for item in items if isinstance(item, dict)]
@@ -1461,6 +1488,21 @@ class Store:
             self.data["activity"] = [
                 item for item in self.data["activity"] if item.get("player_id") != player_id
             ]
+            # Drop alarms/messages aimed only at this player and prune read marks.
+            self.data["alarms"] = [
+                a for a in self.data["alarms"] if a.get("target") != player_id
+            ]
+            for alarm in self.data["alarms"]:
+                if isinstance(alarm.get("reads"), list):
+                    alarm["reads"] = [r for r in alarm["reads"] if r != player_id]
+            self.data["messages"] = [
+                m
+                for m in self.data["messages"]
+                if not (m.get("audience") == "player" and m.get("recipient_id") == player_id)
+            ]
+            for message in self.data["messages"]:
+                if isinstance(message.get("reads"), list):
+                    message["reads"] = [r for r in message["reads"] if r != player_id]
             self._save()
 
     def add_rating(self, player_id: str, payload: dict) -> dict:
@@ -1625,7 +1667,215 @@ class Store:
             ]
             if len(self.data["staff"]) == before:
                 raise KeyError("Staff member not found")
+            # Drop direct messages to this staff member.
+            self.data["messages"] = [
+                m
+                for m in self.data["messages"]
+                if not (
+                    m.get("audience") == "staff_member"
+                    and m.get("recipient_id") == staff_id
+                )
+            ]
             self._save()
+
+    # -- alarms (coach -> player reminders) --------------------------------
+    def list_alarms(self) -> list[dict]:
+        """Every alarm, newest first (coach management view)."""
+        with self.lock:
+            return sorted(
+                (dict(a) for a in self.data["alarms"]),
+                key=lambda a: a.get("created_at", ""),
+                reverse=True,
+            )
+
+    def add_alarm(self, payload: dict) -> dict:
+        text = clean_text(payload.get("text"), "Alarm", MAX_ALARM_LEN)
+        target = payload.get("target")
+        with self.lock:
+            if target in (None, "", "all"):
+                target = "all"
+                target_name = "All players"
+            else:
+                player = next(
+                    (p for p in self.data["players"] if p.get("id") == target), None
+                )
+                if not player:
+                    raise ValueError("Choose a valid player")
+                target_name = player.get("name", "")
+            alarm = {
+                "id": new_id("alarm"),
+                "text": text,
+                "target": target,
+                "target_name": target_name,
+                "created_at": utc_now(),
+                "reads": [],
+            }
+            self.data["alarms"].append(alarm)
+            if len(self.data["alarms"]) > MAX_BROADCASTS:
+                self.data["alarms"] = self.data["alarms"][-MAX_BROADCASTS:]
+            self._save()
+            return dict(alarm)
+
+    def delete_alarm(self, alarm_id: str) -> None:
+        with self.lock:
+            before = len(self.data["alarms"])
+            self.data["alarms"] = [
+                a for a in self.data["alarms"] if a.get("id") != alarm_id
+            ]
+            if len(self.data["alarms"]) == before:
+                raise KeyError("Alarm not found")
+            self._save()
+
+    def _alarm_targets_player(self, alarm: dict, player_id: str) -> bool:
+        return alarm.get("target") == "all" or alarm.get("target") == player_id
+
+    def alarms_for_player(self, player_id: str) -> list[dict]:
+        """Alarms visible to a player, each annotated with a read flag."""
+        with self.lock:
+            result = []
+            for alarm in self.data["alarms"]:
+                if not self._alarm_targets_player(alarm, player_id):
+                    continue
+                item = dict(alarm)
+                item["read"] = player_id in (alarm.get("reads") or [])
+                item.pop("reads", None)
+                result.append(item)
+            result.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+            return result
+
+    def mark_alarm_read(self, alarm_id: str, player_id: str) -> None:
+        with self.lock:
+            alarm = next(
+                (a for a in self.data["alarms"] if a.get("id") == alarm_id), None
+            )
+            if not alarm or not self._alarm_targets_player(alarm, player_id):
+                raise KeyError("Alarm not found")
+            reads = alarm.setdefault("reads", [])
+            if player_id not in reads:
+                reads.append(player_id)
+                self._save()
+
+    def mark_all_alarms_read(self, player_id: str) -> None:
+        with self.lock:
+            changed = False
+            for alarm in self.data["alarms"]:
+                if not self._alarm_targets_player(alarm, player_id):
+                    continue
+                reads = alarm.setdefault("reads", [])
+                if player_id not in reads:
+                    reads.append(player_id)
+                    changed = True
+            if changed:
+                self._save()
+
+    # -- messages (coach -> player / team / staff) -------------------------
+    def list_messages(self) -> list[dict]:
+        """Every message, newest first (coach outbox view)."""
+        with self.lock:
+            return sorted(
+                (dict(m) for m in self.data["messages"]),
+                key=lambda m: m.get("created_at", ""),
+                reverse=True,
+            )
+
+    def add_message(self, payload: dict) -> dict:
+        body = clean_text(payload.get("body"), "Message", MAX_MESSAGE_LEN)
+        audience = payload.get("audience")
+        if audience not in MESSAGE_AUDIENCES:
+            raise ValueError("Choose who to message")
+        with self.lock:
+            recipient_id = None
+            if audience == "team":
+                recipient_name = "Entire team"
+            elif audience == "staff":
+                recipient_name = "All staff"
+            elif audience == "player":
+                recipient_id = payload.get("recipient_id")
+                player = next(
+                    (p for p in self.data["players"] if p.get("id") == recipient_id),
+                    None,
+                )
+                if not player:
+                    raise ValueError("Choose a valid player")
+                recipient_name = player.get("name", "")
+            else:  # staff_member
+                recipient_id = payload.get("recipient_id")
+                member = next(
+                    (s for s in self.data["staff"] if s.get("id") == recipient_id), None
+                )
+                if not member:
+                    raise ValueError("Choose a valid staff member")
+                recipient_name = member.get("name", "")
+            message = {
+                "id": new_id("msg"),
+                "body": body,
+                "audience": audience,
+                "recipient_id": recipient_id,
+                "recipient_name": recipient_name,
+                "created_at": utc_now(),
+                "reads": [],
+            }
+            self.data["messages"].append(message)
+            if len(self.data["messages"]) > MAX_BROADCASTS:
+                self.data["messages"] = self.data["messages"][-MAX_BROADCASTS:]
+            self._save()
+            return dict(message)
+
+    def delete_message(self, message_id: str) -> None:
+        with self.lock:
+            before = len(self.data["messages"])
+            self.data["messages"] = [
+                m for m in self.data["messages"] if m.get("id") != message_id
+            ]
+            if len(self.data["messages"]) == before:
+                raise KeyError("Message not found")
+            self._save()
+
+    def _message_targets_player(self, message: dict, player_id: str) -> bool:
+        if message.get("audience") == "team":
+            return True
+        return (
+            message.get("audience") == "player"
+            and message.get("recipient_id") == player_id
+        )
+
+    def messages_for_player(self, player_id: str) -> list[dict]:
+        with self.lock:
+            result = []
+            for message in self.data["messages"]:
+                if not self._message_targets_player(message, player_id):
+                    continue
+                item = dict(message)
+                item["read"] = player_id in (message.get("reads") or [])
+                item.pop("reads", None)
+                result.append(item)
+            result.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+            return result
+
+    def mark_message_read(self, message_id: str, player_id: str) -> None:
+        with self.lock:
+            message = next(
+                (m for m in self.data["messages"] if m.get("id") == message_id), None
+            )
+            if not message or not self._message_targets_player(message, player_id):
+                raise KeyError("Message not found")
+            reads = message.setdefault("reads", [])
+            if player_id not in reads:
+                reads.append(player_id)
+                self._save()
+
+    def mark_all_messages_read(self, player_id: str) -> None:
+        with self.lock:
+            changed = False
+            for message in self.data["messages"]:
+                if not self._message_targets_player(message, player_id):
+                    continue
+                reads = message.setdefault("reads", [])
+                if player_id not in reads:
+                    reads.append(player_id)
+                    changed = True
+            if changed:
+                self._save()
 
     # -- authentication ----------------------------------------------------
     def ensure_admin_password(self, env_password: str | None = None) -> str | None:
@@ -2009,6 +2259,20 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/team":
                 send_json(self, 200, {"team": self.store.get_team()})
                 return
+            if path == "/api/alarms":
+                if session and session.get("role") == "player":
+                    pid = session.get("player_id", "")
+                    send_json(self, 200, {"alarms": self.store.alarms_for_player(pid)})
+                else:
+                    send_json(self, 200, {"alarms": self.store.list_alarms()})
+                return
+            if path == "/api/messages":
+                if session and session.get("role") == "player":
+                    pid = session.get("player_id", "")
+                    send_json(self, 200, {"messages": self.store.messages_for_player(pid)})
+                else:
+                    send_json(self, 200, {"messages": self.store.list_messages()})
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.get_player(player_match.group(1)))
@@ -2087,6 +2351,42 @@ class IdevHandler(BaseHTTPRequestHandler):
             )
             if drill_match:
                 send_json(self, 201, self.store.add_drill(drill_match.group(1), payload))
+                return
+            if path == "/api/alarms":
+                send_json(self, 201, self.store.add_alarm(payload))
+                return
+            if path == "/api/messages":
+                send_json(self, 201, self.store.add_message(payload))
+                return
+            if path == "/api/alarms/read":
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_all_alarms_read(pid)
+                send_json(self, 200, {"ok": True})
+                return
+            if path == "/api/messages/read":
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_all_messages_read(pid)
+                send_json(self, 200, {"ok": True})
+                return
+            alarm_read = re.fullmatch(
+                r"/api/alarms/([a-zA-Z0-9_-]{8,64})/read", path
+            )
+            if alarm_read:
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_alarm_read(alarm_read.group(1), pid)
+                send_json(self, 200, {"ok": True})
+                return
+            message_read = re.fullmatch(
+                r"/api/messages/([a-zA-Z0-9_-]{8,64})/read", path
+            )
+            if message_read:
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_message_read(message_read.group(1), pid)
+                send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:
@@ -2174,6 +2474,16 @@ class IdevHandler(BaseHTTPRequestHandler):
             staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
             if staff_match:
                 self.store.delete_staff(staff_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            alarm_match = re.fullmatch(r"/api/alarms/([a-zA-Z0-9_-]{8,64})", path)
+            if alarm_match:
+                self.store.delete_alarm(alarm_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            message_match = re.fullmatch(r"/api/messages/([a-zA-Z0-9_-]{8,64})", path)
+            if message_match:
+                self.store.delete_message(message_match.group(1))
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
