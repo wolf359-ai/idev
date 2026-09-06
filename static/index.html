@@ -15,6 +15,7 @@
       </div>
       <div class="login-tabs" role="tablist">
         <button type="button" id="tab-player" class="btn tab active">Player</button>
+        <button type="button" id="tab-staff" class="btn tab">Staff</button>
         <button type="button" id="tab-coach" class="btn tab">Coach</button>
       </div>
       <form id="player-login-form" class="form login-form" autocomplete="off">
@@ -22,6 +23,18 @@
         <label>
           Access code
           <input id="player-code" name="code" type="password" autocomplete="one-time-code" required>
+        </label>
+        <button type="submit" class="btn btn-primary">Sign in</button>
+      </form>
+      <form id="staff-login-form" class="form login-form hidden" autocomplete="off">
+        <p class="meta">Staff sign in with their name and the access password a coach set for them.</p>
+        <label>
+          Name
+          <input id="staff-name" name="name" type="text" autocomplete="off" required>
+        </label>
+        <label>
+          Password
+          <input id="staff-password" name="password" type="password" autocomplete="current-password" required>
         </label>
         <button type="submit" class="btn btn-primary">Sign in</button>
       </form>

@@ -1829,6 +1829,11 @@ textarea {
   display: none;
 }
 
+/* Managers and view-only staff can browse the roster but not the admin tools. */
+.app.no-admin #admin-tools {
+  display: none;
+}
+
 @media (max-width: 800px) {
   .app {
     grid-template-columns: 1fr;

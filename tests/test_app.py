@@ -943,6 +943,23 @@ class HttpTests(unittest.TestCase):
     def login_player(self, code: str) -> tuple[int, object]:
         return self._login({"mode": "player", "code": code})
 
+    def login_staff(self, name: str, password: str) -> tuple[int, object]:
+        return self._login({"mode": "staff", "name": name, "password": password})
+
+    def make_staff(self, name: str, access_level: str, password: str) -> str:
+        """Create a staff member with a login password (as the signed-in coach)."""
+        status, member = self.call(
+            "POST",
+            "/api/staff",
+            {"name": name, "role": "Coach", "access_level": access_level},
+        )
+        self.assertEqual(status, 201, member)
+        status, _ = self.call(
+            "PUT", f"/api/staff/{member['id']}/password", {"password": password}
+        )
+        self.assertEqual(status, 200)
+        return member["id"]
+
     def sign_out(self) -> None:
         self.cookie = None
         self.csrf = None
@@ -1460,6 +1477,137 @@ class HttpTests(unittest.TestCase):
         self.sign_out()
         status, _payload = self.login_player(code)
         self.assertEqual(status, 401)
+
+    # -- staff login + role-based permissions ------------------------------
+    def test_staff_login_reports_role_and_level(self) -> None:
+        self.make_staff("Kyle Wallace", "Manager", "manager-pass")
+        self.sign_out()
+        status, payload = self.login_staff("Kyle Wallace", "manager-pass")
+        self.assertEqual(status, 200, payload)
+        self.assertEqual(payload["role"], "staff")
+        self.assertEqual(payload["access_level"], "Manager")
+        self.assertEqual(payload["staff_name"], "Kyle Wallace")
+        self.assertTrue(payload["can"]["content"])
+        self.assertFalse(payload["can"]["admin"])
+        self.assertTrue(payload["can"]["view_all"])
+
+    def test_staff_login_rejects_wrong_password(self) -> None:
+        self.make_staff("Dana Lee", "Full", "right-pass")
+        self.sign_out()
+        status, _payload = self.login_staff("Dana Lee", "wrong-pass")
+        self.assertEqual(status, 401)
+
+    def test_staff_login_rejects_member_without_password(self) -> None:
+        status, member = self.call(
+            "POST",
+            "/api/staff",
+            {"name": "No Pass", "role": "Assistant Coach", "access_level": "Read-only"},
+        )
+        self.assertEqual(status, 201, member)
+        self.sign_out()
+        status, _payload = self.login_staff("No Pass", "anything")
+        self.assertEqual(status, 401)
+
+    def test_full_staff_has_admin_access(self) -> None:
+        self.make_staff("Tom Harrop", "Full", "full-pass")
+        self.sign_out()
+        status, payload = self.login_staff("Tom Harrop", "full-pass")
+        self.assertEqual(status, 200)
+        self.assertTrue(payload["can"]["admin"])
+        # Full staff can add players (an admin action).
+        status, _player = self.call(
+            "POST", "/api/players", {"name": "New Kid", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+
+    def test_manager_can_edit_content_but_not_admin(self) -> None:
+        status, skill = self.call("POST", "/api/skills", {"name": "Speed"})
+        self.assertEqual(status, 201)
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Sam", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+        self.make_staff("Kyle Wallace", "Manager", "manager-pass")
+        self.sign_out()
+        self.login_staff("Kyle Wallace", "manager-pass")
+        # Content actions allowed.
+        status, _ = self.call(
+            "POST", f"/api/players/{pid}/ratings", {"skill_id": skill["id"], "score": 4}
+        )
+        self.assertEqual(status, 201)
+        status, _ = self.call("POST", f"/api/players/{pid}/notes", {"text": "Nice work"})
+        self.assertEqual(status, 201)
+        status, _ = self.call(
+            "POST", "/api/alarms", {"text": "Practice at 5", "target": "all"}
+        )
+        self.assertEqual(status, 201)
+        # Admin actions denied.
+        status, _ = self.call(
+            "POST", "/api/players", {"name": "Blocked", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 403)
+        status, _ = self.call("PUT", f"/api/players/{pid}", {"name": "Renamed"})
+        self.assertEqual(status, 403)
+        status, _ = self.call("POST", f"/api/players/{pid}/access-code")
+        self.assertEqual(status, 403)
+
+    def test_view_only_staff_is_read_only(self) -> None:
+        status, skill = self.call("POST", "/api/skills", {"name": "Speed"})
+        self.assertEqual(status, 201)
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Riley", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+        self.make_staff("Pat Viewer", "Read-only", "view-pass")
+        self.sign_out()
+        self.login_staff("Pat Viewer", "view-pass")
+        # Can browse all players and their details.
+        status, players = self.call("GET", "/api/players")
+        self.assertEqual(status, 200)
+        self.assertTrue(any(p["id"] == pid for p in players["players"]))
+        status, _detail = self.call("GET", f"/api/players/{pid}")
+        self.assertEqual(status, 200)
+        # Cannot make any changes.
+        status, _ = self.call(
+            "POST", f"/api/players/{pid}/ratings", {"skill_id": skill["id"], "score": 4}
+        )
+        self.assertEqual(status, 403)
+        status, _ = self.call("POST", f"/api/players/{pid}/notes", {"text": "nope"})
+        self.assertEqual(status, 403)
+        status, _ = self.call("POST", "/api/skills", {"name": "Blocked"})
+        self.assertEqual(status, 403)
+        status, _ = self.call(
+            "POST", "/api/alarms", {"text": "nope", "target": "all"}
+        )
+        self.assertEqual(status, 403)
+
+    def test_assistant_staff_is_read_only(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Jo", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        pid = player["id"]
+        self.make_staff("Trevor Robbins", "Assistant", "asst-pass")
+        self.sign_out()
+        status, payload = self.login_staff("Trevor Robbins", "asst-pass")
+        self.assertEqual(status, 200)
+        self.assertFalse(payload["can"]["content"])
+        self.assertTrue(payload["can"]["view_all"])
+        status, _ = self.call("POST", f"/api/players/{pid}/notes", {"text": "nope"})
+        self.assertEqual(status, 403)
+
+    def test_find_staff_by_credentials(self) -> None:
+        sid = self.make_staff("Casey Match", "Manager", "secret-pass")
+        member = self.store.find_staff_by_credentials("casey match", "secret-pass")
+        self.assertIsNotNone(member)
+        self.assertEqual(member["id"], sid)
+        self.assertEqual(member["access_level"], "Manager")
+        self.assertNotIn("password_hash", member)
+        self.assertIsNone(
+            self.store.find_staff_by_credentials("Casey Match", "nope")
+        )
 
 
 if __name__ == "__main__":

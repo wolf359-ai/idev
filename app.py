@@ -95,7 +95,43 @@ ADMIN_PASSWORD_ENV = os.environ.get("IDEV_ADMIN_PASSWORD")
 PERM_PUBLIC = "public"
 PERM_COACH = "coach"
 PERM_PLAYER_OWN = "player_own"
-PERM_AUTHED = "authed"  # any signed-in user (coach or player)
+PERM_AUTHED = "authed"  # any signed-in user (coach, player, or staff)
+# Capability tiers layered over the staff access levels.
+#   admin   : coach or "Full" staff -> every site function
+#   content : admin or "Manager" staff -> ratings, notes, drills, alarms, messages
+#   view    : coach or any staff -> browse all players and their information
+PERM_ADMIN = "admin"
+PERM_CONTENT = "content"
+PERM_VIEW = "view"
+PERM_PLAYER_VIEW = "player_view"  # coach/staff (any) may view; player only own
+
+# Staff access levels grouped by capability.
+STAFF_ADMIN_LEVELS = ("Full",)
+STAFF_CONTENT_LEVELS = ("Full", "Manager")
+
+
+def session_is_admin(session: dict | None) -> bool:
+    if not session:
+        return False
+    if session.get("role") == "coach":
+        return True
+    return (
+        session.get("role") == "staff"
+        and session.get("access_level") in STAFF_ADMIN_LEVELS
+    )
+
+
+def session_is_content(session: dict | None) -> bool:
+    if session_is_admin(session):
+        return True
+    return bool(session) and (
+        session.get("role") == "staff"
+        and session.get("access_level") in STAFF_CONTENT_LEVELS
+    )
+
+
+def session_can_view_all(session: dict | None) -> bool:
+    return bool(session) and session.get("role") in ("coach", "staff")
 
 POSITIONS = (
     "Pitcher",
@@ -880,12 +916,24 @@ class SessionManager:
     def _fingerprint(user_agent: str) -> str:
         return hashlib.sha256((user_agent or "").encode("utf-8")).hexdigest()
 
-    def create(self, role: str, player_id: str | None, user_agent: str) -> tuple[str, dict]:
+    def create(
+        self,
+        role: str,
+        player_id: str | None,
+        user_agent: str,
+        *,
+        staff_id: str = "",
+        access_level: str = "",
+        staff_name: str = "",
+    ) -> tuple[str, dict]:
         sid = secrets.token_urlsafe(32)
         now = time.time()
         session = {
             "role": role,
             "player_id": player_id or "",
+            "staff_id": staff_id,
+            "access_level": access_level,
+            "staff_name": staff_name,
             "created_at": now,
             "last_seen": now,
             "csrf": secrets.token_urlsafe(32),
@@ -962,6 +1010,9 @@ class LoginRateLimiter:
             self.blocked_until.pop(key, None)
 
 
+ID_RE = r"[a-zA-Z0-9_-]{8,64}"
+
+
 def required_permission(method: str, path: str):
     """Map an HTTP method + path to the access level required to reach it."""
     if method in ("GET", "HEAD"):
@@ -973,30 +1024,44 @@ def required_permission(method: str, path: str):
             # Team name/season is shown in the header for any signed-in user.
             return PERM_AUTHED
         if path in ("/api/alarms", "/api/messages"):
-            # Coaches see all; players see their own inbox (handled in do_GET).
+            # Players see their own inbox; coach/staff see all (handled in do_GET).
             return PERM_AUTHED
-        match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
+        match = re.fullmatch(rf"/api/players/({ID_RE})", path)
         if match:
-            return (PERM_PLAYER_OWN, match.group(1))
-        return PERM_COACH
+            return (PERM_PLAYER_VIEW, match.group(1))
+        # Roster/staff/skills listings: any coach or staff member may browse.
+        return PERM_VIEW
     if method == "POST" and path in ("/api/login", "/api/logout"):
         return PERM_PUBLIC
     if method == "POST":
-        act_match = re.fullmatch(
-            r"/api/players/([a-zA-Z0-9_-]{8,64})/activity", path
-        )
+        act_match = re.fullmatch(rf"/api/players/({ID_RE})/activity", path)
         if act_match:
             # A player may log activity (e.g. opening a drill link) on their own
-            # profile; a coach may log it for anyone.
+            # profile; a coach or content staff may log it for anyone.
             return (PERM_PLAYER_OWN, act_match.group(1))
         # Any signed-in player may mark their own alarms/messages read.
         if path in ("/api/alarms/read", "/api/messages/read"):
             return PERM_AUTHED
-        if re.fullmatch(
-            r"/api/(?:alarms|messages)/([a-zA-Z0-9_-]{8,64})/read", path
-        ):
+        if re.fullmatch(rf"/api/(?:alarms|messages)/({ID_RE})/read", path):
             return PERM_AUTHED
-    return PERM_COACH
+        # Content actions: ratings, notes, drills, skills, alarms, messages.
+        if path in ("/api/skills", "/api/alarms", "/api/messages"):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/players/({ID_RE})/(?:ratings|notes|drills)", path):
+            return PERM_CONTENT
+        # Everything else (add/import players, staff, access codes) is admin.
+        return PERM_ADMIN
+    if method == "DELETE":
+        # Removing notes, drills, alarms, and messages is a content action.
+        if re.fullmatch(r"/api/notes/" + ID_RE, path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/players/{ID_RE}/drills/{ID_RE}", path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/(?:alarms|messages)/{ID_RE}", path):
+            return PERM_CONTENT
+        return PERM_ADMIN
+    # PUT (player profile/stats, staff passwords, team) and any other method.
+    return PERM_ADMIN
 
 
 class Store:
@@ -1907,6 +1972,28 @@ class Store:
             record = self.data.get("auth", {}).get("admin")
         return verify_password(password, record)
 
+    def find_staff_by_credentials(self, name: object, password: object) -> dict | None:
+        """Return a public staff record when name + password match, else None.
+
+        Staff sign in with their name and the access password a coach set for
+        them. Names are matched case-insensitively; only members that have a
+        stored password hash can sign in.
+        """
+        if not isinstance(name, str) or not isinstance(password, str):
+            return None
+        wanted = name.strip().casefold()
+        if not wanted:
+            return None
+        with self.lock:
+            candidates = [dict(m) for m in self.data["staff"]]
+        for member in candidates:
+            if str(member.get("name", "")).strip().casefold() != wanted:
+                continue
+            record = member.get("password_hash")
+            if record and verify_password(password, record):
+                return public_staff(member)
+        return None
+
     def set_player_access_code(self, player_id: str, code: object = None) -> str:
         """Set a player's access code, storing only its hash.
 
@@ -2153,6 +2240,15 @@ class IdevHandler(BaseHTTPRequestHandler):
                 payload["player"] = {"id": player["id"], "name": player["name"]}
             except KeyError:
                 payload["player"] = None
+        if session["role"] == "staff":
+            payload["access_level"] = session.get("access_level", "")
+            payload["staff_name"] = session.get("staff_name", "")
+        # Capability flags let the UI hide controls the role cannot use.
+        payload["can"] = {
+            "admin": session_is_admin(session),
+            "content": session_is_content(session),
+            "view_all": session_can_view_all(session),
+        }
         return payload
 
     def _guard(self):
@@ -2166,14 +2262,35 @@ class IdevHandler(BaseHTTPRequestHandler):
             return session, perm, False
         if perm == PERM_AUTHED:
             return session, perm, True
-        if perm == PERM_COACH:
-            if session.get("role") != "coach":
+        if perm == PERM_VIEW:
+            if not session_can_view_all(session):
                 self._reject(403, "Not allowed")
                 return session, perm, False
             return session, perm, True
-        # (PERM_PLAYER_OWN, player_id): coach always; player only for own id.
-        player_id = perm[1]
-        if session.get("role") == "coach":
+        if perm == PERM_CONTENT:
+            if not session_is_content(session):
+                self._reject(403, "Not allowed")
+                return session, perm, False
+            return session, perm, True
+        if perm in (PERM_ADMIN, PERM_COACH):
+            if not session_is_admin(session):
+                self._reject(403, "Not allowed")
+                return session, perm, False
+            return session, perm, True
+        # Tuple perms scoped to a specific player id.
+        tier, player_id = perm
+        if tier == PERM_PLAYER_VIEW:
+            # Coaches and staff may view anyone; a player may view only their own.
+            if session_can_view_all(session):
+                return session, perm, True
+            if session.get("role") == "player" and hmac.compare_digest(
+                session.get("player_id", ""), player_id
+            ):
+                return session, perm, True
+            self._reject(403, "Not allowed")
+            return session, perm, False
+        # (PERM_PLAYER_OWN, player_id): content staff/coach always; player own only.
+        if session_is_content(session):
             return session, perm, True
         if session.get("role") == "player" and hmac.compare_digest(
             session.get("player_id", ""), player_id
@@ -2200,7 +2317,10 @@ class IdevHandler(BaseHTTPRequestHandler):
         mode = payload.get("mode")
         role = None
         player_id = None
-        if mode == "coach" or (mode is None and "password" in payload):
+        staff_id = ""
+        access_level = ""
+        staff_name = ""
+        if mode == "coach" or (mode is None and "password" in payload and "name" not in payload):
             if self.store.verify_admin_password(payload.get("password")):
                 role = "coach"
         elif mode == "player" or (mode is None and "code" in payload):
@@ -2208,6 +2328,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             if found:
                 role = "player"
                 player_id = found
+        elif mode == "staff":
+            member = self.store.find_staff_by_credentials(
+                payload.get("name"), payload.get("password")
+            )
+            if member:
+                role = "staff"
+                staff_id = member["id"]
+                access_level = member.get("access_level", "")
+                staff_name = member.get("name", "")
         if role is None:
             self.rate_limiter.record_failure(key)
             send_json(self, 401, {"error": "Invalid sign-in details"})
@@ -2216,7 +2345,12 @@ class IdevHandler(BaseHTTPRequestHandler):
         # Regenerate the session identifier on login; drop any prior session.
         self.session_manager.destroy(self._cookie_sid())
         sid, created = self.session_manager.create(
-            role, player_id, self.headers.get("User-Agent", "")
+            role,
+            player_id,
+            self.headers.get("User-Agent", ""),
+            staff_id=staff_id,
+            access_level=access_level,
+            staff_name=staff_name,
         )
         send_json(
             self,

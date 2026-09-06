@@ -3,7 +3,9 @@
   const appView = document.getElementById("app-view");
   const playerLoginForm = document.getElementById("player-login-form");
   const coachLoginForm = document.getElementById("coach-login-form");
+  const staffLoginForm = document.getElementById("staff-login-form");
   const tabPlayer = document.getElementById("tab-player");
+  const tabStaff = document.getElementById("tab-staff");
   const tabCoach = document.getElementById("tab-coach");
   const loginError = document.getElementById("login-error");
   const logoutBtn = document.getElementById("logout-btn");
@@ -92,10 +94,23 @@
     role: null,
     player: null,
     csrf: null,
+    accessLevel: "",
+    can: { admin: false, content: false, view_all: false },
   };
 
+  // Full site access: coach or "Full" staff.
+  function canAdmin() {
+    return Boolean(state.can && state.can.admin);
+  }
+
+  // Ratings, notes, drills, alarms, and messages: admin or "Manager" staff.
+  function canContent() {
+    return Boolean(state.can && state.can.content);
+  }
+
+  // Anyone who cannot edit content (players and view-only staff) is read-only.
   function isReadOnly() {
-    return state.role === "player";
+    return !canContent();
   }
 
   function showError(message) {
@@ -299,7 +314,8 @@
   }
 
   async function loadStaff() {
-    if (state.role !== "coach") {
+    // Coaches and staff can browse the roster; players cannot.
+    if (state.role === "player" || !state.role) {
       return;
     }
     const data = await request("/api/staff");
@@ -560,7 +576,7 @@
         el(
           "li",
           { className: "comm-empty meta" },
-          state.role === "coach" ? "No alarms yet. Add one above." : "No alarms yet.",
+          canContent() ? "No alarms yet. Add one above." : "No alarms yet.",
         ),
       );
       return;
@@ -570,12 +586,12 @@
         alarm.target_name || (alarm.target === "all" ? "All players" : "");
       const meta = [
         formatWhen(alarm.created_at),
-        state.role === "coach" && audience ? `To: ${audience}` : null,
+        state.role !== "player" && audience ? `To: ${audience}` : null,
       ]
         .filter(Boolean)
         .join(" \u00b7 ");
       const del =
-        state.role === "coach"
+        canContent()
           ? el(
               "button",
               {
@@ -606,9 +622,9 @@
 
   function openAlarmModal() {
     if (!alarmModal) return;
-    const isCoach = state.role === "coach";
-    if (alarmForm) alarmForm.classList.toggle("hidden", !isCoach);
-    if (isCoach) populateAlarmTargets();
+    const canSend = canContent();
+    if (alarmForm) alarmForm.classList.toggle("hidden", !canSend);
+    if (canSend) populateAlarmTargets();
     renderAlarmList();
     showDialog(alarmModal);
     if (state.role === "player") {
@@ -690,7 +706,7 @@
         el(
           "li",
           { className: "comm-empty meta" },
-          state.role === "coach"
+          canContent()
             ? "No messages yet. Send one above."
             : "No messages yet.",
         ),
@@ -699,7 +715,7 @@
     }
     items.forEach((message) => {
       let tag;
-      if (state.role === "coach") {
+      if (state.role !== "player") {
         const to = messageAudienceLabel(message);
         tag = to ? `To: ${to}` : null;
       } else {
@@ -707,7 +723,7 @@
       }
       const meta = [formatWhen(message.created_at), tag].filter(Boolean).join(" \u00b7 ");
       const del =
-        state.role === "coach"
+        canContent()
           ? el(
               "button",
               {
@@ -738,9 +754,9 @@
 
   function openMessageModal() {
     if (!messageModal) return;
-    const isCoach = state.role === "coach";
-    if (messageForm) messageForm.classList.toggle("hidden", !isCoach);
-    if (isCoach) updateMessageRecipient();
+    const canSend = canContent();
+    if (messageForm) messageForm.classList.toggle("hidden", !canSend);
+    if (canSend) updateMessageRecipient();
     renderMessageList();
     showDialog(messageModal);
     if (state.role === "player") {
@@ -842,8 +858,8 @@
     if (!brandMeta) {
       return;
     }
-    // Players don't load the full roster or staff list, so only coaches see this.
-    if (state.role !== "coach") {
+    // Players don't load the full roster or staff list; coaches and staff do.
+    if (state.role === "player" || !state.role) {
       brandMeta.textContent = "";
       brandMeta.classList.add("hidden");
       return;
@@ -1116,12 +1132,15 @@
 
     const player = state.detail;
     const readOnly = isReadOnly();
+    // Editing the player profile, access codes, metrics, and stats is an admin
+    // action (coach or "Full" staff). Managers still rate, add notes/drills.
+    const canEditProfile = canAdmin();
     emptyState.classList.add("hidden");
 
     const rated = (player.progress || []).filter((item) => item.current);
 
     const actions = [];
-    if (!readOnly) {
+    if (canEditProfile) {
       actions.push(el("button", { type: "button", className: "btn", onClick: editPlayer }, "Edit"));
       actions.push(
         el(
@@ -1177,7 +1196,7 @@
                 item.current ? `${item.current} / 5` : "Not rated yet",
               ),
             ),
-            skillMetric(player, item.skill_name || "", readOnly),
+            skillMetric(player, item.skill_name || "", !canEditProfile),
           ),
         ),
       ),
@@ -1192,7 +1211,7 @@
     );
 
     const stats = player.stats || { offense: [], defense: [] };
-    const statsCard = readOnly
+    const statsCard = !canEditProfile
       ? el(
           "section",
           { className: "card stats-card" },
@@ -1940,7 +1959,8 @@
   async function loadDetail(playerId) {
     state.detail = await request(`/api/players/${encodeURIComponent(playerId)}`);
     state.selectedId = playerId;
-    if (!isReadOnly()) {
+    // Players have no roster list; coaches and staff keep the active row in sync.
+    if (state.role !== "player") {
       renderRoster();
     }
     renderDetail();
@@ -2306,11 +2326,13 @@
 
   // -- authentication ----------------------------------------------------
   function selectTab(which) {
-    const player = which === "player";
-    tabPlayer.classList.toggle("active", player);
-    tabCoach.classList.toggle("active", !player);
-    playerLoginForm.classList.toggle("hidden", !player);
-    coachLoginForm.classList.toggle("hidden", player);
+    const mode = which === "coach" || which === "staff" ? which : "player";
+    tabPlayer.classList.toggle("active", mode === "player");
+    if (tabStaff) tabStaff.classList.toggle("active", mode === "staff");
+    tabCoach.classList.toggle("active", mode === "coach");
+    playerLoginForm.classList.toggle("hidden", mode !== "player");
+    if (staffLoginForm) staffLoginForm.classList.toggle("hidden", mode !== "staff");
+    coachLoginForm.classList.toggle("hidden", mode !== "coach");
     loginError.textContent = "";
   }
 
@@ -2318,6 +2340,8 @@
     state.role = null;
     state.csrf = null;
     state.player = null;
+    state.accessLevel = "";
+    state.can = { admin: false, content: false, view_all: false };
     state.players = [];
     state.staff = [];
     state.selectedId = null;
@@ -2330,6 +2354,7 @@
     renderCommBadges();
     appView.classList.add("hidden");
     appView.classList.remove("role-player");
+    appView.classList.remove("no-admin");
     loginView.classList.remove("hidden");
   }
 
@@ -2345,9 +2370,13 @@
     state.role = session.role;
     state.csrf = session.csrf || null;
     state.player = session.player || null;
+    state.accessLevel = session.access_level || "";
+    state.can = session.can || { admin: false, content: false, view_all: false };
     loginError.textContent = "";
     loginView.classList.add("hidden");
     appView.classList.remove("hidden");
+    // Only "Full" staff and coaches see the roster admin tools.
+    appView.classList.toggle("no-admin", !canAdmin());
     if (state.role === "player") {
       appView.classList.add("role-player");
       sessionLabel.textContent = state.player ? `Signed in: ${state.player.name}` : "Signed in";
@@ -2357,7 +2386,12 @@
       }
     } else {
       appView.classList.remove("role-player");
-      sessionLabel.textContent = "Signed in as Coach";
+      if (state.role === "staff") {
+        const lvl = state.accessLevel ? ` (${state.accessLevel})` : "";
+        sessionLabel.textContent = `${session.staff_name || "Staff"}${lvl}`;
+      } else {
+        sessionLabel.textContent = "Signed in as Coach";
+      }
       loadPlayers().catch((error) => showError(error.message));
       loadStaff().catch((error) => showError(error.message));
     }
@@ -2405,12 +2439,24 @@
   }
 
   tabPlayer.addEventListener("click", () => selectTab("player"));
+  if (tabStaff) tabStaff.addEventListener("click", () => selectTab("staff"));
   tabCoach.addEventListener("click", () => selectTab("coach"));
 
   playerLoginForm.addEventListener("submit", (event) => {
     event.preventDefault();
     doLogin({ mode: "player", code: document.getElementById("player-code").value });
   });
+
+  if (staffLoginForm) {
+    staffLoginForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      doLogin({
+        mode: "staff",
+        name: document.getElementById("staff-name").value,
+        password: document.getElementById("staff-password").value,
+      });
+    });
+  }
 
   coachLoginForm.addEventListener("submit", (event) => {
     event.preventDefault();
