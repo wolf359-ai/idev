@@ -1519,11 +1519,46 @@
     );
   }
 
+  // A three-bar chart, pinned to the upper-right corner (Overall tile). The
+  // bars share a vertical gradient built from currentColor, so the fill stays
+  // coordinated with the tile accent — the same cyan as the Overall % value.
+  function barsIcon() {
+    const gradId = "tile-bars-grad";
+    return svgEl(
+      "svg",
+      {
+        class: "tile-bars",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Overall progress",
+      },
+      svgEl("title", {}, "Overall progress"),
+      svgEl(
+        "defs",
+        {},
+        svgEl(
+          "linearGradient",
+          { id: gradId, x1: "0", y1: "0", x2: "0", y2: "1" },
+          // Lighter at the top, fuller at the base (matching a bar-chart glyph).
+          svgEl("stop", { offset: "0", "stop-color": "currentColor", "stop-opacity": "0.5" }),
+          svgEl("stop", { offset: "1", "stop-color": "currentColor", "stop-opacity": "1" }),
+        ),
+      ),
+      // Three rising bars: short, medium, tall.
+      svgEl("rect", { x: "3", y: "14", width: "4.6", height: "8", rx: "1.3", fill: `url(#${gradId})` }),
+      svgEl("rect", { x: "9.7", y: "9", width: "4.6", height: "13", rx: "1.3", fill: `url(#${gradId})` }),
+      svgEl("rect", { x: "16.4", y: "4", width: "4.6", height: "18", rx: "1.3", fill: `url(#${gradId})` }),
+    );
+  }
+
   function metricTile(opts) {
     const children = [
       el("span", { className: "ribbon" }),
       opts.alarm ? warningIcon() : null,
       opts.trophy ? trophyIcon() : null,
+      opts.bars ? barsIcon() : null,
       el("div", { className: "tile-label" }, opts.label),
       el(
         "div",
@@ -1807,6 +1842,8 @@
         value: m.overall,
         unit: "%",
         accent: "cyan",
+        // A 3-bar chart glyph, gradient-tinted to match the cyan Overall %.
+        bars: true,
         spark: m.spark.length ? m.spark : null,
         records: Array.isArray(player.records) ? player.records : null,
         foot: `${m.rated}/${m.total} skills rated`,

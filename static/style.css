@@ -555,6 +555,17 @@ h1, h2, h3, p {
   pointer-events: none;
 }
 
+/* Three-bar chart pinned to the upper-right corner (Overall tile). Its color
+   is set per accent below so the gradient stays coordinated with the metric
+   number (cyan on the Overall tile). */
+.tile-bars {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  color: var(--cyan);
+  pointer-events: none;
+}
+
 .tile-value {
   font-size: 2.05rem;
   line-height: 1.05;
@@ -702,30 +713,37 @@ h1, h2, h3, p {
 .tile.cyan .ribbon { border-top-color: var(--cyan); }
 .tile.cyan .tile-value { color: var(--cyan); }
 .tile.cyan .tile-alarm { color: var(--cyan); }
+.tile.cyan .tile-bars { color: var(--cyan); }
 .tile.cyan .spark i { background: var(--cyan); }
 .tile.green .ribbon { border-top-color: var(--green); }
 .tile.green .tile-value { color: var(--green); }
 .tile.green .tile-alarm { color: var(--green); }
+.tile.green .tile-bars { color: var(--green); }
 .tile.green .spark i { background: var(--green); }
 .tile.orange .ribbon { border-top-color: var(--orange); }
 .tile.orange .tile-value { color: var(--orange); }
 .tile.orange .tile-alarm { color: var(--orange); }
+.tile.orange .tile-bars { color: var(--orange); }
 .tile.orange .spark i { background: var(--orange); }
 .tile.yellow .ribbon { border-top-color: var(--yellow); }
 .tile.yellow .tile-value { color: var(--yellow); }
 .tile.yellow .tile-alarm { color: var(--yellow); }
+.tile.yellow .tile-bars { color: var(--yellow); }
 .tile.yellow .spark i { background: var(--yellow); }
 .tile.lime .ribbon { border-top-color: var(--lime); }
 .tile.lime .tile-value { color: var(--lime); }
 .tile.lime .tile-alarm { color: var(--lime); }
+.tile.lime .tile-bars { color: var(--lime); }
 .tile.lime .spark i { background: var(--lime); }
 .tile.blue .ribbon { border-top-color: var(--blue); }
 .tile.blue .tile-value { color: var(--blue); }
 .tile.blue .tile-alarm { color: var(--blue); }
+.tile.blue .tile-bars { color: var(--blue); }
 .tile.blue .spark i { background: var(--blue); }
 .tile.red .ribbon { border-top-color: var(--red); }
 .tile.red .tile-value { color: var(--red); }
 .tile.red .tile-alarm { color: var(--red); }
+.tile.red .tile-bars { color: var(--red); }
 .tile.red .spark i { background: var(--red); }
 
 /* The trend line/area follows each tile's accent color. */
