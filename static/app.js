@@ -1,10 +1,9 @@
 (() => {
   const loginView = document.getElementById("login-view");
   const appView = document.getElementById("app-view");
-  const playerLoginForm = document.getElementById("player-login-form");
-  const coachLoginForm = document.getElementById("coach-login-form");
-  const tabPlayer = document.getElementById("tab-player");
-  const tabCoach = document.getElementById("tab-coach");
+  const loginForm = document.getElementById("login-form");
+  const loginUsername = document.getElementById("login-username");
+  const loginPassword = document.getElementById("login-password");
   const loginError = document.getElementById("login-error");
   const logoutBtn = document.getElementById("logout-btn");
   const sessionLabel = document.getElementById("session-label");
@@ -13,28 +12,103 @@
   const main = document.getElementById("main");
   const emptyState = document.getElementById("empty-state");
   const addForm = document.getElementById("add-player-form");
-  const showAdd = document.getElementById("show-add-player");
+  const addPlayerModal = document.getElementById("add-player-modal");
+  const openAddPlayerBtn = document.getElementById("open-add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
   const importForm = document.getElementById("import-roster-form");
-  const showImport = document.getElementById("show-import-roster");
+  const importPanel = document.getElementById("import-roster");
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
   const rosterPreview = document.getElementById("roster-preview");
   const previewRosterButton = document.getElementById("preview-roster");
+  const staffForm = document.getElementById("add-staff-form");
+  const staffPanel = document.getElementById("staff-tools");
+  const staffList = document.getElementById("staff-list");
+  const staffModal = document.getElementById("staff-modal");
+  const openStaffBtn = document.getElementById("open-add-staff");
+  const cancelStaff = document.getElementById("cancel-add-staff");
+  const staffManageModal = document.getElementById("staff-manage-modal");
+  const staffManageList = document.getElementById("staff-manage-list");
+  const openManageStaffBtn = document.getElementById("open-manage-staff");
+  const closeManageStaffBtn = document.getElementById("close-manage-staff");
+  const teamPanel = document.getElementById("team-tools");
+  const teamSummary = document.getElementById("team-summary");
+  const teamModal = document.getElementById("team-modal");
+  const teamForm = document.getElementById("team-form");
+  const openTeamBtn = document.getElementById("open-team-info");
+  const cancelTeam = document.getElementById("cancel-team-info");
+  const drillModal = document.getElementById("drill-modal");
+  const drillForm = document.getElementById("drill-form");
+  const cancelDrill = document.getElementById("cancel-drill");
+  const editPlayerModal = document.getElementById("edit-player-modal");
+  const editPlayerForm = document.getElementById("edit-player-form");
+  const cancelEditPlayer = document.getElementById("cancel-edit-player");
+  const playerLoginModal = document.getElementById("player-login-modal");
+  const playerLoginForm = document.getElementById("player-login-form");
+  const playerLoginUsername = document.getElementById("player-login-username");
+  const playerLoginPassword = document.getElementById("player-login-password");
+  const cancelPlayerLogin = document.getElementById("cancel-player-login");
+  const noteModal = document.getElementById("note-modal");
+  const noteForm = document.getElementById("note-form");
+  const noteInput = document.getElementById("note-input");
+  const cancelNote = document.getElementById("cancel-note");
+  const noteViewModal = document.getElementById("note-view-modal");
+  const noteViewWhen = document.getElementById("note-view-when");
+  const noteViewText = document.getElementById("note-view-text");
+  const closeNoteView = document.getElementById("close-note-view");
+  const brandTeam = document.getElementById("brand-team");
+  const brandMeta = document.getElementById("brand-meta");
+  const alarmBtn = document.getElementById("alarm-btn");
+  const alarmBadge = document.getElementById("alarm-badge");
+  const alarmModal = document.getElementById("alarm-modal");
+  const alarmForm = document.getElementById("alarm-form");
+  const alarmTarget = document.getElementById("alarm-target");
+  const alarmText = document.getElementById("alarm-text");
+  const alarmList = document.getElementById("alarm-list");
+  const closeAlarm = document.getElementById("close-alarm");
+  const messageBtn = document.getElementById("message-btn");
+  const messageBadge = document.getElementById("message-badge");
+  const messageModal = document.getElementById("message-modal");
+  const messageForm = document.getElementById("message-form");
+  const messageAudience = document.getElementById("message-audience");
+  const messageRecipientLabel = document.getElementById("message-recipient-label");
+  const messageRecipient = document.getElementById("message-recipient");
+  const messageBody = document.getElementById("message-body");
+  const messageList = document.getElementById("message-list");
+  const closeMessage = document.getElementById("close-message");
+  let drillTargetId = null;
+  let noteTargetCategory = "focus";
 
   const state = {
     players: [],
+    staff: [],
+    team: {},
+    alarms: [],
+    messages: [],
     selectedId: null,
     detail: null,
     importReady: false,
     role: null,
     player: null,
     csrf: null,
+    accessLevel: "",
+    can: { admin: false, content: false, view_all: false },
   };
 
+  // Full site access: coach or "Full" staff.
+  function canAdmin() {
+    return Boolean(state.can && state.can.admin);
+  }
+
+  // Ratings, notes, drills, alarms, and messages: admin or "Manager" staff.
+  function canContent() {
+    return Boolean(state.can && state.can.content);
+  }
+
+  // Anyone who cannot edit content (players and view-only staff) is read-only.
   function isReadOnly() {
-    return state.role === "player";
+    return !canContent();
   }
 
   function showError(message) {
@@ -186,9 +260,36 @@
       : "Preview roster";
   }
 
+  // Rating colors shared with the skill dots: red (weak) to green (strong).
+  const SCORE_COLORS = {
+    1: "hsl(352, 85%, 60%)",
+    2: "hsl(28, 90%, 58%)",
+    3: "hsl(50, 92%, 56%)",
+    4: "hsl(96, 62%, 52%)",
+    5: "hsl(150, 72%, 50%)",
+  };
+
+  function scoreColor(value) {
+    if (!value) return "#3a4757";
+    const level = Math.max(1, Math.min(5, Math.round(value)));
+    return SCORE_COLORS[level];
+  }
+
+  // "Shortstop · Second Base" when a secondary position is set, else just primary.
+  function positionLabel(player) {
+    const primary = player.position || "";
+    const secondary = player.secondary_position || "";
+    if (primary && secondary) return `${primary} · ${secondary}`;
+    return primary || secondary;
+  }
+
   function renderRoster() {
     playerList.replaceChildren();
+    if (!state.players.length) {
+      return;
+    }
     state.players.forEach((player) => {
+      const badge = player.number === null || player.number === undefined ? "—" : `#${player.number}`;
       const button = el(
         "button",
         {
@@ -196,29 +297,760 @@
           className: "player-btn" + (player.id === state.selectedId ? " active" : ""),
           onClick: () => selectPlayer(player.id),
         },
-        el("strong", {}, player.name),
-        el("div", { className: "meta" }, [jersey(player), player.position].filter(Boolean).join(" · ")),
+        el("span", { className: "player-dot" }),
+        el(
+          "span",
+          { className: "player-id" },
+          el("strong", {}, player.name),
+          el("span", { className: "meta" }, player.position || "—"),
+        ),
+        el("span", { className: "player-score" }, badge),
       );
       playerList.append(el("li", {}, button));
     });
   }
 
+  async function loadStaff() {
+    // Coaches and staff can browse the roster; players cannot.
+    if (state.role === "player" || !state.role) {
+      return;
+    }
+    const data = await request("/api/staff");
+    state.staff = data.staff || [];
+    renderStaff();
+    renderBrandMeta();
+  }
+
+  function renderStaff() {
+    if (!staffList) {
+      return;
+    }
+    staffList.replaceChildren();
+    if (!state.staff.length) {
+      staffList.append(el("li", { className: "staff-empty meta" }, "No staff added yet."));
+      return;
+    }
+    state.staff.forEach((member) => {
+      const details = [member.role, member.contact].filter(Boolean).join(" · ");
+      // Show how they sign in: their username, or a hint that no login is set.
+      const loginBit = member.username
+        ? `Login: ${member.username}`
+        : member.has_password
+          ? "Login: their name"
+          : "No login";
+      const meta = [details, loginBit].filter(Boolean).join(" · ");
+      const info = el(
+        "div",
+        { className: "staff-info" },
+        el(
+          "div",
+          { className: "staff-top" },
+          el("strong", {}, member.name),
+          el("span", { className: "staff-access" }, member.access_level || ""),
+        ),
+        meta ? el("div", { className: "meta staff-meta" }, meta) : null,
+      );
+      staffList.append(el("li", { className: "staff-item" }, info));
+    });
+  }
+
+  async function removeStaff(member) {
+    if (!window.confirm(`Remove ${member.name} from staff?`)) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, { method: "DELETE" });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function updateStaffAccess(member, level) {
+    if (level === member.access_level) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ access_level: level }),
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+      // Revert the dropdown to the stored value on failure.
+      renderManageStaff();
+    }
+  }
+
+  async function updateStaffIdentity(member, patch, btn) {
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      });
+      await loadStaff();
+      renderManageStaff();
+      if (btn) {
+        btn.textContent = "Saved";
+        setTimeout(() => {
+          btn.textContent = "Save";
+        }, 1200);
+      }
+    } catch (error) {
+      showError(error.message);
+      // Restore the fields to their stored values on failure.
+      renderManageStaff();
+    }
+  }
+
+  async function setStaffPassword(member, password) {
+    const value = (password || "").trim();
+    if (value.length < 4) {
+      showError("Password must be at least 4 characters");
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}/password`, {
+        method: "PUT",
+        body: JSON.stringify({ password: value }),
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function clearStaffPassword(member) {
+    if (!window.confirm(`Clear ${member.name}'s access password?`)) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}/password`, {
+        method: "DELETE",
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function renderManageStaff() {
+    if (!staffManageList) {
+      return;
+    }
+    staffManageList.replaceChildren();
+    if (!state.staff.length) {
+      staffManageList.append(
+        el("li", { className: "staff-empty meta" }, "No staff added yet."),
+      );
+      return;
+    }
+    state.staff.forEach((member) => {
+      const details = [member.role, member.contact].filter(Boolean).join(" · ");
+      // Full-access users can change a member's access level in place.
+      const accessSelect = el(
+        "select",
+        {
+          className: "staff-access-select",
+          "aria-label": `Access level for ${member.name}`,
+        },
+        ...["Full", "Manager", "Assistant", "Read-only"].map((lvl) =>
+          el("option", { value: lvl }, lvl),
+        ),
+      );
+      accessSelect.value = member.access_level || "Full";
+      accessSelect.addEventListener("change", () => {
+        updateStaffAccess(member, accessSelect.value);
+      });
+      const info = el(
+        "div",
+        { className: "staff-info" },
+        el(
+          "div",
+          { className: "staff-top" },
+          el("strong", {}, member.name),
+          accessSelect,
+        ),
+        el(
+          "div",
+          { className: "meta staff-meta" },
+          [
+            details,
+            member.username
+              ? `Login: ${member.username}`
+              : member.has_password
+                ? "Login: their name"
+                : "No login",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+        ),
+      );
+
+      // Editable email + username for this member (Full-access action).
+      const emailInput = el("input", {
+        type: "text",
+        className: "staff-edit-input",
+        value: member.contact || "",
+        placeholder: "Email or phone",
+        maxLength: 120,
+        autocomplete: "off",
+        "aria-label": `Email or phone for ${member.name}`,
+      });
+      const usernameInput = el("input", {
+        type: "text",
+        className: "staff-edit-input",
+        value: member.username || "",
+        placeholder: "Username",
+        minLength: 3,
+        maxLength: 32,
+        autocomplete: "off",
+        autocapitalize: "none",
+        spellcheck: false,
+        "aria-label": `Username for ${member.name}`,
+      });
+      const saveIdentityBtn = el(
+        "button",
+        { type: "button", className: "btn btn-primary staff-edit-save" },
+        "Save",
+      );
+      saveIdentityBtn.addEventListener("click", () => {
+        updateStaffIdentity(
+          member,
+          {
+            contact: emailInput.value.trim(),
+            username: usernameInput.value.trim(),
+          },
+          saveIdentityBtn,
+        );
+      });
+      const identityRow = el(
+        "div",
+        { className: "staff-manage-edit" },
+        el("label", { className: "staff-edit-field" }, "Email", emailInput),
+        el("label", { className: "staff-edit-field" }, "Username", usernameInput),
+        saveIdentityBtn,
+      );
+
+      const pwInput = el("input", {
+        type: "password",
+        className: "staff-pw-input",
+        placeholder: member.has_password ? "New password" : "Set password",
+        maxLength: 128,
+        autocomplete: "new-password",
+      });
+      const setBtn = el(
+        "button",
+        {
+          type: "button",
+          className: "btn btn-primary staff-pw-set",
+          onClick: () => {
+            setStaffPassword(member, pwInput.value).then(() => {
+              pwInput.value = "";
+            });
+          },
+        },
+        member.has_password ? "Update" : "Set",
+      );
+      const controls = [pwInput, setBtn];
+      if (member.has_password) {
+        controls.push(
+          el(
+            "button",
+            {
+              type: "button",
+              className: "btn staff-pw-clear",
+              onClick: () => clearStaffPassword(member),
+            },
+            "Clear",
+          ),
+        );
+      }
+      controls.push(
+        el(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-danger staff-remove",
+            onClick: () => removeStaff(member),
+          },
+          "Remove",
+        ),
+      );
+
+      const controlRow = el("div", { className: "staff-manage-controls" }, ...controls);
+      staffManageList.append(
+        el("li", { className: "staff-manage-item" }, info, identityRow, controlRow),
+      );
+    });
+  }
+
+  // ---------- Coach alarms + messages (header bell / envelope) ----------
+  function showDialog(modal) {
+    if (!modal) return;
+    if (typeof modal.showModal === "function") {
+      modal.showModal();
+    } else {
+      modal.setAttribute("open", "");
+    }
+  }
+
+  function hideDialog(modal) {
+    if (!modal) return;
+    if (modal.open) {
+      modal.close();
+    } else {
+      modal.removeAttribute("open");
+    }
+  }
+
+  function unreadCount(items) {
+    return (items || []).filter((item) => item && item.read === false).length;
+  }
+
+  function setBadge(badge, count) {
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count > 99 ? "99+" : String(count);
+      badge.classList.remove("hidden");
+    } else {
+      badge.classList.add("hidden");
+    }
+  }
+
+  // Only players have an unread inbox; coaches are the senders.
+  function renderCommBadges() {
+    if (state.role === "player") {
+      setBadge(alarmBadge, unreadCount(state.alarms));
+      setBadge(messageBadge, unreadCount(state.messages));
+    } else {
+      setBadge(alarmBadge, 0);
+      setBadge(messageBadge, 0);
+    }
+  }
+
+  function showCommIcons() {
+    if (!alarmBtn || !messageBtn) return;
+    const show = Boolean(state.role);
+    alarmBtn.classList.toggle("hidden", !show);
+    messageBtn.classList.toggle("hidden", !show);
+  }
+
+  async function loadAlarms() {
+    if (!state.role) return;
+    try {
+      const data = await request("/api/alarms");
+      state.alarms = data.alarms || [];
+    } catch (_error) {
+      state.alarms = [];
+    }
+    renderCommBadges();
+  }
+
+  async function loadMessages() {
+    if (!state.role) return;
+    try {
+      const data = await request("/api/messages");
+      state.messages = data.messages || [];
+    } catch (_error) {
+      state.messages = [];
+    }
+    renderCommBadges();
+  }
+
+  function populateAlarmTargets() {
+    if (!alarmTarget) return;
+    const current = alarmTarget.value;
+    alarmTarget.replaceChildren();
+    alarmTarget.append(el("option", { value: "all" }, "All players"));
+    state.players.forEach((player) => {
+      alarmTarget.append(el("option", { value: player.id }, player.name));
+    });
+    alarmTarget.value = current || "all";
+  }
+
+  function renderAlarmList() {
+    if (!alarmList) return;
+    alarmList.replaceChildren();
+    const items = state.alarms || [];
+    if (!items.length) {
+      alarmList.append(
+        el(
+          "li",
+          { className: "comm-empty meta" },
+          canContent() ? "No alarms yet. Add one above." : "No alarms yet.",
+        ),
+      );
+      return;
+    }
+    items.forEach((alarm) => {
+      const audience =
+        alarm.target_name || (alarm.target === "all" ? "All players" : "");
+      const meta = [
+        formatWhen(alarm.created_at),
+        state.role !== "player" && audience ? `To: ${audience}` : null,
+      ]
+        .filter(Boolean)
+        .join(" \u00b7 ");
+      const del =
+        canContent()
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "comm-remove",
+                title: "Delete alarm",
+                "aria-label": "Delete alarm",
+                onClick: () => removeAlarm(alarm.id),
+              },
+              "\u00d7",
+            )
+          : null;
+      alarmList.append(
+        el(
+          "li",
+          { className: `comm-item${alarm.read === false ? " unread" : ""}` },
+          el(
+            "div",
+            { className: "comm-item-body" },
+            el("div", { className: "comm-meta meta" }, meta),
+            el("p", { className: "comm-text" }, alarm.text || ""),
+          ),
+          del,
+        ),
+      );
+    });
+  }
+
+  function openAlarmModal() {
+    if (!alarmModal) return;
+    const canSend = canContent();
+    if (alarmForm) alarmForm.classList.toggle("hidden", !canSend);
+    if (canSend) populateAlarmTargets();
+    renderAlarmList();
+    showDialog(alarmModal);
+    if (state.role === "player") {
+      request("/api/alarms/read", { method: "POST" })
+        .then(() => loadAlarms())
+        .catch(() => {});
+    }
+  }
+
+  async function submitAlarm(event) {
+    event.preventDefault();
+    const text = (alarmText.value || "").trim();
+    if (!text) return;
+    try {
+      await request("/api/alarms", {
+        method: "POST",
+        body: JSON.stringify({ text, target: alarmTarget.value || "all" }),
+      });
+      alarmForm.reset();
+      if (alarmTarget) alarmTarget.value = "all";
+      await loadAlarms();
+      renderAlarmList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function removeAlarm(id) {
+    if (!window.confirm("Delete this alarm?")) return;
+    try {
+      await request(`/api/alarms/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadAlarms();
+      renderAlarmList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function updateMessageRecipient() {
+    if (!messageAudience || !messageRecipient || !messageRecipientLabel) return;
+    const audience = messageAudience.value;
+    const showRecipient = audience === "player" || audience === "staff_member";
+    messageRecipientLabel.classList.toggle("hidden", !showRecipient);
+    if (!showRecipient) return;
+    const source = audience === "player" ? state.players : state.staff;
+    messageRecipient.replaceChildren();
+    if (!source.length) {
+      messageRecipient.append(
+        el(
+          "option",
+          { value: "" },
+          audience === "player" ? "No players yet" : "No staff yet",
+        ),
+      );
+      return;
+    }
+    source.forEach((item) => {
+      messageRecipient.append(el("option", { value: item.id }, item.name));
+    });
+  }
+
+  function messageAudienceLabel(message) {
+    switch (message.audience) {
+      case "team":
+        return "Entire team";
+      case "staff":
+        return "All staff";
+      default:
+        return message.recipient_name || "";
+    }
+  }
+
+  function renderMessageList() {
+    if (!messageList) return;
+    messageList.replaceChildren();
+    const items = state.messages || [];
+    if (!items.length) {
+      messageList.append(
+        el(
+          "li",
+          { className: "comm-empty meta" },
+          canContent()
+            ? "No messages yet. Send one above."
+            : "No messages yet.",
+        ),
+      );
+      return;
+    }
+    items.forEach((message) => {
+      let tag;
+      if (state.role !== "player") {
+        const to = messageAudienceLabel(message);
+        tag = to ? `To: ${to}` : null;
+      } else {
+        tag = message.audience === "team" ? "Team message" : "Direct message";
+      }
+      const meta = [formatWhen(message.created_at), tag].filter(Boolean).join(" \u00b7 ");
+      const del =
+        canContent()
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "comm-remove",
+                title: "Delete message",
+                "aria-label": "Delete message",
+                onClick: () => removeMessage(message.id),
+              },
+              "\u00d7",
+            )
+          : null;
+      messageList.append(
+        el(
+          "li",
+          { className: `comm-item${message.read === false ? " unread" : ""}` },
+          el(
+            "div",
+            { className: "comm-item-body" },
+            el("div", { className: "comm-meta meta" }, meta),
+            el("p", { className: "comm-text" }, message.body || ""),
+          ),
+          del,
+        ),
+      );
+    });
+  }
+
+  function openMessageModal() {
+    if (!messageModal) return;
+    const canSend = canContent();
+    if (messageForm) messageForm.classList.toggle("hidden", !canSend);
+    if (canSend) updateMessageRecipient();
+    renderMessageList();
+    showDialog(messageModal);
+    if (state.role === "player") {
+      request("/api/messages/read", { method: "POST" })
+        .then(() => loadMessages())
+        .catch(() => {});
+    }
+  }
+
+  async function submitMessage(event) {
+    event.preventDefault();
+    const body = (messageBody.value || "").trim();
+    if (!body) return;
+    const audience = messageAudience.value;
+    const payload = { body, audience };
+    if (audience === "player" || audience === "staff_member") {
+      payload.recipient_id = messageRecipient.value;
+      if (!payload.recipient_id) {
+        showError("Choose a recipient");
+        return;
+      }
+    }
+    try {
+      await request("/api/messages", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      messageForm.reset();
+      updateMessageRecipient();
+      await loadMessages();
+      renderMessageList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function removeMessage(id) {
+    if (!window.confirm("Delete this message?")) return;
+    try {
+      await request(`/api/messages/${encodeURIComponent(id)}`, { method: "DELETE" });
+      await loadMessages();
+      renderMessageList();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function loadTeam() {
+    if (!state.role) {
+      return;
+    }
+    const data = await request("/api/team");
+    state.team = data.team || {};
+    renderTeamSummary();
+    renderBrandTeam();
+  }
+
+  // Show the current team + season under the header title (all signed-in users).
+  function renderBrandTeam() {
+    if (!brandTeam) {
+      return;
+    }
+    const team = state.team || {};
+    const when = [team.season, team.year].filter(Boolean).join(" ");
+    const label = [team.name, when].filter(Boolean).join(" \u00b7 ");
+    if (label) {
+      brandTeam.textContent = label;
+      brandTeam.classList.remove("hidden");
+    } else {
+      brandTeam.textContent = "";
+      brandTeam.classList.add("hidden");
+    }
+    renderBrandMeta();
+  }
+
+  // Head coaches, sorted alphabetically by last name.
+  function headCoachNames() {
+    const lastName = (name) => {
+      const parts = String(name || "").trim().split(/\s+/);
+      return (parts[parts.length - 1] || "").toLowerCase();
+    };
+    return (state.staff || [])
+      .filter(
+        (m) => typeof m.role === "string" && m.role.trim().toLowerCase() === "head coach",
+      )
+      .sort((a, b) => {
+        const la = lastName(a.name);
+        const lb = lastName(b.name);
+        if (la !== lb) {
+          return la < lb ? -1 : 1;
+        }
+        return String(a.name).localeCompare(String(b.name));
+      })
+      .map((m) => m.name);
+  }
+
+  // Roster size + head coach(es) below the team/season line (coach view only).
+  function renderBrandMeta() {
+    if (!brandMeta) {
+      return;
+    }
+    // Players don't load the full roster or staff list; coaches and staff do.
+    if (state.role === "player" || !state.role) {
+      brandMeta.textContent = "";
+      brandMeta.classList.add("hidden");
+      return;
+    }
+    const coaches = headCoachNames();
+    const coachText = coaches.length ? coaches.join(", ") : "Not set";
+    brandMeta.textContent = `Team Roster: ${state.players.length} \u00b7 Head Coach: ${coachText}`;
+    brandMeta.classList.remove("hidden");
+  }
+
+  function renderTeamSummary() {
+    if (!teamSummary) {
+      return;
+    }
+    teamSummary.replaceChildren();
+    const team = state.team || {};
+    const rows = [
+      ["Team", team.name],
+      ["Year", team.year],
+      ["Season", team.season],
+      ["Age bracket", team.age_bracket],
+      ["Years of play", team.play_year],
+    ];
+    const hasAny = rows.some(([, value]) => value);
+    if (!hasAny) {
+      teamSummary.append(
+        el("div", { className: "team-empty meta" }, "No team information yet."),
+      );
+      return;
+    }
+    rows.forEach(([label, value]) => {
+      teamSummary.append(el("dt", {}, label));
+      teamSummary.append(el("dd", { className: value ? "" : "meta" }, value || "Not set"));
+    });
+  }
+
+  function openTeamModal() {
+    const team = state.team || {};
+    document.getElementById("team-name").value = team.name || "";
+    document.getElementById("team-year-input").value = team.year || "";
+    document.getElementById("team-season").value = team.season || "";
+    document.getElementById("team-age-bracket").value = team.age_bracket || "";
+    document.getElementById("team-play-year").value = team.play_year || "";
+    if (typeof teamModal.showModal === "function") {
+      teamModal.showModal();
+    } else {
+      teamModal.setAttribute("open", "");
+    }
+    document.getElementById("team-name").focus();
+  }
+
+  function closeTeamModal() {
+    if (teamModal.open) {
+      teamModal.close();
+    }
+  }
+
   function scoreDots(skillId, current, readOnly) {
     const row = el("div", { className: "dots", role: "group", "aria-label": "Rate 1 to 5" });
-    const level = current ? Math.max(1, Math.min(5, Number(current))) : 0;
-    for (let score = 1; score <= 5; score += 1) {
-      const filled = current && score <= current;
+    const value = current ? Math.max(0, Math.min(5, Number(current))) : 0;
+    const level = value ? Math.max(1, Math.min(5, Math.round(value))) : 0;
+    for (let dot = 1; dot <= 5; dot += 1) {
+      let cls = "dot";
+      if (value >= dot) {
+        cls += ` on full score-${level}`;
+      } else if (value >= dot - 0.5) {
+        cls += ` on half score-${level}`;
+      }
       const attrs = {
         type: "button",
-        className: "dot" + (filled ? ` on score-${level}` : ""),
-        title: `Rate ${score}`,
-        "aria-label": `Rate ${score} out of 5`,
+        className: cls,
+        title: `Rate ${dot} (click left half for ${dot - 0.5})`,
+        "aria-label": `Rate up to ${dot} out of 5`,
       };
       if (readOnly) {
         attrs.disabled = true;
         attrs.className += " static";
       } else {
-        attrs.onClick = () => saveRating(skillId, score);
+        attrs.onClick = (event) => {
+          const target = event.currentTarget;
+          const rect = target.getBoundingClientRect();
+          const leftHalf = event.clientX - rect.left < rect.width / 2;
+          saveRating(skillId, leftHalf ? dot - 0.5 : dot);
+        };
       }
       row.append(el("button", attrs));
     }
@@ -250,15 +1082,21 @@
         "Rate at least three skills to see the strengths and weaknesses radar.",
       );
     }
+    // Square drawing area for the rings, with extra horizontal padding baked
+    // into the viewBox so the long side labels always fit inside the SVG (and
+    // never spill past the card / viewport when the chart is enlarged).
     const size = 320;
-    const center = size / 2;
-    const radius = center - 54;
+    const padX = 70;
+    const viewW = size + padX * 2;
+    const cx = viewW / 2;
+    const cy = size / 2;
+    const radius = cy - 34;
     const maxScore = 5;
     const rings = 5;
     const angleFor = (index) => (Math.PI * 2 * index) / items.length - Math.PI / 2;
     const point = (index, ratio) => {
       const angle = angleFor(index);
-      return [center + radius * ratio * Math.cos(angle), center + radius * ratio * Math.sin(angle)];
+      return [cx + radius * ratio * Math.cos(angle), cy + radius * ratio * Math.sin(angle)];
     };
 
     const gridRings = [];
@@ -270,8 +1108,8 @@
       gridRings.push(
         svgEl("polygon", {
           points: pts,
-          fill: "none",
-          stroke: "#d8cebf",
+          fill: ring === rings ? "rgba(34,211,238,0.03)" : "none",
+          stroke: ring === rings ? "#274152" : "#1c2735",
           "stroke-width": ring === rings ? 1.5 : 1,
         }),
       );
@@ -280,35 +1118,84 @@
     const spokes = items.map((_item, index) => {
       const [x, y] = point(index, 1);
       return svgEl("line", {
-        x1: center,
-        y1: center,
+        x1: cx,
+        y1: cy,
         x2: x.toFixed(1),
         y2: y.toFixed(1),
-        stroke: "#d8cebf",
+        stroke: "#1c2735",
         "stroke-width": 1,
       });
     });
 
-    const valuePoints = items
-      .map((item, index) => point(index, (item.value || 0) / maxScore).map((n) => n.toFixed(1)).join(","))
-      .join(" ");
-
-    const average = items.reduce((sum, item) => sum + item.value, 0) / items.length;
-    const shapeColor = scoreColor(average || 1);
-
-    const dots = items.map((item, index) => {
+    // Value vertices, each carrying its own score color.
+    const verts = items.map((item, index) => {
       const [x, y] = point(index, (item.value || 0) / maxScore);
-      return svgEl("circle", {
-        cx: x.toFixed(1),
-        cy: y.toFixed(1),
-        r: 3.5,
-        fill: item.value ? scoreColor(item.value) : "#b9b1a1",
-      });
+      return { x, y, color: scoreColor(item.value) };
     });
 
+    // Unique id prefix so multiple gradients never collide.
+    const uid = "rg" + Math.random().toString(36).slice(2, 8);
+
+    // Per-edge linear gradients that blend each vertex color into the next,
+    // making the shape multi-colored to match the skill ratings.
+    const gradientDefs = [];
+    const fillSectors = [];
+    const edges = [];
+    for (let i = 0; i < verts.length; i += 1) {
+      const a = verts[i];
+      const b = verts[(i + 1) % verts.length];
+      const gid = `${uid}-${i}`;
+      gradientDefs.push(
+        svgEl(
+          "linearGradient",
+          {
+            id: gid,
+            gradientUnits: "userSpaceOnUse",
+            x1: a.x.toFixed(1),
+            y1: a.y.toFixed(1),
+            x2: b.x.toFixed(1),
+            y2: b.y.toFixed(1),
+          },
+          svgEl("stop", { offset: "0", "stop-color": a.color }),
+          svgEl("stop", { offset: "1", "stop-color": b.color }),
+        ),
+      );
+      // Triangle from center to this edge tiles the (star-shaped) value area.
+      fillSectors.push(
+        svgEl("polygon", {
+          points: `${cx},${cy} ${a.x.toFixed(1)},${a.y.toFixed(1)} ${b.x.toFixed(1)},${b.y.toFixed(1)}`,
+          fill: `url(#${gid})`,
+          "fill-opacity": "0.26",
+          stroke: "none",
+        }),
+      );
+      edges.push(
+        svgEl("line", {
+          x1: a.x.toFixed(1),
+          y1: a.y.toFixed(1),
+          x2: b.x.toFixed(1),
+          y2: b.y.toFixed(1),
+          stroke: `url(#${gid})`,
+          "stroke-width": 2.5,
+          "stroke-linecap": "round",
+        }),
+      );
+    }
+
+    const dots = verts.map((v) =>
+      svgEl("circle", {
+        cx: v.x.toFixed(1),
+        cy: v.y.toFixed(1),
+        r: 3.8,
+        fill: v.color,
+        stroke: "#0b1019",
+        "stroke-width": 1,
+      }),
+    );
+
     const labels = items.map((item, index) => {
-      const [x, y] = point(index, 1.16);
-      const anchor = Math.abs(x - center) < 8 ? "middle" : x > center ? "start" : "end";
+      const [x, y] = point(index, 1.14);
+      const anchor = Math.abs(x - cx) < 8 ? "middle" : x > cx ? "start" : "end";
       return svgEl(
         "text",
         {
@@ -316,8 +1203,8 @@
           y: y.toFixed(1),
           "text-anchor": anchor,
           "dominant-baseline": "middle",
-          "font-size": "11",
-          fill: "#1c211e",
+          "font-size": "10",
+          fill: "#9fb0c0",
         },
         `${item.label} (${item.value || 0})`,
       );
@@ -326,22 +1213,17 @@
     const svg = svgEl(
       "svg",
       {
-        viewBox: `0 0 ${size} ${size}`,
+        viewBox: `0 0 ${viewW} ${size}`,
         width: "100%",
         role: "img",
         "aria-label": "Skill strengths and weaknesses radar",
         class: "radar",
       },
+      svgEl("defs", {}, ...gradientDefs),
       ...gridRings,
       ...spokes,
-      svgEl("polygon", {
-        points: valuePoints,
-        fill: shapeColor,
-        "fill-opacity": "0.28",
-        stroke: shapeColor,
-        "stroke-width": 2,
-        "stroke-linejoin": "round",
-      }),
+      ...fillSectors,
+      ...edges,
       ...dots,
       ...labels,
     );
@@ -357,27 +1239,29 @@
 
     const player = state.detail;
     const readOnly = isReadOnly();
+    // Editing the player profile, access codes, metrics, and stats is an admin
+    // action (coach or "Full" staff). Managers still rate, add notes/drills.
+    const canEditProfile = canAdmin();
     emptyState.classList.add("hidden");
 
     const rated = (player.progress || []).filter((item) => item.current);
-    const notes = player.notes || [];
 
     const actions = [];
-    if (!readOnly) {
+    if (canEditProfile) {
       actions.push(el("button", { type: "button", className: "btn", onClick: editPlayer }, "Edit"));
       actions.push(
         el(
           "button",
-          { type: "button", className: "btn", onClick: manageAccessCode },
-          player.has_access_code ? "Reset code" : "Access code",
+          { type: "button", className: "btn", onClick: managePlayerLogin },
+          player.has_login ? "Reset login" : "Set login",
         ),
       );
-      if (player.has_access_code) {
+      if (player.has_login) {
         actions.push(
           el(
             "button",
-            { type: "button", className: "btn btn-danger", onClick: revokeAccessCode },
-            "Remove access",
+            { type: "button", className: "btn btn-danger", onClick: clearPlayerLogin },
+            "Remove login",
           ),
         );
       }
@@ -386,28 +1270,20 @@
       );
     }
 
-    const header = el(
-      "section",
-      { className: "card who" },
-      el(
-        "div",
-        {},
-        el("strong", {}, player.name),
-        el("div", { className: "meta" }, [jersey(player), player.position].filter(Boolean).join(" · ")),
-      ),
-      actions.length ? el("div", { className: "row" }, actions) : null,
-    );
+    const metrics = computeMetrics(player);
+    const hero = renderHero(player, actions, metrics);
+    const statTiles = renderStatTiles(metrics);
 
     const skills = el(
       "section",
-      { className: "card" },
+      { className: "card skills-card" },
       el("h2", {}, "Skills and ratings"),
       el(
         "p",
         { className: "meta" },
         readOnly
           ? "Your latest rating for each skill (1–5)."
-          : "Tap a circle to save a new rating (1–5). Older ratings stay in Progress.",
+          : "Click a circle to rate (1–5); click its left half for a half point (e.g. 3.5). Older ratings stay in Progress.",
       ),
       el(
         "div",
@@ -416,9 +1292,18 @@
           el(
             "article",
             { className: "skill" },
-            el("h3", {}, item.skill_name || "Skill"),
-            scoreDots(item.skill_id, item.current, readOnly),
-            el("div", { className: "meta" }, item.current ? `${item.current} / 5` : "Not rated yet"),
+            el(
+              "div",
+              { className: "skill-main" },
+              el("h3", {}, item.skill_name || "Skill"),
+              scoreDots(item.skill_id, item.current, readOnly),
+              el(
+                "div",
+                { className: "meta" },
+                item.current ? `${item.current} / 5` : "Not rated yet",
+              ),
+            ),
+            skillMetric(player, item.skill_name || "", !canEditProfile),
           ),
         ),
       ),
@@ -426,24 +1311,24 @@
 
     const radar = el(
       "section",
-      { className: "card" },
-      el("h2", {}, "Skill radar"),
+      { className: "card radar-card" },
+      el("h2", {}, "Performance Profile"),
       el("p", { className: "meta" }, "Strengths and weaknesses across every skill at a glance."),
       el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
     );
 
     const stats = player.stats || { offense: [], defense: [] };
-    const statsCard = readOnly
+    const statsCard = !canEditProfile
       ? el(
           "section",
-          { className: "card" },
+          { className: "card stats-card" },
           el("h2", {}, "GameChanger stats"),
           statsReadOnly("Offense", stats.offense || []),
           statsReadOnly("Defense", stats.defense || []),
         )
       : el(
           "section",
-          { className: "card" },
+          { className: "card stats-card" },
           el("h2", {}, "GameChanger stats"),
           el(
             "p",
@@ -459,9 +1344,30 @@
           ),
         );
 
+    const activity = player.activity || [];
+    const activityBlock = activity.length
+      ? el(
+          "div",
+          { className: "activity" },
+          el("h3", { className: "activity-title" }, "Drill activity"),
+          el(
+            "ul",
+            { className: "activity-list" },
+            activity.map((entry) =>
+              el(
+                "li",
+                { className: "activity-item" },
+                el("span", { className: "activity-text" }, entry.text || ""),
+                el("span", { className: "activity-when meta" }, formatWhen(entry.created_at)),
+              ),
+            ),
+          ),
+        )
+      : null;
+
     const progress = el(
       "section",
-      { className: "card" },
+      { className: "card progress-card" },
       el("h2", {}, "Progress"),
       rated.length
         ? rated.map((item) =>
@@ -480,60 +1386,770 @@
             ),
           )
         : el("p", { className: "empty" }, "Rate a skill to start a progress history."),
+      activityBlock,
     );
 
-    const cards = [header, skills, radar, statsCard, progress];
+    // Coach notes now live in the Focus Area tile (with modal entry), so the
+    // standalone Notes card is gone to avoid duplicating the same record.
+    const dash = el(
+      "div",
+      { className: "dash" },
+      skills,
+      radar,
+      statsCard,
+      progress,
+    );
 
-    if (readOnly) {
-      const noteList = el(
-        "ul",
-        { className: "notes" },
-        notes.length
-          ? notes.map((note) =>
-              el(
-                "li",
-                {},
-                el("div", { className: "note-top" }, el("span", { className: "meta" }, formatWhen(note.created_at))),
-                el("p", {}, note.text || ""),
-              ),
-            )
-          : el("li", { className: "empty" }, "No notes yet."),
-      );
-      cards.push(el("section", { className: "card" }, el("h2", {}, "Notes"), noteList));
-    } else {
-      const noteForm = el(
-        "form",
-        { className: "form", onSubmit: saveNote },
-        el("label", {}, "New note", el("textarea", { name: "text", maxlength: "2000", required: true })),
-        el("button", { type: "submit", className: "btn btn-primary" }, "Save note"),
-      );
-      const noteList = el(
-        "ul",
-        { className: "notes" },
-        notes.length
-          ? notes.map((note) =>
-              el(
-                "li",
-                {},
-                el(
-                  "div",
-                  { className: "note-top" },
-                  el("span", { className: "meta" }, formatWhen(note.created_at)),
-                  el(
-                    "button",
-                    { type: "button", className: "btn btn-danger", onClick: () => removeNote(note.id) },
-                    "Delete",
-                  ),
-                ),
-                el("p", {}, note.text || ""),
-              ),
-            )
-          : el("li", { className: "empty" }, "No notes yet."),
-      );
-      cards.push(el("section", { className: "card" }, el("h2", {}, "Notes"), noteForm, noteList));
+    const nodes = [hero];
+    if (statTiles) {
+      nodes.push(statTiles);
     }
+    nodes.push(dash);
+    main.replaceChildren(...nodes);
+  }
 
-    main.replaceChildren(...cards);
+  // Map a 1-5 value to a tile accent color name.
+  function accentForScore(value) {
+    const v = Math.round(Number(value) || 0);
+    return { 1: "red", 2: "orange", 3: "yellow", 4: "lime", 5: "green" }[v] || "cyan";
+  }
+
+  function computeMetrics(player) {
+    const items = player.progress || [];
+    const rated = items.filter((item) => item.current);
+    const values = rated.map((item) => Number(item.current) || 0);
+    const avg = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    const overall = Math.round((avg / 5) * 100);
+    let top = null;
+    let low = null;
+    rated.forEach((item) => {
+      const v = Number(item.current) || 0;
+      const name = item.skill_name || "Skill";
+      if (!top || v > top.value) {
+        top = { name, value: v };
+      }
+      // Track every skill tied at the lowest score so the Focus Area card can
+      // list them all (e.g. "Power, Pitching" when both are 2.5).
+      if (!low || v < low.value) {
+        low = { name, value: v, names: [name] };
+      } else if (v === low.value) {
+        low.names.push(name);
+      }
+    });
+    const spark = items.map((item) => Number(item.current) || 0);
+    const stats = player.stats || {};
+    const findStat = (abbr) => {
+      const groups = [stats.offense || [], stats.defense || []];
+      for (const group of groups) {
+        const found = group.find((s) => (s.abbr || "").toUpperCase() === abbr);
+        if (found && found.display !== undefined && found.display !== null && found.display !== "") {
+          return found.display;
+        }
+      }
+      return null;
+    };
+    const avgTrend = computeAvgTrend(weeklyAvgSeries(player));
+    return { rated: rated.length, total: items.length, avg, overall, top, low, spark, avgTrend, findStat };
+  }
+
+  // Reconstruct the player's average rating at the end of each week from the raw
+  // rating history (latest score per skill as of that moment, averaged).
+  function weeklyAvgSeries(player) {
+    const ratings = (player.ratings || [])
+      .map((r) => ({ skill: r.skill_id, score: Number(r.score) || 0, t: Date.parse(r.created_at) }))
+      .filter((r) => r.skill && !Number.isNaN(r.t))
+      .sort((a, b) => a.t - b.t);
+    if (ratings.length < 2) {
+      return [];
+    }
+    const WEEK = 7 * 24 * 3600 * 1000;
+    const tMin = ratings[0].t;
+    const tMax = Math.max(ratings[ratings.length - 1].t, Date.now());
+    const bounds = [tMin];
+    for (let t = tMin + WEEK; t < tMax; t += WEEK) {
+      bounds.push(t);
+    }
+    bounds.push(tMax);
+    const avgAsOf = (t) => {
+      const latest = new Map();
+      for (const r of ratings) {
+        if (r.t <= t) {
+          latest.set(r.skill, r.score);
+        } else {
+          break;
+        }
+      }
+      const vals = [...latest.values()];
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+    const series = bounds.map(avgAsOf).filter((v) => v !== null);
+    // Keep at most the last 10 weekly points for a compact sparkline.
+    return series.slice(-10);
+  }
+
+  // Compare the two most recent weekly averages to derive a direction + percent.
+  function computeAvgTrend(series) {
+    if (!series || series.length < 2) {
+      return { series: series || [], direction: "flat", pct: 0 };
+    }
+    const last = series[series.length - 1];
+    const prev = series[series.length - 2];
+    const delta = last - prev;
+    const eps = 0.049; // ratings move in 0.5 steps; ignore floating-point noise
+    const direction = delta > eps ? "up" : delta < -eps ? "down" : "flat";
+    const pct = prev > 0 ? Math.round((delta / prev) * 100) : last > 0 ? 100 : 0;
+    return { series, direction, pct };
+  }
+
+  // A warning triangle with an exclamation point. The stroke/mark inherit the
+  // tile's accent color (via currentColor), so it matches the metric number.
+  function warningIcon() {
+    return svgEl(
+      "svg",
+      {
+        class: "tile-alarm",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Needs attention",
+      },
+      svgEl("title", {}, "Needs attention"),
+      // Rounded triangle outline.
+      svgEl("path", {
+        d: "M12 3.2 L21.4 19.4 A1.4 1.4 0 0 1 20.2 21.4 H3.8 A1.4 1.4 0 0 1 2.6 19.4 Z",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.8",
+        "stroke-linejoin": "round",
+      }),
+      // Exclamation stem.
+      svgEl("line", {
+        x1: "12",
+        y1: "9.5",
+        x2: "12",
+        y2: "14.5",
+        stroke: "currentColor",
+        "stroke-width": "1.9",
+        "stroke-linecap": "round",
+      }),
+      // Exclamation dot.
+      svgEl("circle", { cx: "12", cy: "17.4", r: "1.15", fill: "currentColor" }),
+    );
+  }
+
+  // A gold trophy, pinned to the upper-right corner (used on the Top Skill tile).
+  function trophyIcon() {
+    return svgEl(
+      "svg",
+      {
+        class: "tile-trophy",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Top skill",
+      },
+      svgEl("title", {}, "Top skill"),
+      // Cup bowl.
+      svgEl("path", {
+        d: "M6 4 H18 V6 C18 9.3 15.3 12 12 12 C8.7 12 6 9.3 6 6 Z",
+        fill: "currentColor",
+      }),
+      // Left and right handles.
+      svgEl("path", {
+        d: "M6 5.2 C3.4 5.2 3.4 9 6.3 9.3",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.4",
+        "stroke-linecap": "round",
+      }),
+      svgEl("path", {
+        d: "M18 5.2 C20.6 5.2 20.6 9 17.7 9.3",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "1.4",
+        "stroke-linecap": "round",
+      }),
+      // Stem, base trapezoid, and foot bar.
+      svgEl("line", {
+        x1: "12",
+        y1: "12",
+        x2: "12",
+        y2: "16",
+        stroke: "currentColor",
+        "stroke-width": "2",
+      }),
+      svgEl("path", { d: "M10 16 H14 L15 19 H9 Z", fill: "currentColor" }),
+      svgEl("rect", { x: "8", y: "19", width: "8", height: "2", rx: "0.6", fill: "currentColor" }),
+    );
+  }
+
+  // A three-bar chart, pinned to the upper-right corner (Overall tile). The
+  // bars share a vertical gradient built from currentColor, so the fill stays
+  // coordinated with the tile accent — the same cyan as the Overall % value.
+  function barsIcon() {
+    const gradId = "tile-bars-grad";
+    return svgEl(
+      "svg",
+      {
+        class: "tile-bars",
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": "Overall progress",
+      },
+      svgEl("title", {}, "Overall progress"),
+      svgEl(
+        "defs",
+        {},
+        svgEl(
+          "linearGradient",
+          { id: gradId, x1: "0", y1: "0", x2: "0", y2: "1" },
+          // Lighter at the top, fuller at the base (matching a bar-chart glyph).
+          svgEl("stop", { offset: "0", "stop-color": "currentColor", "stop-opacity": "0.5" }),
+          svgEl("stop", { offset: "1", "stop-color": "currentColor", "stop-opacity": "1" }),
+        ),
+      ),
+      // Three rising bars: short, medium, tall.
+      svgEl("rect", { x: "3", y: "14", width: "4.6", height: "8", rx: "1.3", fill: `url(#${gradId})` }),
+      svgEl("rect", { x: "9.7", y: "9", width: "4.6", height: "13", rx: "1.3", fill: `url(#${gradId})` }),
+      svgEl("rect", { x: "16.4", y: "4", width: "4.6", height: "18", rx: "1.3", fill: `url(#${gradId})` }),
+    );
+  }
+
+  // An up/down trend arrow pinned to the upper-right corner: green when the
+  // metric increased week over week, red when it decreased. Returns null for a
+  // flat/absent trend so no icon is drawn.
+  function trendIcon(trend) {
+    const dir = trend && trend.direction;
+    if (dir !== "up" && dir !== "down") return null;
+    const up = dir === "up";
+    return svgEl(
+      "svg",
+      {
+        class: `tile-trend ${dir}`,
+        viewBox: "0 0 24 24",
+        width: "22",
+        height: "22",
+        role: "img",
+        "aria-label": up ? "Trending up" : "Trending down",
+      },
+      svgEl("title", {}, up ? "Trending up" : "Trending down"),
+      svgEl("path", {
+        d: up ? "M12 19 V7 M6.5 12.5 L12 7 L17.5 12.5" : "M12 5 V17 M6.5 11.5 L12 17 L17.5 11.5",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2.2",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      }),
+    );
+  }
+
+  function metricTile(opts) {
+    const children = [
+      el("span", { className: "ribbon" }),
+      opts.alarm ? warningIcon() : null,
+      opts.trophy ? trophyIcon() : null,
+      opts.bars ? barsIcon() : null,
+      opts.trend ? trendIcon(opts.trend) : null,
+      el("div", { className: "tile-label" }, opts.label),
+      el(
+        "div",
+        {},
+        el("span", { className: "tile-value" }, opts.value),
+        opts.unit ? el("span", { className: "tile-unit" }, opts.unit) : null,
+      ),
+    ];
+    if (opts.spark && opts.spark.length) {
+      children.push(
+        el(
+          "div",
+          { className: "spark" },
+          opts.spark.map((v) =>
+            el("i", { style: `height:${Math.max(10, Math.round(((Number(v) || 0) / 5) * 100))}%` }),
+          ),
+        ),
+      );
+    }
+    if (opts.trend && opts.trend.series && opts.trend.series.length >= 2) {
+      children.push(trendTag(opts.trend), trendSpark(opts.trend));
+    }
+    if (opts.records && opts.records.length) {
+      const prs = prList(opts.records);
+      if (prs) {
+        children.push(prs);
+      }
+    }
+    // When a tile shows notes, keep the skill-name foot above the notes block
+    // so the bottom-aligned "Add note" button lands at the card's bottom edge
+    // (matching the "Add drill" tile).
+    if (opts.foot) {
+      const footClass = opts.notes ? "tile-foot tile-foot-inline" : "tile-foot";
+      children.push(el("div", { className: footClass }, opts.foot));
+    }
+    if (opts.notes) {
+      children.push(notesBlock(opts.notes));
+    }
+    return el("div", { className: `tile ${opts.accent || "cyan"}` }, ...children);
+  }
+
+  // Notes for a given card. Legacy notes without a category belong to "focus".
+  function notesForCategory(player, category) {
+    const all = Array.isArray(player.notes) ? player.notes : [];
+    return all.filter((note) => (note.category || "focus") === category);
+  }
+
+  // A running record of coach notes shown inside a tile: history + an
+  // "Add note" button (coaches only) that opens the note modal. Notes are
+  // grouped by category so each tile keeps its own record.
+  function notesBlock(cfg) {
+    const items = Array.isArray(cfg.items) ? cfg.items : [];
+    const category = cfg.category || "focus";
+    const children = [
+      el("div", { className: "note-block-head" }, "Coach notes"),
+    ];
+    if (!items.length) {
+      children.push(el("div", { className: "note-empty meta" }, "No notes yet."));
+    } else {
+      const list = el("ul", { className: "note-list" });
+      items.forEach((note) => {
+        const del = cfg.canEdit
+          ? el(
+              "button",
+              {
+                type: "button",
+                className: "note-remove",
+                title: "Delete note",
+                "aria-label": "Delete note",
+                onClick: () => removeNote(note.id),
+              },
+              "\u00d7",
+            )
+          : null;
+        // Each note collapses to a single clickable line; the full text opens
+        // in a read-only modal. The line highlights on hover.
+        const preview = (note.text || "").replace(/\s+/g, " ").trim() || "Untitled note";
+        const openBtn = el(
+          "button",
+          {
+            type: "button",
+            className: "note-open",
+            title: "View note",
+            onClick: () => openNoteView(note),
+          },
+          el("span", { className: "note-when meta" }, formatWhen(note.created_at)),
+          el("span", { className: "note-preview" }, preview),
+        );
+        list.append(
+          el("li", { className: "note-item" }, openBtn, del),
+        );
+      });
+      children.push(list);
+    }
+    if (cfg.canEdit) {
+      children.push(
+        el(
+          "div",
+          { className: "note-actions" },
+          el(
+            "button",
+            { type: "button", className: "btn note-add", onClick: () => openNoteModal(category) },
+            "Add note",
+          ),
+        ),
+      );
+    }
+    return el("div", { className: "note-block" }, ...children);
+  }
+
+  // Render personal-record (PR) notes inside a metric tile, newest first.
+  function prList(records) {
+    const fmt = (n) => {
+      const num = Number(n);
+      return Number.isInteger(num) ? String(num) : num.toFixed(2);
+    };
+    const items = records
+      // A record without a delta is a legacy first-entry baseline, not a real PR.
+      .filter((rec) => rec.delta !== null && rec.delta !== undefined)
+      .slice(0, 6)
+      .map((rec) => {
+      const unit = rec.unit ? ` ${rec.unit}` : "";
+      const num = Number(rec.delta);
+      const sign = num > 0 ? "+" : num < 0 ? "\u2212" : "";
+      // The achieved value (e.g. "48 MPH") plus the change (e.g. "(+2)").
+      const value = `${fmt(rec.value)}${unit}`;
+      const change = `(${sign}${fmt(Math.abs(num))})`;
+      return el(
+        "li",
+        { className: "pr-item" },
+        el("span", { className: "pr-arrow" }, "\u25B2"),
+        el(
+          "span",
+          { className: "pr-text" },
+          el("span", { className: "pr-title" }, "New PR"),
+          " \u2014 ",
+          el("span", { className: "pr-name" }, rec.label),
+          " ",
+          el("span", { className: "pr-value" }, value),
+          " ",
+          el("span", { className: "pr-delta" }, change),
+        ),
+      );
+    });
+    if (!items.length) {
+      return null;
+    }
+    return el(
+      "ul",
+      { className: "pr-list" },
+      ...items,
+    );
+  }
+
+  // A small "week over week" indicator: arrow + percent change.
+  function trendTag(trend) {
+    const glyph = trend.direction === "up" ? "\u25B2" : trend.direction === "down" ? "\u25BC" : "\u2014";
+    const pct = `${trend.pct > 0 ? "+" : ""}${trend.pct}%`;
+    return el(
+      "div",
+      { className: `trend-tag ${trend.direction}` },
+      el("span", { className: "trend-arrow" }, glyph),
+      el("span", { className: "trend-pct" }, pct),
+      el("span", { className: "trend-note" }, "week over week"),
+    );
+  }
+
+  // A line sparkline of the weekly average rating that fills the tile body.
+  function trendSpark(trend) {
+    const s = trend.series;
+    const n = s.length;
+    let lo = Math.min(...s);
+    let hi = Math.max(...s);
+    if (hi - lo < 1) {
+      const mid = (hi + lo) / 2;
+      lo = mid - 0.5;
+      hi = mid + 0.5;
+    }
+    const W = 100;
+    const H = 100;
+    const pad = 8;
+    const xAt = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * W);
+    const yAt = (v) => H - pad - ((v - lo) / (hi - lo)) * (H - pad * 2);
+    const pts = s.map((v, i) => [xAt(i), yAt(v)]);
+    const lineD = smoothPathD(pts);
+    const areaD = `${lineD} L ${W},${H} L 0,${H} Z`;
+    // A vertical gradient fades the fill from the tile accent (top) to
+    // transparent (bottom). currentColor resolves to each tile's accent.
+    const gradId = `trend-grad-${Math.random().toString(36).slice(2, 9)}`;
+    const gradient = svgEl(
+      "linearGradient",
+      { id: gradId, x1: "0", y1: "0", x2: "0", y2: "1" },
+      svgEl("stop", { offset: "0", "stop-color": "currentColor", "stop-opacity": "0.5" }),
+      svgEl("stop", { offset: "1", "stop-color": "currentColor", "stop-opacity": "0" }),
+    );
+    const defs = svgEl("defs", {}, gradient);
+    const area = svgEl("path", {
+      d: areaD,
+      class: "trend-area",
+      style: `fill: url(#${gradId}); opacity: 1;`,
+    });
+    const line = svgEl("path", {
+      d: lineD,
+      class: "trend-line",
+      fill: "none",
+      "stroke-width": "2",
+      "stroke-linecap": "round",
+      "stroke-linejoin": "round",
+      "vector-effect": "non-scaling-stroke",
+    });
+    return svgEl(
+      "svg",
+      {
+        viewBox: `0 0 ${W} ${H}`,
+        class: "trend-spark",
+        preserveAspectRatio: "none",
+        "aria-hidden": "true",
+      },
+      defs,
+      area,
+      line,
+    );
+  }
+
+  // Build a smoothed (Catmull-Rom -> cubic Bezier) SVG path through the points
+  // so the trendline curves gently instead of forming sharp peaks and valleys.
+  function smoothPathD(pts) {
+    if (!pts.length) {
+      return "";
+    }
+    if (pts.length < 3) {
+      return "M " + pts.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" L ");
+    }
+    const t = 1 / 6; // tension; lower = tighter to the points
+    const d = [`M ${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`];
+    for (let i = 0; i < pts.length - 1; i += 1) {
+      const p0 = pts[i - 1] || pts[i];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2] || p2;
+      const c1x = p1[0] + (p2[0] - p0[0]) * t;
+      const c1y = p1[1] + (p2[1] - p0[1]) * t;
+      const c2x = p2[0] - (p3[0] - p1[0]) * t;
+      const c2y = p2[1] - (p3[1] - p1[1]) * t;
+      d.push(
+        `C ${c1x.toFixed(1)},${c1y.toFixed(1)} ${c2x.toFixed(1)},${c2y.toFixed(1)} ` +
+          `${p2[0].toFixed(1)},${p2[1].toFixed(1)}`,
+      );
+    }
+    return d.join(" ");
+  }
+
+  function renderHero(player, actions, m) {
+    const tags = [el("span", { className: "tag on" }, `Overall ${m.overall}%`)];
+    if (player.team_year) {
+      tags.push(el("span", { className: "tag" }, `${player.team_year} team year`));
+    }
+    if (player.grad_year) {
+      tags.push(el("span", { className: "tag" }, `Class of ${player.grad_year}`));
+    }
+    if (player.has_login) {
+      tags.push(el("span", { className: "tag on" }, "Login set"));
+    } else {
+      tags.push(el("span", { className: "tag" }, "No login"));
+    }
+    const idPanel = el(
+      "section",
+      { className: "card hero-id" },
+      el("div", { className: "hero-num" }, jersey(player) || "—"),
+      el("div", { className: "hero-name" }, player.name),
+      el("div", { className: "hero-sub" }, positionLabel(player) || "Athlete"),
+      el("div", { className: "tags" }, tags),
+      actions.length ? el("div", { className: "row", style: "margin-top:0.7rem" }, actions) : null,
+    );
+
+    const tiles = el(
+      "div",
+      { className: "tiles" },
+      metricTile({
+        label: "Overall",
+        value: m.overall,
+        unit: "%",
+        accent: "cyan",
+        // A 3-bar chart glyph, gradient-tinted to match the cyan Overall %.
+        bars: true,
+        spark: m.spark.length ? m.spark : null,
+        records: Array.isArray(player.records) ? player.records : null,
+        foot: `${m.rated}/${m.total} skills rated`,
+      }),
+      metricTile({
+        label: "Avg Rating",
+        value: m.avg ? m.avg.toFixed(1) : "0.0",
+        unit: "/5",
+        accent: accentForScore(m.avg),
+        trend: m.avgTrend,
+        foot: "Across rated skills",
+      }),
+      metricTile({
+        label: "Top Skill",
+        value: m.top ? m.top.value : "—",
+        unit: m.top ? "/5" : "",
+        accent: "green",
+        // A gold trophy marks the player's strongest skill.
+        trophy: Boolean(m.top),
+        foot: m.top ? m.top.name : "Rate a skill",
+        notes: { items: notesForCategory(player, "top"), canEdit: !isReadOnly(), category: "top" },
+      }),
+      metricTile({
+        label: "Focus Area",
+        value: m.low ? m.low.value : "—",
+        unit: m.low ? "/5" : "",
+        accent: m.low ? accentForScore(m.low.value) : "orange",
+        // A focus score of 2.5 or lower flags the card as needing attention.
+        alarm: m.low && Number(m.low.value) <= 2.5,
+        // List every skill tied at the lowest score, not just one.
+        foot: m.low ? (m.low.names || [m.low.name]).join(", ") : "Rate a skill",
+        notes: { items: notesForCategory(player, "focus"), canEdit: !isReadOnly(), category: "focus" },
+      }),
+      drillsTile(player),
+    );
+
+    return el("div", { className: "hero" }, idPanel, tiles);
+  }
+
+  // Only http(s) links may become clickable anchors (blocks javascript:/data:).
+  function safeLink(url) {
+    return typeof url === "string" && /^https?:\/\//i.test(url.trim());
+  }
+
+  // "Skills Assigned" tile: a bulleted list of up to 10 development drills.
+  // Compact the free-text drill cadence for display, e.g.
+  // "3x per week" -> "3x-pw", "Daily warmup" -> "Daily", "Weekly" -> "pw".
+  function abbreviateFreq(text) {
+    if (!text) {
+      return "";
+    }
+    let s = String(text).trim();
+    if (/\bdaily\b/i.test(s)) {
+      return "Daily";
+    }
+    s = s
+      .replace(/\btimes\b/gi, "x")
+      .replace(/\bper\s*week\b/gi, "pw")
+      .replace(/\bper\s*day\b/gi, "pd")
+      .replace(/\bper\s*month\b/gi, "pm")
+      .replace(/\bweekly\b/gi, "pw")
+      .replace(/\bmonthly\b/gi, "pm")
+      .replace(/\/\s*week\b/gi, "-pw")
+      .replace(/\/\s*day\b/gi, "-pd")
+      .replace(/\/\s*month\b/gi, "-pm");
+    // Join a count like "3x pw" into "3x-pw".
+    s = s.replace(/(\d+)\s*x\s*[-\s]*\s*(pw|pd|pm)\b/gi, "$1x-$2");
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  function drillsTile(player) {
+    const readOnly = isReadOnly();
+    const drills = Array.isArray(player.drills) ? player.drills : [];
+    const children = [
+      el("span", { className: "ribbon" }),
+      el("div", { className: "tile-label" }, "Skills Assigned"),
+    ];
+    if (!drills.length) {
+      children.push(el("div", { className: "drill-empty meta" }, "No drills assigned yet."));
+    } else {
+      children.push(
+        el(
+          "div",
+          { className: "drill-head" },
+          el("span", { className: "drill-head-name" }, "Skill Name"),
+          el("span", { className: "drill-head-dur" }, "Duration"),
+        ),
+      );
+      const list = el("ul", { className: "drill-list" });
+      drills.slice(0, 10).forEach((drill) => {
+        const label = safeLink(drill.link)
+          ? el(
+              "a",
+              {
+                className: "drill-link",
+                href: drill.link,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                onClick: () => logDrillOpen(player.id, drill.name),
+              },
+              drill.name,
+            )
+          : el("span", { className: "drill-name" }, drill.name);
+        const freq = el(
+          "span",
+          { className: "drill-freq meta", title: drill.frequency || "" },
+          abbreviateFreq(drill.frequency) || "\u2014",
+        );
+        const remove = readOnly
+          ? null
+          : el(
+              "button",
+              {
+                type: "button",
+                className: "drill-remove",
+                title: `Remove ${drill.name}`,
+                "aria-label": `Remove ${drill.name}`,
+                onClick: () => removeDrill(player.id, drill),
+              },
+              "\u00d7",
+            );
+        list.append(
+          el(
+            "li",
+            { className: "drill-item" },
+            el("span", { className: "drill-name-cell" }, label),
+            el("span", { className: "drill-dur-cell" }, freq, remove),
+          ),
+        );
+      });
+      children.push(list);
+    }
+    if (!readOnly) {
+      const full = drills.length >= 10;
+      children.push(
+        el(
+          "div",
+          { className: "drill-actions" },
+          el(
+            "button",
+            {
+              type: "button",
+              className: "btn drill-add",
+              disabled: full || undefined,
+              onClick: () => openDrillModal(player.id),
+            },
+            full ? "Max 10 drills" : "Add drill",
+          ),
+        ),
+      );
+    }
+    return el("div", { className: "tile blue drill-tile" }, ...children);
+  }
+
+  async function removeDrill(playerId, drill) {
+    if (!window.confirm(`Remove drill "${drill.name}"?`)) {
+      return;
+    }
+    try {
+      await request(
+        `/api/players/${encodeURIComponent(playerId)}/drills/${encodeURIComponent(drill.id)}`,
+        { method: "DELETE" },
+      );
+      await loadDetail(state.selectedId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  function openDrillModal(playerId) {
+    drillTargetId = playerId;
+    drillForm.reset();
+    if (typeof drillModal.showModal === "function") {
+      drillModal.showModal();
+    } else {
+      drillModal.setAttribute("open", "");
+    }
+    document.getElementById("drill-name").focus();
+  }
+
+  function closeDrillModal() {
+    if (drillModal.open) {
+      drillModal.close();
+    }
+    drillForm.reset();
+    drillTargetId = null;
+  }
+
+  // Secondary tile row from GameChanger computed stats, when present.
+  function renderStatTiles(m) {
+    const specs = [
+      { abbr: "AVG", label: "Batting Avg", accent: "yellow" },
+      { abbr: "OBP", label: "On-Base %", accent: "cyan" },
+      { abbr: "SLG", label: "Slugging", accent: "orange" },
+      { abbr: "OPS", label: "OPS", accent: "lime" },
+      { abbr: "FLD%", label: "Fielding %", accent: "green" },
+    ];
+    const tiles = specs
+      .map((spec) => {
+        const display = m.findStat(spec.abbr);
+        if (display === null) {
+          return null;
+        }
+        return metricTile({ label: spec.label, value: display, accent: spec.accent, foot: "GameChanger" });
+      })
+      .filter(Boolean);
+    if (!tiles.length) {
+      return null;
+    }
+    return el("div", { className: "tiles" }, tiles);
   }
 
   function statsGroup(title, items) {
@@ -601,6 +2217,7 @@
     const exists = state.players.some((player) => player.id === nextId);
     state.selectedId = exists ? nextId : (state.players[0] && state.players[0].id) || null;
     renderRoster();
+    renderBrandMeta();
     if (state.selectedId) {
       await loadDetail(state.selectedId);
     } else {
@@ -612,7 +2229,8 @@
   async function loadDetail(playerId) {
     state.detail = await request(`/api/players/${encodeURIComponent(playerId)}`);
     state.selectedId = playerId;
-    if (!isReadOnly()) {
+    // Players have no roster list; coaches and staff keep the active row in sync.
+    if (state.role !== "player") {
       renderRoster();
     }
     renderDetail();
@@ -621,6 +2239,124 @@
   async function selectPlayer(playerId) {
     try {
       await loadDetail(playerId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // Per-skill editable metric shown on the far right of a skill box.
+  const SKILL_METRICS = {
+    Hitting: {
+      key: "exit_velo",
+      heading: "Exit Velo",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.01,
+      aria: "Exit velocity in MPH",
+    },
+    Power: {
+      key: "distance",
+      heading: "Distance",
+      unit: "Feet",
+      min: 0,
+      max: 1000,
+      step: 0.01,
+      aria: "Hitting distance in feet",
+    },
+    "Base running": {
+      key: "base_time",
+      heading: "Time",
+      unit: "(s)",
+      min: 0,
+      max: 60,
+      step: 0.01,
+      aria: "Base-running time in seconds",
+    },
+    Pitching: {
+      key: "pitch_velo",
+      heading: "Velocity",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.01,
+      aria: "Pitching velocity in MPH",
+    },
+    Throwing: {
+      key: "throw_speed",
+      heading: "IF Velo",
+      unit: "MPH",
+      min: 0,
+      max: 200,
+      step: 0.01,
+      aria: "Infield throwing velocity in MPH",
+    },
+  };
+
+  function metricDisplay(value) {
+    return value === "" || value === null || value === undefined ? "—" : String(value);
+  }
+
+  function skillMetric(player, skillName, readOnly) {
+    const spec = SKILL_METRICS[skillName];
+    if (!spec) {
+      return null;
+    }
+    return el(
+      "div",
+      { className: "skill-metric" },
+      el("h3", {}, spec.heading),
+      metricField(player, readOnly, spec),
+      el("div", { className: "skill-metric-unit" }, spec.unit),
+    );
+  }
+
+  function metricField(player, readOnly, spec) {
+    const value = player[spec.key];
+    if (readOnly) {
+      return el("div", { className: "skill-metric-value" }, metricDisplay(value));
+    }
+    const input = el("input", {
+      type: "number",
+      className: "skill-metric-input",
+      min: String(spec.min),
+      max: String(spec.max),
+      step: String(spec.step),
+      placeholder: "—",
+      "aria-label": spec.aria,
+      value: value === "" || value === null || value === undefined ? "" : String(value),
+    });
+    input.addEventListener("change", () => saveMetric(spec.key, input));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+    return input;
+  }
+
+  // Save a single metric without re-rendering the whole detail, so the value the
+  // coach entered stays put (and is replaced by the server's normalized value).
+  async function saveMetric(key, input) {
+    if (!state.selectedId) {
+      return;
+    }
+    try {
+      const updated = await request(
+        `/api/players/${encodeURIComponent(state.selectedId)}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({ [key]: input.value.trim() }),
+        },
+      );
+      const saved = updated && key in updated ? updated[key] : input.value.trim();
+      if (state.detail) {
+        state.detail[key] = saved;
+      }
+      input.value = saved === "" || saved === null || saved === undefined ? "" : String(saved);
+      // Refresh so any new personal-record note shows in the Overall tile.
+      await loadDetail(state.selectedId);
     } catch (error) {
       showError(error.message);
     }
@@ -661,19 +2397,76 @@
     }
   }
 
+  function openNoteModal(category) {
+    if (!state.selectedId || !noteModal) {
+      return;
+    }
+    noteTargetCategory = category === "top" ? "top" : "focus";
+    const title = document.getElementById("note-title");
+    if (title) {
+      title.textContent =
+        noteTargetCategory === "top" ? "Add top skill note" : "Add focus area note";
+    }
+    noteForm.reset();
+    if (typeof noteModal.showModal === "function") {
+      noteModal.showModal();
+    } else {
+      noteModal.setAttribute("open", "");
+    }
+    if (noteInput) {
+      noteInput.focus();
+    }
+  }
+
+  function closeNoteModal() {
+    if (noteModal.open) {
+      noteModal.close();
+    } else {
+      noteModal.removeAttribute("open");
+    }
+  }
+
+  // Show a single note's full text in a read-only modal.
+  function openNoteView(note) {
+    if (!noteViewModal) {
+      return;
+    }
+    if (noteViewWhen) {
+      noteViewWhen.textContent = formatWhen(note.created_at);
+    }
+    if (noteViewText) {
+      noteViewText.textContent = note.text || "";
+    }
+    if (typeof noteViewModal.showModal === "function") {
+      noteViewModal.showModal();
+    } else {
+      noteViewModal.setAttribute("open", "");
+    }
+  }
+
+  function closeNoteViewModal() {
+    if (!noteViewModal) {
+      return;
+    }
+    if (noteViewModal.open) {
+      noteViewModal.close();
+    } else {
+      noteViewModal.removeAttribute("open");
+    }
+  }
+
   async function saveNote(event) {
     event.preventDefault();
     if (!state.selectedId) {
       return;
     }
-    const form = event.currentTarget;
-    const text = new FormData(form).get("text");
+    const text = new FormData(noteForm).get("text");
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}/notes`, {
         method: "POST",
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, category: noteTargetCategory }),
       });
-      form.reset();
+      closeNoteModal();
       await loadDetail(state.selectedId);
     } catch (error) {
       showError(error.message);
@@ -684,6 +2477,22 @@
     try {
       await request(`/api/notes/${encodeURIComponent(noteId)}`, { method: "DELETE" });
       await loadDetail(state.selectedId);
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // Log an entry in the Progress section whenever a drill link is opened. The
+  // link still opens in a new tab; logging is best-effort and never blocks it.
+  async function logDrillOpen(playerId, name) {
+    try {
+      await request(`/api/players/${encodeURIComponent(playerId)}/activity`, {
+        method: "POST",
+        body: JSON.stringify({ text: `Reviewed drill: ${name}` }),
+      });
+      if (state.selectedId === playerId) {
+        await loadDetail(playerId);
+      }
     } catch (error) {
       showError(error.message);
     }
@@ -707,70 +2516,79 @@
     }
   }
 
-  async function editPlayer() {
-    if (!state.detail) {
+  function editPlayer() {
+    if (!state.detail || !editPlayerModal) {
       return;
     }
-    const name = window.prompt("Player name", state.detail.name);
-    if (name === null) {
+    const p = state.detail;
+    editPlayerForm.reset();
+    editPlayerForm.elements.name.value = p.name || "";
+    editPlayerForm.elements.position.value = p.position || "";
+    editPlayerForm.elements.secondary_position.value = p.secondary_position || "";
+    editPlayerForm.elements.number.value =
+      p.number === null || p.number === undefined ? "" : p.number;
+    editPlayerForm.elements.grad_year.value = p.grad_year || "";
+    if (typeof editPlayerModal.showModal === "function") {
+      editPlayerModal.showModal();
+    } else {
+      editPlayerModal.setAttribute("open", "");
+    }
+    editPlayerForm.elements.name.focus();
+  }
+
+  function closeEditPlayer() {
+    if (editPlayerModal && editPlayerModal.open) {
+      editPlayerModal.close();
+    }
+    editPlayerForm.reset();
+  }
+
+  function managePlayerLogin() {
+    if (!state.selectedId || !state.detail || !playerLoginModal) {
       return;
     }
-    const position = window.prompt("Position", state.detail.position);
-    if (position === null) {
-      return;
+    const has = state.detail.has_login;
+    const title = document.getElementById("player-login-title");
+    const help = document.getElementById("player-login-help");
+    if (title) {
+      title.textContent = has ? "Reset player login" : "Set player login";
     }
-    const number = window.prompt("Jersey number (blank to clear)", state.detail.number ?? "");
-    if (number === null) {
-      return;
+    if (help) {
+      help.textContent = has
+        ? "Enter a new username and password for this player. The current login will stop working."
+        : "Give this player a username and password so they can sign in and view their own development.";
     }
-    try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
-        method: "PUT",
-        body: JSON.stringify({ name, position, number }),
-      });
-      await loadPlayers(state.selectedId);
-    } catch (error) {
-      showError(error.message);
+    playerLoginForm.reset();
+    if (playerLoginUsername) {
+      playerLoginUsername.value = state.detail.username || "";
+    }
+    if (typeof playerLoginModal.showModal === "function") {
+      playerLoginModal.showModal();
+    } else {
+      playerLoginModal.setAttribute("open", "");
+    }
+    if (playerLoginUsername) {
+      playerLoginUsername.focus();
     }
   }
 
-  async function manageAccessCode() {
-    if (!state.selectedId || !state.detail) {
-      return;
-    }
-    const has = state.detail.has_access_code;
-    const ok = window.confirm(
-      has
-        ? "Generate a NEW access code? The current code will stop working."
-        : "Create an access code so this player can sign in and see their development?",
-    );
-    if (!ok) {
-      return;
-    }
-    try {
-      const result = await request(
-        `/api/players/${encodeURIComponent(state.selectedId)}/access-code`,
-        { method: "POST" },
-      );
-      window.prompt(
-        "Give this access code to the player. It is shown only once — copy it now:",
-        result.code,
-      );
-      await loadDetail(state.selectedId);
-    } catch (error) {
-      showError(error.message);
+  function closePlayerLoginModal() {
+    if (playerLoginModal.open) {
+      playerLoginModal.close();
+    } else {
+      playerLoginModal.removeAttribute("open");
     }
   }
 
-  async function revokeAccessCode() {
+  async function clearPlayerLogin() {
     if (!state.selectedId) {
       return;
     }
-    if (!window.confirm("Remove this player's access code? They will no longer be able to sign in.")) {
+    if (!window.confirm("Remove this player's login? They will no longer be able to sign in.")) {
       return;
     }
     try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}/access-code`, {
+      await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
         method: "DELETE",
       });
       await loadDetail(state.selectedId);
@@ -780,24 +2598,25 @@
   }
 
   // -- authentication ----------------------------------------------------
-  function selectTab(which) {
-    const player = which === "player";
-    tabPlayer.classList.toggle("active", player);
-    tabCoach.classList.toggle("active", !player);
-    playerLoginForm.classList.toggle("hidden", !player);
-    coachLoginForm.classList.toggle("hidden", player);
-    loginError.textContent = "";
-  }
-
   function showLogin() {
     state.role = null;
     state.csrf = null;
     state.player = null;
+    state.accessLevel = "";
+    state.can = { admin: false, content: false, view_all: false };
     state.players = [];
+    state.staff = [];
     state.selectedId = null;
     state.detail = null;
+    state.team = {};
+    state.alarms = [];
+    state.messages = [];
+    renderBrandTeam();
+    showCommIcons();
+    renderCommBadges();
     appView.classList.add("hidden");
     appView.classList.remove("role-player");
+    appView.classList.remove("no-admin");
     loginView.classList.remove("hidden");
   }
 
@@ -813,9 +2632,13 @@
     state.role = session.role;
     state.csrf = session.csrf || null;
     state.player = session.player || null;
+    state.accessLevel = session.access_level || "";
+    state.can = session.can || { admin: false, content: false, view_all: false };
     loginError.textContent = "";
     loginView.classList.add("hidden");
     appView.classList.remove("hidden");
+    // Only "Full" staff and coaches see the roster admin tools.
+    appView.classList.toggle("no-admin", !canAdmin());
     if (state.role === "player") {
       appView.classList.add("role-player");
       sessionLabel.textContent = state.player ? `Signed in: ${state.player.name}` : "Signed in";
@@ -825,9 +2648,21 @@
       }
     } else {
       appView.classList.remove("role-player");
-      sessionLabel.textContent = "Signed in as Coach";
+      if (state.role === "staff") {
+        const lvl = state.accessLevel ? ` (${state.accessLevel})` : "";
+        sessionLabel.textContent = `${session.staff_name || "Staff"}${lvl}`;
+      } else {
+        sessionLabel.textContent = "Signed in as Coach";
+      }
       loadPlayers().catch((error) => showError(error.message));
+      loadStaff().catch((error) => showError(error.message));
     }
+    // Team + season appears in the header for both roles.
+    loadTeam().catch((error) => showError(error.message));
+    // Alarms + messages are available to both roles (compose vs inbox).
+    showCommIcons();
+    loadAlarms().catch(() => {});
+    loadMessages().catch(() => {});
   }
 
   async function doLogin(body) {
@@ -844,8 +2679,7 @@
         loginError.textContent = payload.error || "Could not sign in";
         return;
       }
-      playerLoginForm.reset();
-      coachLoginForm.reset();
+      if (loginForm) loginForm.reset();
       applySession(payload);
     } catch (_error) {
       loginError.textContent = "Could not sign in. Please try again.";
@@ -865,18 +2699,15 @@
     }
   }
 
-  tabPlayer.addEventListener("click", () => selectTab("player"));
-  tabCoach.addEventListener("click", () => selectTab("coach"));
-
-  playerLoginForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    doLogin({ mode: "player", code: document.getElementById("player-code").value });
-  });
-
-  coachLoginForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    doLogin({ mode: "coach", password: document.getElementById("coach-password").value });
-  });
+  if (loginForm) {
+    loginForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      doLogin({
+        username: loginUsername ? loginUsername.value : "",
+        password: loginPassword ? loginPassword.value : "",
+      });
+    });
+  }
 
   logoutBtn.addEventListener("click", async () => {
     try {
@@ -887,26 +2718,352 @@
     showLogin();
   });
 
-  showAdd.addEventListener("click", () => {
-    importForm.classList.add("hidden");
-    addForm.classList.remove("hidden");
-    document.getElementById("player-name").focus();
+  // Open one admin panel at a time and focus its first field.
+  importPanel.addEventListener("toggle", () => {
+    if (importPanel.open) {
+      staffPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
+      rosterText.focus();
+    }
   });
+
+  staffPanel.addEventListener("toggle", () => {
+    if (staffPanel.open) {
+      importPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
+    }
+  });
+
+  if (teamPanel) {
+    teamPanel.addEventListener("toggle", () => {
+      if (teamPanel.open) {
+        importPanel.open = false;
+        staffPanel.open = false;
+      }
+    });
+  }
+
+  // Add-player modal open/close.
+  function openAddPlayerModal() {
+    addForm.reset();
+    if (typeof addPlayerModal.showModal === "function") {
+      addPlayerModal.showModal();
+    } else {
+      addPlayerModal.setAttribute("open", "");
+    }
+    const nameField = document.getElementById("player-name");
+    if (nameField) {
+      nameField.focus();
+    }
+  }
+
+  function closeAddPlayerModal() {
+    if (addPlayerModal.open) {
+      addPlayerModal.close();
+    } else {
+      addPlayerModal.removeAttribute("open");
+    }
+  }
+
+  if (openAddPlayerBtn) {
+    openAddPlayerBtn.addEventListener("click", openAddPlayerModal);
+  }
+
+  addPlayerModal.addEventListener("click", (event) => {
+    if (event.target === addPlayerModal) {
+      closeAddPlayerModal();
+    }
+  });
+
+  function openStaffModal() {
+    staffForm.reset();
+    if (typeof staffModal.showModal === "function") {
+      staffModal.showModal();
+    } else {
+      staffModal.setAttribute("open", "");
+    }
+    document.getElementById("staff-name").focus();
+  }
+
+  function closeStaffModal() {
+    if (staffModal.open) {
+      staffModal.close();
+    }
+    staffForm.reset();
+  }
+
+  openStaffBtn.addEventListener("click", openStaffModal);
+
+  // Click on the backdrop (outside the form) closes the modal.
+  staffModal.addEventListener("click", (event) => {
+    if (event.target === staffModal) {
+      closeStaffModal();
+    }
+  });
+
+  function openManageStaffModal() {
+    renderManageStaff();
+    if (typeof staffManageModal.showModal === "function") {
+      staffManageModal.showModal();
+    } else {
+      staffManageModal.setAttribute("open", "");
+    }
+  }
+
+  function closeManageStaffModal() {
+    if (staffManageModal.open) {
+      staffManageModal.close();
+    }
+  }
+
+  if (openManageStaffBtn) {
+    openManageStaffBtn.addEventListener("click", openManageStaffModal);
+  }
+  if (closeManageStaffBtn) {
+    closeManageStaffBtn.addEventListener("click", closeManageStaffModal);
+  }
+  if (staffManageModal) {
+    staffManageModal.addEventListener("click", (event) => {
+      if (event.target === staffManageModal) {
+        closeManageStaffModal();
+      }
+    });
+  }
+
+  if (openTeamBtn) {
+    openTeamBtn.addEventListener("click", openTeamModal);
+  }
+  if (cancelTeam) {
+    cancelTeam.addEventListener("click", closeTeamModal);
+  }
+  if (teamModal) {
+    teamModal.addEventListener("click", (event) => {
+      if (event.target === teamModal) {
+        closeTeamModal();
+      }
+    });
+  }
+  if (teamForm) {
+    teamForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(teamForm);
+      try {
+        await request("/api/team", {
+          method: "PUT",
+          body: JSON.stringify({
+            name: form.get("name"),
+            year: form.get("year"),
+            season: form.get("season"),
+            age_bracket: form.get("age_bracket"),
+            play_year: form.get("play_year"),
+          }),
+        });
+        closeTeamModal();
+        await loadTeam();
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelDrill) {
+    cancelDrill.addEventListener("click", closeDrillModal);
+  }
+  if (drillModal) {
+    drillModal.addEventListener("click", (event) => {
+      if (event.target === drillModal) {
+        closeDrillModal();
+      }
+    });
+  }
+  if (drillForm) {
+    drillForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!drillTargetId) {
+        return;
+      }
+      const form = new FormData(drillForm);
+      try {
+        await request(`/api/players/${encodeURIComponent(drillTargetId)}/drills`, {
+          method: "POST",
+          body: JSON.stringify({
+            name: form.get("name"),
+            frequency: form.get("frequency"),
+            link: form.get("link"),
+          }),
+        });
+        closeDrillModal();
+        await loadDetail(state.selectedId);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelEditPlayer) {
+    cancelEditPlayer.addEventListener("click", closeEditPlayer);
+  }
+  if (editPlayerModal) {
+    editPlayerModal.addEventListener("click", (event) => {
+      if (event.target === editPlayerModal) {
+        closeEditPlayer();
+      }
+    });
+  }
+  if (editPlayerForm) {
+    editPlayerForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.selectedId) {
+        return;
+      }
+      const form = new FormData(editPlayerForm);
+      try {
+        await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            name: form.get("name"),
+            position: form.get("position"),
+            secondary_position: form.get("secondary_position"),
+            grad_year: form.get("grad_year"),
+            number: form.get("number"),
+          }),
+        });
+        closeEditPlayer();
+        await loadPlayers(state.selectedId);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelPlayerLogin) {
+    cancelPlayerLogin.addEventListener("click", closePlayerLoginModal);
+  }
+  if (playerLoginModal) {
+    playerLoginModal.addEventListener("click", (event) => {
+      if (event.target === playerLoginModal) {
+        closePlayerLoginModal();
+      }
+    });
+  }
+  if (playerLoginForm) {
+    playerLoginForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!state.selectedId) {
+        return;
+      }
+      const username = playerLoginUsername.value.trim();
+      const password = playerLoginPassword.value;
+      try {
+        await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
+          method: "PUT",
+          body: JSON.stringify({ username, password }),
+        });
+        closePlayerLoginModal();
+        await loadDetail(state.selectedId);
+      } catch (error) {
+        showError(error.message);
+      }
+    });
+  }
+
+  if (cancelNote) {
+    cancelNote.addEventListener("click", closeNoteModal);
+  }
+  if (noteModal) {
+    noteModal.addEventListener("click", (event) => {
+      if (event.target === noteModal) {
+        closeNoteModal();
+      }
+    });
+  }
+  if (noteForm) {
+    noteForm.addEventListener("submit", saveNote);
+  }
+  if (closeNoteView) {
+    closeNoteView.addEventListener("click", closeNoteViewModal);
+  }
+  if (noteViewModal) {
+    noteViewModal.addEventListener("click", (event) => {
+      if (event.target === noteViewModal) {
+        closeNoteViewModal();
+      }
+    });
+  }
+
+  if (alarmBtn) {
+    alarmBtn.addEventListener("click", openAlarmModal);
+  }
+  if (closeAlarm) {
+    closeAlarm.addEventListener("click", () => hideDialog(alarmModal));
+  }
+  if (alarmForm) {
+    alarmForm.addEventListener("submit", submitAlarm);
+  }
+  if (alarmModal) {
+    alarmModal.addEventListener("click", (event) => {
+      if (event.target === alarmModal) {
+        hideDialog(alarmModal);
+      }
+    });
+  }
+  if (messageBtn) {
+    messageBtn.addEventListener("click", openMessageModal);
+  }
+  if (closeMessage) {
+    closeMessage.addEventListener("click", () => hideDialog(messageModal));
+  }
+  if (messageForm) {
+    messageForm.addEventListener("submit", submitMessage);
+  }
+  if (messageAudience) {
+    messageAudience.addEventListener("change", updateMessageRecipient);
+  }
+  if (messageModal) {
+    messageModal.addEventListener("click", (event) => {
+      if (event.target === messageModal) {
+        hideDialog(messageModal);
+      }
+    });
+  }
 
   cancelAdd.addEventListener("click", () => {
     addForm.reset();
-    addForm.classList.add("hidden");
+    closeAddPlayerModal();
   });
 
-  showImport.addEventListener("click", () => {
-    addForm.classList.add("hidden");
-    importForm.classList.remove("hidden");
-    rosterText.focus();
+  cancelStaff.addEventListener("click", closeStaffModal);
+
+  staffForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(staffForm);
+    const body = {
+      name: form.get("name"),
+      role: form.get("role"),
+      contact: form.get("contact"),
+      access_level: form.get("access_level"),
+    };
+    const username = (form.get("username") || "").trim();
+    const password = (form.get("password") || "").trim();
+    if (username || password) {
+      body.username = username;
+      body.password = password;
+    }
+    try {
+      await request("/api/staff", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      closeStaffModal();
+      await loadStaff();
+    } catch (error) {
+      showError(error.message);
+    }
   });
 
   cancelImport.addEventListener("click", () => {
     importForm.reset();
-    importForm.classList.add("hidden");
+    importPanel.open = false;
     resetImportPreview();
   });
 
@@ -954,7 +3111,7 @@
       });
       const imported = result.imported || [];
       importForm.reset();
-      importForm.classList.add("hidden");
+      importPanel.open = false;
       resetImportPreview();
       await loadPlayers(imported.length ? imported[0].id : undefined);
     } catch (error) {
@@ -966,17 +3123,28 @@
   addForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(addForm);
+    const body = {
+      name: form.get("name"),
+      position: form.get("position"),
+      secondary_position: form.get("secondary_position"),
+      team_year: form.get("team_year"),
+      grad_year: form.get("grad_year"),
+      team_type: form.get("team_type"),
+      number: form.get("number"),
+    };
+    const username = (form.get("username") || "").trim();
+    const password = (form.get("password") || "").trim();
+    if (username || password) {
+      body.username = username;
+      body.password = password;
+    }
     try {
       const created = await request("/api/players", {
         method: "POST",
-        body: JSON.stringify({
-          name: form.get("name"),
-          position: form.get("position"),
-          number: form.get("number"),
-        }),
+        body: JSON.stringify(body),
       });
       addForm.reset();
-      addForm.classList.add("hidden");
+      closeAddPlayerModal();
       await loadPlayers(created.id);
     } catch (error) {
       showError(error.message);

@@ -11,25 +11,17 @@
     <div class="login-card card">
       <div class="brand brand-dark">
         <img class="logo" src="/static/logo.png" alt="Alpha logo" width="135" height="44">
-        <p class="wordmark tagline">Softball player development</p>
+        <p class="wordmark tagline">Player development portal</p>
       </div>
-      <div class="login-tabs" role="tablist">
-        <button type="button" id="tab-player" class="btn tab active">Player</button>
-        <button type="button" id="tab-coach" class="btn tab">Coach</button>
-      </div>
-      <form id="player-login-form" class="form login-form" autocomplete="off">
-        <p class="meta">Enter the access code your coach gave you to see your own development.</p>
+      <form id="login-form" class="form login-form" autocomplete="off">
+        <p class="meta">Sign in with the username and password your coach gave you.</p>
         <label>
-          Access code
-          <input id="player-code" name="code" type="password" autocomplete="one-time-code" required>
+          Username
+          <input id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         </label>
-        <button type="submit" class="btn btn-primary">Sign in</button>
-      </form>
-      <form id="coach-login-form" class="form login-form hidden" autocomplete="off">
-        <p class="meta">Coaches manage the full roster, ratings, stats, and notes.</p>
         <label>
-          Coach password
-          <input id="coach-password" name="password" type="password" autocomplete="current-password" required>
+          Password
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
         </label>
         <button type="submit" class="btn btn-primary">Sign in</button>
       </form>
@@ -42,11 +34,26 @@
       <div class="brand">
         <img class="logo" src="/static/logo.png" alt="Alpha logo" width="123" height="40">
         <div>
-          <h1 class="wordmark">idev</h1>
           <p>Softball player development</p>
+          <p class="brand-team hidden" id="brand-team"></p>
+          <p class="brand-meta hidden" id="brand-meta"></p>
         </div>
       </div>
       <div class="session-controls">
+        <button type="button" id="alarm-btn" class="icon-btn hidden" title="Alarms" aria-label="Alarms">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span id="alarm-badge" class="icon-badge hidden">0</span>
+        </button>
+        <button type="button" id="message-btn" class="icon-btn hidden" title="Messages" aria-label="Messages">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"></path>
+            <path d="m22 6-10 7L2 6"></path>
+          </svg>
+          <span id="message-badge" class="icon-badge hidden">0</span>
+        </button>
         <span id="session-label" class="session-label"></span>
         <button type="button" id="logout-btn" class="btn">Sign out</button>
       </div>
@@ -55,13 +62,22 @@
     <aside class="roster" aria-label="Players">
       <div class="roster-head">
         <h2>Players</h2>
-        <div class="row">
-          <button type="button" id="show-import-roster" class="btn">Import roster</button>
-          <button type="button" id="show-add-player" class="btn btn-primary">Add player</button>
-        </div>
       </div>
-      <form id="import-roster-form" class="card form hidden" autocomplete="off">
-        <h3>Import GameChanger roster</h3>
+      <ul id="player-list" class="player-list"></ul>
+      <hr class="roster-sep">
+      <details class="admin" id="admin-tools">
+        <summary class="admin-summary">
+          <span class="admin-title">Admin</span>
+          <span class="admin-caret" aria-hidden="true"></span>
+        </summary>
+        <div class="admin-body">
+        <details class="admin admin-sub" id="import-roster">
+          <summary class="admin-summary">
+            <span class="admin-title">Import roster</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+      <form id="import-roster-form" class="form" autocomplete="off">
         <p class="meta">
           In GameChanger, open Stats and choose Export Stats. Select that CSV here;
           the importer reads the # and Roster columns. You can also paste one player
@@ -86,15 +102,193 @@
           <button type="button" id="cancel-import-roster" class="btn">Cancel</button>
         </div>
       </form>
-      <form id="add-player-form" class="card form hidden" autocomplete="off">
+          </div>
+        </details>
+        <div class="admin-sub admin-launch">
+          <button type="button" id="open-add-player" class="btn btn-primary">Add player</button>
+        </div>
+        <details class="admin admin-sub" id="staff-tools">
+          <summary class="admin-summary">
+            <span class="admin-title">Staff</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+            <ul id="staff-list" class="staff-list"></ul>
+            <div class="row">
+              <button type="button" id="open-add-staff" class="btn btn-primary">Add staff</button>
+              <button type="button" id="open-manage-staff" class="btn">Manage access</button>
+            </div>
+          </div>
+        </details>
+        <details class="admin admin-sub" id="team-tools">
+          <summary class="admin-summary">
+            <span class="admin-title">Team information</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+            <dl id="team-summary" class="team-summary"></dl>
+            <div class="row">
+              <button type="button" id="open-team-info" class="btn btn-primary">Edit team information</button>
+            </div>
+          </div>
+        </details>
+        </div>
+      </details>
+    </aside>
+
+    <main class="main" id="main">
+      <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, GameChanger stats, notes, and progress.</p>
+    </main>
+
+    <dialog id="staff-modal" class="modal" aria-labelledby="staff-modal-title">
+      <form id="add-staff-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="staff-modal-title">Add staff member</h3>
+        <p class="meta">Grant a coach or team helper access to the app.</p>
+        <label>
+          Name
+          <input id="staff-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Role
+          <input id="staff-role" name="role" maxlength="60" placeholder="Head Coach" required>
+        </label>
+        <label>
+          Contact information
+          <input id="staff-contact" name="contact" maxlength="120" placeholder="Email or phone">
+        </label>
+        <label>
+          Admin access
+          <select id="staff-access" name="access_level" required>
+            <option value="">Choose one</option>
+            <option>Full</option>
+            <option>Manager</option>
+            <option>Assistant</option>
+            <option>Read-only</option>
+          </select>
+        </label>
+        <p class="meta form-section">Login (optional) — they sign in with this username and password.</p>
+        <label>
+          Username
+          <input id="staff-username" name="username" minlength="3" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. kwallace">
+        </label>
+        <label>
+          Password
+          <input id="staff-password" name="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="At least 4 characters">
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save staff</button>
+          <button type="button" id="cancel-add-staff" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="staff-manage-modal" class="modal modal-wide" aria-labelledby="staff-manage-title">
+      <h3 class="modal-title" id="staff-manage-title">Manage staff access</h3>
+      <p class="meta">Change access levels, set or clear passwords, or remove a coach or staff member.</p>
+      <ul id="staff-manage-list" class="staff-manage-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-manage-staff" class="btn">Done</button>
+      </div>
+    </dialog>
+
+    <dialog id="team-modal" class="modal" aria-labelledby="team-modal-title">
+      <form id="team-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="team-modal-title">Team information</h3>
+        <p class="meta">Set the team name, year, season, and years of play.</p>
+        <label>
+          Team name
+          <input id="team-name" name="name" maxlength="80" placeholder="Boston Caps">
+        </label>
+        <label>
+          Year
+          <input id="team-year-input" name="year" maxlength="20" placeholder="2025">
+        </label>
+        <label>
+          Season
+          <select id="team-season" name="season">
+            <option value="">Choose one</option>
+            <option>Spring</option>
+            <option>Summer</option>
+            <option>Fall</option>
+            <option>Winter</option>
+          </select>
+        </label>
+        <label>
+          Age bracket
+          <select id="team-age-bracket" name="age_bracket">
+            <option value="">Choose one</option>
+            <option>10u</option>
+            <option>12u</option>
+            <option>14u</option>
+            <option>16u</option>
+            <option>18u</option>
+          </select>
+        </label>
+        <label>
+          Years of play
+          <select id="team-play-year" name="play_year">
+            <option value="">Choose one</option>
+            <option>First year</option>
+            <option>Second year</option>
+          </select>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <button type="button" id="cancel-team-info" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="drill-modal" class="modal" aria-labelledby="drill-modal-title">
+      <form id="drill-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="drill-modal-title">Add skill drill</h3>
+        <p class="meta">Assign a skill-development drill with an optional link.</p>
+        <label>
+          Drill name
+          <input id="drill-name" name="name" maxlength="80" placeholder="Tee work — outside pitch" required>
+        </label>
+        <label>
+          Frequency of practice
+          <input id="drill-frequency" name="frequency" maxlength="60" placeholder="3x per week">
+        </label>
+        <label>
+          Link
+          <input id="drill-link" name="link" type="url" maxlength="300" placeholder="https://example.com/drill">
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save drill</button>
+          <button type="button" id="cancel-drill" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="add-player-modal" class="modal" aria-labelledby="add-player-title">
+      <form id="add-player-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="add-player-title">Add player</h3>
         <label>
           Name
           <input id="player-name" name="name" maxlength="80" required>
         </label>
         <label>
-          Position
+          Primary position
           <select id="player-position" name="position" required>
             <option value="">Choose one</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Secondary position
+          <select id="player-secondary-position" name="secondary_position">
+            <option value="">None</option>
             <option>Pitcher</option>
             <option>Catcher</option>
             <option>First Base</option>
@@ -112,17 +306,215 @@
           Jersey number
           <input id="player-number" name="number" type="number" min="0" max="99">
         </label>
-        <div class="row">
+        <label>
+          Team year
+          <input id="player-team-year" name="team_year" maxlength="20" placeholder="2025">
+        </label>
+        <label>
+          Graduation year
+          <input id="player-grad-year" name="grad_year" maxlength="9" placeholder="2028">
+        </label>
+        <label>
+          Team type
+          <select id="player-team-type" name="team_type">
+            <option value="">Choose one</option>
+            <option>10u-1</option>
+            <option>10u-2</option>
+            <option>12u-1y</option>
+            <option>12u-2y</option>
+            <option>14u-1y</option>
+            <option>14u-2y</option>
+          </select>
+        </label>
+        <p class="meta form-section">Login (optional) — lets this player sign in to see their own development.</p>
+        <label>
+          Username
+          <input id="player-username" name="username" minlength="3" maxlength="32" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="e.g. rivera7">
+        </label>
+        <label>
+          Password
+          <input id="player-password" name="password" type="password" minlength="4" maxlength="128" autocomplete="new-password" placeholder="At least 4 characters">
+        </label>
+        <div class="row modal-actions">
           <button type="submit" class="btn btn-primary">Save player</button>
           <button type="button" id="cancel-add-player" class="btn">Cancel</button>
         </div>
       </form>
-      <ul id="player-list" class="player-list"></ul>
-    </aside>
-
-    <main class="main" id="main">
-      <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, GameChanger stats, notes, and progress.</p>
-    </main>
+    </dialog>
+    <dialog id="edit-player-modal" class="modal" aria-labelledby="edit-player-title">
+      <form id="edit-player-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="edit-player-title">Edit player</h3>
+        <label>
+          Name
+          <input id="edit-player-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Primary position
+          <select id="edit-player-position" name="position" required>
+            <option value="">Choose one</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Secondary position
+          <select id="edit-player-secondary-position" name="secondary_position">
+            <option value="">None</option>
+            <option>Pitcher</option>
+            <option>Catcher</option>
+            <option>First Base</option>
+            <option>Second Base</option>
+            <option>Third Base</option>
+            <option>Shortstop</option>
+            <option>Left Field</option>
+            <option>Center Field</option>
+            <option>Right Field</option>
+            <option>Utility</option>
+            <option>DP/Flex</option>
+          </select>
+        </label>
+        <label>
+          Jersey number
+          <input id="edit-player-number" name="number" type="number" min="0" max="99">
+        </label>
+        <label>
+          Graduation year
+          <input id="edit-player-grad-year" name="grad_year" maxlength="9" placeholder="2028">
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save changes</button>
+          <button type="button" id="cancel-edit-player" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="player-login-modal" class="modal" aria-labelledby="player-login-title">
+      <form id="player-login-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="player-login-title">Set player login</h3>
+        <p class="meta" id="player-login-help">
+          Give this player a username and password so they can sign in and view
+          their own development.
+        </p>
+        <label>
+          Username
+          <input
+            id="player-login-username"
+            name="username"
+            minlength="3"
+            maxlength="32"
+            required
+            autocomplete="off"
+            autocapitalize="none"
+            spellcheck="false"
+            placeholder="e.g. rivera7"
+          >
+        </label>
+        <label>
+          Password
+          <input
+            id="player-login-password"
+            name="password"
+            type="password"
+            minlength="4"
+            maxlength="128"
+            required
+            autocomplete="new-password"
+            placeholder="At least 4 characters"
+          >
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save login</button>
+          <button type="button" id="cancel-player-login" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="note-modal" class="modal" aria-labelledby="note-title">
+      <form id="note-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="note-title">Add coach note</h3>
+        <p class="meta">
+          Record an observation, coaching cue, or focus for this player. Notes are
+          kept over time.
+        </p>
+        <label>
+          Note
+          <textarea id="note-input" name="text" maxlength="2000" rows="4" required
+            placeholder="e.g. Keep front shoulder closed on outside pitches."></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save note</button>
+          <button type="button" id="cancel-note" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="note-view-modal" class="modal" aria-labelledby="note-view-title">
+      <h3 class="modal-title" id="note-view-title">Coach note</h3>
+      <p class="meta" id="note-view-when"></p>
+      <p class="note-view-text" id="note-view-text"></p>
+      <div class="row modal-actions">
+        <button type="button" id="close-note-view" class="btn btn-primary">Close</button>
+      </div>
+    </dialog>
+    <dialog id="alarm-modal" class="modal" aria-labelledby="alarm-title">
+      <h3 class="modal-title" id="alarm-title">Alarms</h3>
+      <form id="alarm-form" class="form comm-compose hidden" autocomplete="off">
+        <label>
+          Send to
+          <select id="alarm-target" name="target">
+            <option value="all">All players</option>
+          </select>
+        </label>
+        <label>
+          Alarm
+          <textarea id="alarm-text" name="text" maxlength="500" rows="2" required
+            placeholder="e.g. Practice moved to 5pm Thursday."></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Add alarm</button>
+        </div>
+      </form>
+      <ul id="alarm-list" class="comm-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-alarm" class="btn">Close</button>
+      </div>
+    </dialog>
+    <dialog id="message-modal" class="modal" aria-labelledby="message-title">
+      <h3 class="modal-title" id="message-title">Messages</h3>
+      <form id="message-form" class="form comm-compose hidden" autocomplete="off">
+        <label>
+          Send to
+          <select id="message-audience" name="audience">
+            <option value="team">Entire team</option>
+            <option value="staff">All staff</option>
+            <option value="player">Specific player</option>
+            <option value="staff_member">Specific staff member</option>
+          </select>
+        </label>
+        <label id="message-recipient-label" class="hidden">
+          Recipient
+          <select id="message-recipient" name="recipient_id"></select>
+        </label>
+        <label>
+          Message
+          <textarea id="message-body" name="body" maxlength="2000" rows="3" required
+            placeholder="e.g. Great effort at practice today, team!"></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Send message</button>
+        </div>
+      </form>
+      <ul id="message-list" class="comm-list"></ul>
+      <div class="row modal-actions">
+        <button type="button" id="close-message" class="btn">Close</button>
+      </div>
+    </dialog>
   </div>
   <script src="/static/app.js"></script>
 </body>

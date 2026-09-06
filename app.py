@@ -32,9 +32,38 @@ STATIC_DIR = (ROOT / "static").resolve()
 MAX_BODY_BYTES = 256 * 1024
 MAX_NAME_LEN = 80
 MAX_NOTE_LEN = 2000
+# Coach notes are grouped by the dashboard card they belong to. Legacy notes
+# without a category are treated as "focus" (where notes first lived).
+NOTE_CATEGORIES = ("focus", "top")
+DEFAULT_NOTE_CATEGORY = "focus"
+MAX_ACTIVITY_LEN = 200
+MAX_ACTIVITY = 50
+# Coach-to-player alarms (reminders/alerts) and coach messages. Both are
+# broadcast from a coach; recipients (players) track per-item read state.
+MAX_ALARM_LEN = 500
+MAX_MESSAGE_LEN = 2000
+MAX_BROADCASTS = 500
+MESSAGE_AUDIENCES = ("team", "staff", "player", "staff_member")
 MAX_SKILL_LEN = 40
 MAX_ROSTER_PLAYERS = 200
 MAX_ROSTER_TEXT_BYTES = 200 * 1024
+MAX_DRILLS = 10
+MAX_DRILL_NAME_LEN = 80
+MAX_DRILL_FREQ_LEN = 60
+MAX_DRILL_LINK_LEN = 300
+MAX_RECORDS = 50
+# Numeric performance metrics that track a personal record (PR). "higher_better"
+# marks speed/velocity (a new max is a PR); time metrics improve as they drop.
+PR_METRICS = {
+    "exit_velo": {"label": "Exit Velo", "unit": "MPH", "higher_better": True},
+    "pitch_velo": {"label": "Velocity", "unit": "MPH", "higher_better": True},
+    "throw_speed": {"label": "IF Velo", "unit": "MPH", "higher_better": True},
+    "distance": {"label": "Distance", "unit": "Feet", "higher_better": True},
+    "base_time": {"label": "Running speed", "unit": "s", "higher_better": False},
+}
+# Keep this many timestamped snapshots in data_backups/ so an accidental
+# deletion or corruption of the data file never loses the roster.
+MAX_BACKUPS = int(os.environ.get("IDEV_MAX_BACKUPS", "40"))
 HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
 DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
@@ -50,18 +79,58 @@ COOKIE_SECURE = os.environ.get("IDEV_HTTPS", "").strip().lower() in {"1", "true"
 # Human-chosen coach password: slow, salted KDF (PBKDF2-HMAC-SHA256, >=600k).
 PBKDF2_ALGO = "pbkdf2_sha256"
 PBKDF2_ITERATIONS = 600_000
-# Player access codes are high-entropy random tokens, so a single SHA-256 is
-# appropriate (brute force is infeasible) and keeps per-login lookup cheap.
-ACCESS_CODE_BYTES = 18
 GENERATED_ADMIN_BYTES = 12
+# Weak, well-known default coach password used only until the coach picks their
+# own (via IDEV_ADMIN_PASSWORD). Fine for a local, single-user app; change it
+# before exposing idev on a network.
+DEFAULT_ADMIN_PASSWORD = "123"
 LOGIN_MAX_FAILURES = 10
 LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_BLOCK_SECONDS = 5 * 60
 ADMIN_PASSWORD_ENV = os.environ.get("IDEV_ADMIN_PASSWORD")
+# The coach signs in with this username plus the admin password.
+ADMIN_USERNAME = os.environ.get("IDEV_ADMIN_USERNAME", "coach").strip() or "coach"
 
 PERM_PUBLIC = "public"
 PERM_COACH = "coach"
 PERM_PLAYER_OWN = "player_own"
+PERM_AUTHED = "authed"  # any signed-in user (coach, player, or staff)
+# Capability tiers layered over the staff access levels.
+#   admin   : coach or "Full" staff -> every site function
+#   content : admin or "Manager" staff -> ratings, notes, drills, alarms, messages
+#   view    : coach or any staff -> browse all players and their information
+PERM_ADMIN = "admin"
+PERM_CONTENT = "content"
+PERM_VIEW = "view"
+PERM_PLAYER_VIEW = "player_view"  # coach/staff (any) may view; player only own
+
+# Staff access levels grouped by capability.
+STAFF_ADMIN_LEVELS = ("Full",)
+STAFF_CONTENT_LEVELS = ("Full", "Manager")
+
+
+def session_is_admin(session: dict | None) -> bool:
+    if not session:
+        return False
+    if session.get("role") == "coach":
+        return True
+    return (
+        session.get("role") == "staff"
+        and session.get("access_level") in STAFF_ADMIN_LEVELS
+    )
+
+
+def session_is_content(session: dict | None) -> bool:
+    if session_is_admin(session):
+        return True
+    return bool(session) and (
+        session.get("role") == "staff"
+        and session.get("access_level") in STAFF_CONTENT_LEVELS
+    )
+
+
+def session_can_view_all(session: dict | None) -> bool:
+    return bool(session) and session.get("role") in ("coach", "staff")
 
 POSITIONS = (
     "Pitcher",
@@ -75,6 +144,44 @@ POSITIONS = (
     "Right Field",
     "Utility",
     "DP/Flex",
+)
+
+# Levels of admin access a staff member can be granted.
+STAFF_ACCESS_LEVELS = (
+    "Full",
+    "Manager",
+    "Assistant",
+    "Read-only",
+)
+
+TEAM_SEASONS = (
+    "Spring",
+    "Summer",
+    "Fall",
+    "Winter",
+)
+TEAM_PLAY_YEARS = (
+    "First year",
+    "Second year",
+)
+
+# Girls' softball age brackets a team competes in.
+TEAM_AGE_BRACKETS = (
+    "10u",
+    "12u",
+    "14u",
+    "16u",
+    "18u",
+)
+
+# Age-group / squad the player is playing with.
+TEAM_TYPES = (
+    "10u-1",
+    "10u-2",
+    "12u-1y",
+    "12u-2y",
+    "14u-1y",
+    "14u-2y",
 )
 
 DEFAULT_SKILLS = (
@@ -110,6 +217,7 @@ OFFENSE_COUNT_FIELDS = (
     ("sac", "SAC", "Sacrifice bunts"),
     ("sb", "SB", "Stolen bases"),
     ("cs", "CS", "Caught stealing"),
+    ("pitches", "PIT", "Pitches seen"),
 )
 
 DEFENSE_COUNT_FIELDS = (
@@ -127,6 +235,7 @@ OFFENSE_COMPUTED_FIELDS = (
     ("ops", "OPS", "On-base plus slugging"),
     ("tb", "TB", "Total bases"),
     ("xbh", "XBH", "Extra-base hits"),
+    ("p_pa", "P/PA", "Pitches per plate appearance"),
 )
 
 DEFENSE_COMPUTED_FIELDS = (
@@ -188,14 +297,19 @@ def parse_number(value: object) -> int | None:
     return number
 
 
-def parse_score(value: object) -> int:
+def parse_score(value: object) -> float:
     try:
-        score = int(value)
+        score = float(value)
     except (TypeError, ValueError) as exc:
-        raise ValueError("Rating must be a whole number from 1 to 5") from exc
-    if score < 1 or score > 5:
-        raise ValueError("Rating must be a whole number from 1 to 5")
-    return score
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5") from exc
+    halves = round(score * 2)
+    if abs(score * 2 - halves) > 1e-9:
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5")
+    if halves < 2 or halves > 10:
+        raise ValueError("Rating must be from 1 to 5 in steps of 0.5")
+    score = halves / 2
+    # Keep whole numbers as ints so stored scores and JSON stay clean.
+    return int(score) if score.is_integer() else score
 
 
 def parse_position(value: object) -> str:
@@ -203,6 +317,266 @@ def parse_position(value: object) -> str:
     if position not in POSITIONS:
         raise ValueError("Choose a position from the list")
     return position
+
+
+def parse_optional_position(value: object) -> str:
+    """Secondary position is optional; blank means none."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    return parse_position(value)
+
+
+def parse_team_year(value: object) -> str:
+    """Optional team/season year, e.g. "2025" or "2024-25"; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 20:
+        raise ValueError("Team year must be 20 characters or fewer")
+    return text
+
+
+def parse_grad_year(value: object) -> str:
+    """Optional graduation year, e.g. "2028"; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 9:
+        raise ValueError("Graduation year must be 9 characters or fewer")
+    return text
+
+
+def parse_team_type(value: object) -> str:
+    """Optional squad/age-group type; blank means unset, else from TEAM_TYPES."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if text not in TEAM_TYPES:
+        raise ValueError("Choose a team type from the list")
+    return text
+
+
+def parse_exit_velo(value: object) -> object:
+    """Optional exit velocity in MPH; blank means unset, otherwise 0-200."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        mph = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Exit velo must be a number")
+    if mph != mph or mph in (float("inf"), float("-inf")):
+        raise ValueError("Exit velo must be a number")
+    if mph < 0 or mph > 200:
+        raise ValueError("Exit velo must be between 0 and 200 MPH")
+    return round(mph, 2)
+
+
+def parse_pitch_velo(value: object) -> object:
+    """Optional pitching velocity in MPH; blank means unset, otherwise 0-200."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        mph = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Velocity must be a number")
+    if mph != mph or mph in (float("inf"), float("-inf")):
+        raise ValueError("Velocity must be a number")
+    if mph < 0 or mph > 200:
+        raise ValueError("Velocity must be between 0 and 200 MPH")
+    return round(mph, 2)
+
+
+def parse_throw_speed(value: object) -> object:
+    """Optional throwing speed in MPH; blank means unset, otherwise 0-200."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        mph = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Throw speed must be a number")
+    if mph != mph or mph in (float("inf"), float("-inf")):
+        raise ValueError("Throw speed must be a number")
+    if mph < 0 or mph > 200:
+        raise ValueError("Throw speed must be between 0 and 200 MPH")
+    return round(mph, 2)
+
+
+def parse_base_time(value: object) -> object:
+    """Optional base-running time in seconds; blank means unset, otherwise 0-60."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Time must be a number")
+    if seconds != seconds or seconds in (float("inf"), float("-inf")):
+        raise ValueError("Time must be a number")
+    if seconds < 0 or seconds > 60:
+        raise ValueError("Time must be between 0 and 60 seconds")
+    return round(seconds, 2)
+
+
+def parse_distance(value: object) -> object:
+    """Optional hitting distance in feet; blank means unset, otherwise 0-1000."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and not value.strip():
+        return ""
+    try:
+        feet = float(value)
+    except (TypeError, ValueError):
+        raise ValueError("Distance must be a number")
+    if feet != feet or feet in (float("inf"), float("-inf")):
+        raise ValueError("Distance must be a number")
+    if feet < 0 or feet > 1000:
+        raise ValueError("Distance must be between 0 and 1000 feet")
+    return round(feet, 2)
+
+
+def parse_optional_contact(value: object) -> str:
+    """Contact info (email or phone) is optional; blank means none."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 120:
+        raise ValueError("Contact must be 120 characters or fewer")
+    return text
+
+
+def parse_staff(payload: object) -> dict:
+    """Validate a staff member: name, role, contact, and admin access level."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send staff details in the request body")
+    name = clean_text(payload.get("name"), "Staff name", 80)
+    role = clean_text(payload.get("role"), "Role", 60)
+    access_level = clean_text(payload.get("access_level"), "Access level", 40)
+    if access_level not in STAFF_ACCESS_LEVELS:
+        raise ValueError("Choose an access level from the list")
+    contact = parse_optional_contact(payload.get("contact"))
+    return {
+        "name": name,
+        "role": role,
+        "contact": contact,
+        "access_level": access_level,
+    }
+
+
+def parse_staff_password(value: object) -> str:
+    """Validate a staff member's access password."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("Password is required")
+    if len(value) < 4:
+        raise ValueError("Password must be at least 4 characters")
+    if len(value) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    return value
+
+
+def parse_optional_name(value: object, field: str, max_len: int) -> str:
+    """A free-text field that may be left blank."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > max_len:
+        raise ValueError(f"{field} must be {max_len} characters or fewer")
+    return text
+
+
+def parse_optional_season(value: object) -> str:
+    """Optional season, chosen from a fixed list; blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_SEASONS:
+        raise ValueError("Choose a season from the list")
+    return text
+
+
+def parse_optional_play_year(value: object) -> str:
+    """Optional years-of-play designation (first or second year); blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_PLAY_YEARS:
+        raise ValueError("Choose first or second year of play")
+    return text
+
+
+def parse_optional_age_bracket(value: object) -> str:
+    """Optional girls' softball age bracket (e.g. 12u); blank means unset."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if text not in TEAM_AGE_BRACKETS:
+        raise ValueError("Choose an age bracket from the list")
+    return text
+
+
+def parse_team(payload: object) -> dict:
+    """Validate team information: name, year, season, age bracket, and years of play."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send team details in the request body")
+    return {
+        "name": parse_optional_name(payload.get("name"), "Team name", 80),
+        "year": parse_team_year(payload.get("year")),
+        "season": parse_optional_season(payload.get("season")),
+        "age_bracket": parse_optional_age_bracket(payload.get("age_bracket")),
+        "play_year": parse_optional_play_year(payload.get("play_year")),
+    }
+
+
+def parse_optional_link(value: object) -> str:
+    """Optional drill link; only http(s) URLs are allowed (blocks javascript:/data:)."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    if len(text) > MAX_DRILL_LINK_LEN:
+        raise ValueError(f"Link must be {MAX_DRILL_LINK_LEN} characters or fewer")
+    parsed = urlparse(text)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        raise ValueError("Link must be a http or https URL")
+    return text
+
+
+def parse_drill(payload: object) -> dict:
+    """Validate a skill-development drill: name, practice frequency, and link."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send drill details in the request body")
+    return {
+        "name": clean_text(payload.get("name"), "Drill name", MAX_DRILL_NAME_LEN),
+        "frequency": parse_optional_name(
+            payload.get("frequency"), "Frequency", MAX_DRILL_FREQ_LEN
+        ),
+        "link": parse_optional_link(payload.get("link")),
+    }
 
 
 def normalize_position(value: object) -> str:
@@ -390,6 +764,9 @@ def compute_game_stats(counts: dict) -> dict:
     obp = (on_base / on_base_chances) if on_base_chances else None
     slg = (total_bases / at_bats) if at_bats else None
     ops = (obp + slg) if obp is not None and slg is not None else None
+    plate_appearances = int(counts["pa"])
+    pitches_seen = int(counts["pitches"])
+    p_pa = (pitches_seen / plate_appearances) if plate_appearances else None
     total_chances = int(counts["po"]) + int(counts["a"]) + int(counts["e"])
     fpct = ((int(counts["po"]) + int(counts["a"])) / total_chances) if total_chances else None
     return {
@@ -399,6 +776,7 @@ def compute_game_stats(counts: dict) -> dict:
         "ops": None if ops is None else round(ops, 3),
         "tb": total_bases,
         "xbh": extra_base,
+        "p_pa": None if p_pa is None else round(p_pa, 2),
         "tc": total_chances,
         "fpct": None if fpct is None else round(fpct, 3),
     }
@@ -429,6 +807,9 @@ def build_stats_view(raw: object) -> dict:
             value = computed[key]
             if key in {"tb", "xbh", "tc"}:
                 display = str(value)
+            elif key == "p_pa":
+                # Pitches per PA is a plain average (e.g. 3.75), not a .xxx rate.
+                display = "—" if value is None else f"{value:.2f}"
             else:
                 display = format_rate(value)
             items.append(
@@ -451,12 +832,49 @@ def build_stats_view(raw: object) -> dict:
     }
 
 
-PUBLIC_PLAYER_FIELDS = ("id", "name", "position", "number", "created_at", "stats")
+PUBLIC_PLAYER_FIELDS = (
+    "id",
+    "name",
+    "username",
+    "position",
+    "secondary_position",
+    "team_year",
+    "grad_year",
+    "team_type",
+    "number",
+    "exit_velo",
+    "base_time",
+    "pitch_velo",
+    "throw_speed",
+    "distance",
+    "created_at",
+    "stats",
+)
 
 
 def public_player(player: dict) -> dict:
-    """Copy only non-sensitive player fields (never the access-code hash)."""
-    return {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+    """Copy only non-sensitive player fields (never the password hash)."""
+    view = {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+    view["has_login"] = bool(player.get("password_hash"))
+    return view
+
+
+PUBLIC_STAFF_FIELDS = (
+    "id",
+    "name",
+    "username",
+    "role",
+    "contact",
+    "access_level",
+    "created_at",
+)
+
+
+def public_staff(member: dict) -> dict:
+    """Copy non-sensitive staff fields; never expose the password hash."""
+    view = {key: member.get(key) for key in PUBLIC_STAFF_FIELDS if key in member}
+    view["has_password"] = bool(member.get("password_hash"))
+    return view
 
 
 def hash_password(password: str, *, iterations: int = PBKDF2_ITERATIONS, salt: bytes | None = None) -> dict:
@@ -486,8 +904,30 @@ def verify_password(password: object, record: object) -> bool:
     return hmac.compare_digest(derived, expected)
 
 
-def hash_access_code(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
+
+
+def parse_login_username(value: object) -> str:
+    """A sign-in username: 3-32 chars of letters, digits, dot, dash, underscore."""
+    if not isinstance(value, str):
+        raise ValueError("Enter a username")
+    username = value.strip()
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError(
+            "Username must be 3-32 characters using letters, numbers, '.', '_', or '-'"
+        )
+    return username
+
+
+def parse_login_password(value: object) -> str:
+    """A sign-in password: 4-128 characters."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("Password is required")
+    if len(value) < 4:
+        raise ValueError("Password must be at least 4 characters")
+    if len(value) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    return value
 
 
 class SessionManager:
@@ -503,12 +943,24 @@ class SessionManager:
     def _fingerprint(user_agent: str) -> str:
         return hashlib.sha256((user_agent or "").encode("utf-8")).hexdigest()
 
-    def create(self, role: str, player_id: str | None, user_agent: str) -> tuple[str, dict]:
+    def create(
+        self,
+        role: str,
+        player_id: str | None,
+        user_agent: str,
+        *,
+        staff_id: str = "",
+        access_level: str = "",
+        staff_name: str = "",
+    ) -> tuple[str, dict]:
         sid = secrets.token_urlsafe(32)
         now = time.time()
         session = {
             "role": role,
             "player_id": player_id or "",
+            "staff_id": staff_id,
+            "access_level": access_level,
+            "staff_name": staff_name,
             "created_at": now,
             "last_seen": now,
             "csrf": secrets.token_urlsafe(32),
@@ -585,6 +1037,9 @@ class LoginRateLimiter:
             self.blocked_until.pop(key, None)
 
 
+ID_RE = r"[a-zA-Z0-9_-]{8,64}"
+
+
 def required_permission(method: str, path: str):
     """Map an HTTP method + path to the access level required to reach it."""
     if method in ("GET", "HEAD"):
@@ -592,13 +1047,48 @@ def required_permission(method: str, path: str):
             return PERM_PUBLIC  # login page and static assets
         if path in ("/api/health", "/api/session"):
             return PERM_PUBLIC
-        match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
+        if path == "/api/team":
+            # Team name/season is shown in the header for any signed-in user.
+            return PERM_AUTHED
+        if path in ("/api/alarms", "/api/messages"):
+            # Players see their own inbox; coach/staff see all (handled in do_GET).
+            return PERM_AUTHED
+        match = re.fullmatch(rf"/api/players/({ID_RE})", path)
         if match:
-            return (PERM_PLAYER_OWN, match.group(1))
-        return PERM_COACH
+            return (PERM_PLAYER_VIEW, match.group(1))
+        # Roster/staff/skills listings: any coach or staff member may browse.
+        return PERM_VIEW
     if method == "POST" and path in ("/api/login", "/api/logout"):
         return PERM_PUBLIC
-    return PERM_COACH
+    if method == "POST":
+        act_match = re.fullmatch(rf"/api/players/({ID_RE})/activity", path)
+        if act_match:
+            # A player may log activity (e.g. opening a drill link) on their own
+            # profile; a coach or content staff may log it for anyone.
+            return (PERM_PLAYER_OWN, act_match.group(1))
+        # Any signed-in player may mark their own alarms/messages read.
+        if path in ("/api/alarms/read", "/api/messages/read"):
+            return PERM_AUTHED
+        if re.fullmatch(rf"/api/(?:alarms|messages)/({ID_RE})/read", path):
+            return PERM_AUTHED
+        # Content actions: ratings, notes, drills, skills, alarms, messages.
+        if path in ("/api/skills", "/api/alarms", "/api/messages"):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/players/({ID_RE})/(?:ratings|notes|drills)", path):
+            return PERM_CONTENT
+        # Everything else (add/import players, staff, access codes) is admin.
+        return PERM_ADMIN
+    if method == "DELETE":
+        # Removing notes, drills, alarms, and messages is a content action.
+        if re.fullmatch(r"/api/notes/" + ID_RE, path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/players/{ID_RE}/drills/{ID_RE}", path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/(?:alarms|messages)/{ID_RE}", path):
+            return PERM_CONTENT
+        return PERM_ADMIN
+    # PUT (player profile/stats, staff passwords, team) and any other method.
+    return PERM_ADMIN
 
 
 class Store:
@@ -606,36 +1096,110 @@ class Store:
 
     def __init__(self, path: Path):
         self.path = Path(path)
+        self.backup_dir = self.path.parent / "data_backups"
         self.lock = threading.Lock()
         self.data = self._load()
 
     def _empty(self) -> dict:
-        return {"skills": [], "players": [], "ratings": [], "notes": [], "auth": {}}
+        return {
+            "skills": [],
+            "players": [],
+            "ratings": [],
+            "notes": [],
+            "activity": [],
+            "staff": [],
+            "alarms": [],
+            "messages": [],
+            "team": {},
+            "auth": {},
+        }
 
-    def _load(self) -> dict:
-        if not self.path.exists():
-            return self._empty()
-        try:
-            raw = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            return self._empty()
+    def _normalize(self, raw: object) -> dict | None:
+        """Coerce a parsed JSON document into the store's data shape, or None."""
         if not isinstance(raw, dict):
-            return self._empty()
+            return None
         data = self._empty()
-        for key in ("skills", "players", "ratings", "notes"):
+        for key in (
+            "skills",
+            "players",
+            "ratings",
+            "notes",
+            "activity",
+            "staff",
+            "alarms",
+            "messages",
+        ):
             items = raw.get(key, [])
             if isinstance(items, list):
                 data[key] = [item for item in items if isinstance(item, dict)]
         auth = raw.get("auth")
         if isinstance(auth, dict):
             data["auth"] = auth
+        team = raw.get("team")
+        if isinstance(team, dict):
+            data["team"] = team
         return data
 
-    def _save(self) -> None:
+    def _read_file(self, path: Path) -> dict | None:
+        """Parse a data file into normalized data, or None if unreadable."""
+        try:
+            raw = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        return self._normalize(raw)
+
+    def _backup_files(self) -> list[Path]:
+        """Existing snapshots, newest first (timestamped names sort chronologically)."""
+        if not self.backup_dir.exists():
+            return []
+        files = [p for p in self.backup_dir.glob("data-*.json") if p.is_file()]
+        files.sort(key=lambda p: p.name, reverse=True)
+        return files
+
+    def _load(self) -> dict:
+        data = self._read_file(self.path) if self.path.exists() else None
+        if data is not None:
+            return data
+        # The main file is missing or corrupt. Recover from the newest good
+        # backup so a deleted or truncated data file never wipes the roster.
+        for backup in self._backup_files():
+            recovered = self._read_file(backup)
+            if recovered is not None:
+                self.data = recovered
+                try:
+                    self._write_main()
+                except OSError:
+                    pass
+                return recovered
+        return self._empty()
+
+    def _write_main(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(self.data, indent=2) + "\n", encoding="utf-8")
         tmp.replace(self.path)
+
+    def _write_backup(self) -> None:
+        """Write a timestamped snapshot and prune old ones. Best-effort."""
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S_%f")
+            dest = self.backup_dir / f"data-{stamp}.json"
+            tmp = self.backup_dir / f"data-{stamp}.json.tmp"
+            tmp.write_text(json.dumps(self.data, indent=2) + "\n", encoding="utf-8")
+            tmp.replace(dest)
+            for old in self._backup_files()[MAX_BACKUPS:]:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        except OSError:
+            # Never fail a save just because a backup could not be written.
+            pass
+
+    def _save(self) -> None:
+        self._write_main()
+        self._write_backup()
 
     def seed_demo_if_empty(self) -> None:
         with self.lock:
@@ -653,6 +1217,8 @@ class Store:
                 "id": new_id("player"),
                 "name": "Alex Rivera",
                 "position": "Shortstop",
+                "secondary_position": "Second Base",
+                "team_year": "2025",
                 "number": 7,
                 "created_at": earlier,
                 "stats": {
@@ -683,6 +1249,8 @@ class Store:
                 "id": new_id("player"),
                 "name": "Jordan Blake",
                 "position": "Pitcher",
+                "secondary_position": "First Base",
+                "team_year": "2025",
                 "number": 21,
                 "created_at": earlier,
                 "stats": {
@@ -755,6 +1323,16 @@ class Store:
                     "created_at": now,
                 },
             ]
+            self.data["staff"] = [
+                {
+                    "id": new_id("staff"),
+                    "name": "Casey Morgan",
+                    "role": "Head Coach",
+                    "contact": "casey.morgan@example.com",
+                    "access_level": "Full",
+                    "created_at": now,
+                },
+            ]
             self._save()
 
     def list_skills(self) -> list[dict]:
@@ -792,7 +1370,6 @@ class Store:
         with self.lock:
             record = self._player_unlocked(player_id)
             raw_stats = record.get("stats")
-            has_access_code = bool(record.get("access_code_hash"))
             player = public_player(record)
             ratings = [
                 dict(item)
@@ -804,12 +1381,32 @@ class Store:
                 for item in self.data["notes"]
                 if item.get("player_id") == player_id
             ]
+            activity = [
+                dict(item)
+                for item in self.data["activity"]
+                if item.get("player_id") == player_id
+            ]
+            drills = [
+                dict(item)
+                for item in record.get("drills", [])
+                if isinstance(item, dict)
+            ]
+            # Only surface genuine PRs. A record without a delta is a legacy
+            # first-entry baseline (there was nothing to beat), not a real PR.
+            records = [
+                dict(item)
+                for item in record.get("records", [])
+                if isinstance(item, dict) and item.get("delta") is not None
+            ]
             skills = list(self.data["skills"])
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-        player["has_access_code"] = has_access_code
+        activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         player["ratings"] = ratings
         player["notes"] = notes
+        player["activity"] = activity[:MAX_ACTIVITY]
+        player["drills"] = drills
+        player["records"] = records[:MAX_RECORDS]
         player["progress"] = build_progress(skills, ratings)
         player["stats"] = build_stats_view(raw_stats)
         return player
@@ -819,11 +1416,39 @@ class Store:
             "id": new_id("player"),
             "name": clean_text(payload.get("name"), "Player name", MAX_NAME_LEN),
             "position": parse_position(payload.get("position")),
+            "secondary_position": parse_optional_position(payload.get("secondary_position")),
+            "team_year": parse_team_year(payload.get("team_year")),
+            "grad_year": parse_grad_year(payload.get("grad_year")),
+            "team_type": parse_team_type(payload.get("team_type")),
             "number": parse_number(payload.get("number")),
+            "exit_velo": parse_exit_velo(payload.get("exit_velo")),
+            "base_time": parse_base_time(payload.get("base_time")),
+            "pitch_velo": parse_pitch_velo(payload.get("pitch_velo")),
+            "throw_speed": parse_throw_speed(payload.get("throw_speed")),
+            "distance": parse_distance(payload.get("distance")),
             "created_at": utc_now(),
             "stats": empty_stat_counts(),
+            "drills": [],
         }
+        # Optionally set a sign-in username + password at creation time.
+        raw_username = payload.get("username") if isinstance(payload, dict) else None
+        raw_password = payload.get("password") if isinstance(payload, dict) else None
+        want_login = bool(
+            (isinstance(raw_username, str) and raw_username.strip())
+            or (isinstance(raw_password, str) and raw_password)
+        )
+        clean_username = ""
+        if want_login:
+            clean_username = parse_login_username(raw_username)
+            secret = parse_login_password(raw_password)
+            if clean_username.casefold() == ADMIN_USERNAME.casefold():
+                raise ValueError("That username is reserved")
         with self.lock:
+            if want_login:
+                if self._login_username_taken(clean_username.casefold()):
+                    raise ValueError("That username is already taken")
+                player["username"] = clean_username
+                player["password_hash"] = hash_password(secret)
             self.data["players"].append(player)
             self._save()
             return public_player(player)
@@ -860,6 +1485,8 @@ class Store:
                         "id": new_id("player"),
                         "name": candidate["name"],
                         "position": candidate["position"],
+                        "secondary_position": candidate.get("secondary_position", ""),
+                        "team_year": candidate.get("team_year", ""),
                         "number": candidate["number"],
                         "created_at": now,
                         "stats": empty_stat_counts(),
@@ -883,10 +1510,76 @@ class Store:
                 player["name"] = clean_text(payload.get("name"), "Player name", MAX_NAME_LEN)
             if "position" in payload:
                 player["position"] = parse_position(payload.get("position"))
+            if "secondary_position" in payload:
+                player["secondary_position"] = parse_optional_position(
+                    payload.get("secondary_position")
+                )
+            if "team_year" in payload:
+                player["team_year"] = parse_team_year(payload.get("team_year"))
+            if "grad_year" in payload:
+                player["grad_year"] = parse_grad_year(payload.get("grad_year"))
+            if "team_type" in payload:
+                player["team_type"] = parse_team_type(payload.get("team_type"))
             if "number" in payload:
                 player["number"] = parse_number(payload.get("number"))
+            if "exit_velo" in payload:
+                player["exit_velo"] = parse_exit_velo(payload.get("exit_velo"))
+                self._record_pr(player, "exit_velo", player["exit_velo"])
+            if "base_time" in payload:
+                player["base_time"] = parse_base_time(payload.get("base_time"))
+                self._record_pr(player, "base_time", player["base_time"])
+            if "pitch_velo" in payload:
+                player["pitch_velo"] = parse_pitch_velo(payload.get("pitch_velo"))
+                self._record_pr(player, "pitch_velo", player["pitch_velo"])
+            if "throw_speed" in payload:
+                player["throw_speed"] = parse_throw_speed(payload.get("throw_speed"))
+                self._record_pr(player, "throw_speed", player["throw_speed"])
+            if "distance" in payload:
+                player["distance"] = parse_distance(payload.get("distance"))
+                self._record_pr(player, "distance", player["distance"])
             self._save()
             return public_player(player)
+
+    def _record_pr(self, player: dict, key: str, value: object) -> None:
+        """Log a personal-record note when a metric beats its previous best."""
+        if key not in PR_METRICS or not isinstance(value, (int, float)):
+            return
+        meta = PR_METRICS[key]
+        best_map = player.setdefault("metric_best", {})
+        previous = best_map.get(key)
+        higher = meta["higher_better"]
+        # The first value entered is only a baseline, not a personal record —
+        # there's nothing to beat yet, so record it silently.
+        if not isinstance(previous, (int, float)):
+            best_map[key] = value
+            return
+        is_pr = False
+        delta = None
+        if higher and value > previous:
+            is_pr = True
+            # Higher-is-better: positive gain (e.g. +2 MPH).
+            delta = round(value - previous, 2)
+        elif not higher and value < previous:
+            is_pr = True
+            # Lower-is-better (time): negative change showing the drop (e.g. -0.20 s).
+            delta = round(value - previous, 2)
+        if not is_pr:
+            return
+        best_map[key] = value
+        note = {
+            "id": new_id("pr"),
+            "metric": key,
+            "label": meta["label"],
+            "unit": meta["unit"],
+            "higher_better": higher,
+            "value": value,
+            "previous": previous if isinstance(previous, (int, float)) else None,
+            "delta": delta,
+            "created_at": utc_now(),
+        }
+        records = player.setdefault("records", [])
+        records.insert(0, note)
+        del records[MAX_RECORDS:]
 
     def delete_player(self, player_id: str) -> None:
         with self.lock:
@@ -900,6 +1593,24 @@ class Store:
             self.data["notes"] = [
                 item for item in self.data["notes"] if item.get("player_id") != player_id
             ]
+            self.data["activity"] = [
+                item for item in self.data["activity"] if item.get("player_id") != player_id
+            ]
+            # Drop alarms/messages aimed only at this player and prune read marks.
+            self.data["alarms"] = [
+                a for a in self.data["alarms"] if a.get("target") != player_id
+            ]
+            for alarm in self.data["alarms"]:
+                if isinstance(alarm.get("reads"), list):
+                    alarm["reads"] = [r for r in alarm["reads"] if r != player_id]
+            self.data["messages"] = [
+                m
+                for m in self.data["messages"]
+                if not (m.get("audience") == "player" and m.get("recipient_id") == player_id)
+            ]
+            for message in self.data["messages"]:
+                if isinstance(message.get("reads"), list):
+                    message["reads"] = [r for r in message["reads"] if r != player_id]
             self._save()
 
     def add_rating(self, player_id: str, payload: dict) -> dict:
@@ -924,17 +1635,49 @@ class Store:
 
     def add_note(self, player_id: str, payload: dict) -> dict:
         text = clean_text(payload.get("text"), "Note", MAX_NOTE_LEN)
+        category = payload.get("category")
+        if category is None or (isinstance(category, str) and not category.strip()):
+            category = DEFAULT_NOTE_CATEGORY
+        elif category not in NOTE_CATEGORIES:
+            raise ValueError("Unknown note category")
         with self.lock:
             self._player_unlocked(player_id)
             note = {
                 "id": new_id("note"),
                 "player_id": player_id,
                 "text": text,
+                "category": category,
                 "created_at": utc_now(),
             }
             self.data["notes"].append(note)
             self._save()
             return dict(note)
+
+    def add_activity(self, player_id: str, payload: dict) -> dict:
+        text = clean_text(payload.get("text"), "Activity", MAX_ACTIVITY_LEN)
+        with self.lock:
+            self._player_unlocked(player_id)
+            entry = {
+                "id": new_id("act"),
+                "player_id": player_id,
+                "text": text,
+                "created_at": utc_now(),
+            }
+            self.data["activity"].append(entry)
+            # Keep only the most recent entries per player so the log stays bounded.
+            own = [a for a in self.data["activity"] if a.get("player_id") == player_id]
+            if len(own) > MAX_ACTIVITY:
+                stale = {
+                    id(a)
+                    for a in sorted(own, key=lambda a: a.get("created_at", ""))[
+                        : len(own) - MAX_ACTIVITY
+                    ]
+                }
+                self.data["activity"] = [
+                    a for a in self.data["activity"] if id(a) not in stale
+                ]
+            self._save()
+            return dict(entry)
 
     def update_stats(self, player_id: str, payload: dict) -> dict:
         counts = parse_stat_counts(payload)
@@ -954,15 +1697,380 @@ class Store:
                 raise KeyError("Note not found")
             self._save()
 
+    def add_drill(self, player_id: str, payload: dict) -> dict:
+        fields = parse_drill(payload)
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            drills = player.setdefault("drills", [])
+            if len(drills) >= MAX_DRILLS:
+                raise ValueError(f"A player can have at most {MAX_DRILLS} drills")
+            drill = {"id": new_id("drill"), **fields, "created_at": utc_now()}
+            drills.append(drill)
+            self._save()
+            return dict(drill)
+
+    def delete_drill(self, player_id: str, drill_id: str) -> None:
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            drills = player.get("drills", [])
+            remaining = [d for d in drills if d.get("id") != drill_id]
+            if len(remaining) == len(drills):
+                raise KeyError("Drill not found")
+            player["drills"] = remaining
+            self._save()
+
+    # -- staff -------------------------------------------------------------
+    # -- team information --------------------------------------------------
+    def get_team(self) -> dict:
+        with self.lock:
+            return dict(self.data.get("team", {}))
+
+    def set_team(self, payload: dict) -> dict:
+        fields = parse_team(payload)
+        with self.lock:
+            self.data["team"] = fields
+            self._save()
+            return dict(fields)
+
+    def _staff_unlocked(self, staff_id: str) -> dict:
+        for member in self.data["staff"]:
+            if member.get("id") == staff_id:
+                return member
+        raise KeyError("Staff member not found")
+
+    def list_staff(self) -> list[dict]:
+        with self.lock:
+            return [public_staff(member) for member in self.data["staff"]]
+
+    def add_staff(self, payload: dict) -> dict:
+        fields = parse_staff(payload)
+        member = {"id": new_id("staff"), **fields, "created_at": utc_now()}
+        # Optionally set a sign-in login at creation time. Staff sign in with
+        # this username (grouped with the password in the form). A password with
+        # no username keeps the legacy name-based login working.
+        raw_username = payload.get("username") if isinstance(payload, dict) else None
+        raw_password = payload.get("password") if isinstance(payload, dict) else None
+        has_username = isinstance(raw_username, str) and bool(raw_username.strip())
+        has_password = isinstance(raw_password, str) and bool(raw_password)
+        clean_username = ""
+        if has_username or has_password:
+            secret = parse_login_password(raw_password)
+            if has_username:
+                clean_username = parse_login_username(raw_username)
+                if clean_username.casefold() == ADMIN_USERNAME.casefold():
+                    raise ValueError("That username is reserved")
+        with self.lock:
+            if has_username:
+                if self._login_username_taken(clean_username.casefold()):
+                    raise ValueError("That username is already taken")
+                member["username"] = clean_username
+            if has_username or has_password:
+                member["password_hash"] = hash_password(secret)
+            self.data["staff"].append(member)
+            self._save()
+            return public_staff(member)
+
+    def update_staff_access(self, staff_id: str, access_level: object) -> dict:
+        """Change a staff member's admin access level (Full-access action)."""
+        level = clean_text(access_level, "Access level", 40)
+        if level not in STAFF_ACCESS_LEVELS:
+            raise ValueError("Choose an access level from the list")
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member["access_level"] = level
+            self._save()
+            return public_staff(member)
+
+    def update_staff(self, staff_id: str, payload: object) -> dict:
+        """Update a staff member's access level, contact (email), and/or username.
+
+        Only keys present in the payload are changed (a Full-access action from
+        the Manage staff modal). Setting ``username`` to an empty string clears
+        it, so the member falls back to name-based login. A non-empty username is
+        validated for format, reserved names, and uniqueness across the shared
+        login namespace (excluding this same member).
+        """
+        if not isinstance(payload, dict):
+            raise ValueError("Send staff details in the request body")
+        updates: dict = {}
+        if "access_level" in payload:
+            level = clean_text(payload.get("access_level"), "Access level", 40)
+            if level not in STAFF_ACCESS_LEVELS:
+                raise ValueError("Choose an access level from the list")
+            updates["access_level"] = level
+        if "contact" in payload:
+            updates["contact"] = parse_optional_contact(payload.get("contact"))
+        change_username = "username" in payload
+        new_username = ""
+        if change_username:
+            raw = payload.get("username")
+            text = raw.strip() if isinstance(raw, str) else ""
+            if text:
+                new_username = parse_login_username(text)
+                if new_username.casefold() == ADMIN_USERNAME.casefold():
+                    raise ValueError("That username is reserved")
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            if change_username and new_username:
+                if self._login_username_taken(
+                    new_username.casefold(), exclude_staff=staff_id
+                ):
+                    raise ValueError("That username is already taken")
+            for key, value in updates.items():
+                member[key] = value
+            if change_username:
+                if new_username:
+                    member["username"] = new_username
+                else:
+                    member.pop("username", None)
+            self._save()
+            return public_staff(member)
+
+    def set_staff_password(self, staff_id: str, password: object) -> dict:
+        """Store only a salted hash of the staff member's access password."""
+        secret = parse_staff_password(password)
+        record = hash_password(secret)
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member["password_hash"] = record
+            self._save()
+            return public_staff(member)
+
+    def clear_staff_password(self, staff_id: str) -> dict:
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member.pop("password_hash", None)
+            self._save()
+            return public_staff(member)
+
+    def delete_staff(self, staff_id: str) -> None:
+        with self.lock:
+            before = len(self.data["staff"])
+            self.data["staff"] = [
+                member for member in self.data["staff"] if member.get("id") != staff_id
+            ]
+            if len(self.data["staff"]) == before:
+                raise KeyError("Staff member not found")
+            # Drop direct messages to this staff member.
+            self.data["messages"] = [
+                m
+                for m in self.data["messages"]
+                if not (
+                    m.get("audience") == "staff_member"
+                    and m.get("recipient_id") == staff_id
+                )
+            ]
+            self._save()
+
+    # -- alarms (coach -> player reminders) --------------------------------
+    def list_alarms(self) -> list[dict]:
+        """Every alarm, newest first (coach management view)."""
+        with self.lock:
+            return sorted(
+                (dict(a) for a in self.data["alarms"]),
+                key=lambda a: a.get("created_at", ""),
+                reverse=True,
+            )
+
+    def add_alarm(self, payload: dict) -> dict:
+        text = clean_text(payload.get("text"), "Alarm", MAX_ALARM_LEN)
+        target = payload.get("target")
+        with self.lock:
+            if target in (None, "", "all"):
+                target = "all"
+                target_name = "All players"
+            else:
+                player = next(
+                    (p for p in self.data["players"] if p.get("id") == target), None
+                )
+                if not player:
+                    raise ValueError("Choose a valid player")
+                target_name = player.get("name", "")
+            alarm = {
+                "id": new_id("alarm"),
+                "text": text,
+                "target": target,
+                "target_name": target_name,
+                "created_at": utc_now(),
+                "reads": [],
+            }
+            self.data["alarms"].append(alarm)
+            if len(self.data["alarms"]) > MAX_BROADCASTS:
+                self.data["alarms"] = self.data["alarms"][-MAX_BROADCASTS:]
+            self._save()
+            return dict(alarm)
+
+    def delete_alarm(self, alarm_id: str) -> None:
+        with self.lock:
+            before = len(self.data["alarms"])
+            self.data["alarms"] = [
+                a for a in self.data["alarms"] if a.get("id") != alarm_id
+            ]
+            if len(self.data["alarms"]) == before:
+                raise KeyError("Alarm not found")
+            self._save()
+
+    def _alarm_targets_player(self, alarm: dict, player_id: str) -> bool:
+        return alarm.get("target") == "all" or alarm.get("target") == player_id
+
+    def alarms_for_player(self, player_id: str) -> list[dict]:
+        """Alarms visible to a player, each annotated with a read flag."""
+        with self.lock:
+            result = []
+            for alarm in self.data["alarms"]:
+                if not self._alarm_targets_player(alarm, player_id):
+                    continue
+                item = dict(alarm)
+                item["read"] = player_id in (alarm.get("reads") or [])
+                item.pop("reads", None)
+                result.append(item)
+            result.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+            return result
+
+    def mark_alarm_read(self, alarm_id: str, player_id: str) -> None:
+        with self.lock:
+            alarm = next(
+                (a for a in self.data["alarms"] if a.get("id") == alarm_id), None
+            )
+            if not alarm or not self._alarm_targets_player(alarm, player_id):
+                raise KeyError("Alarm not found")
+            reads = alarm.setdefault("reads", [])
+            if player_id not in reads:
+                reads.append(player_id)
+                self._save()
+
+    def mark_all_alarms_read(self, player_id: str) -> None:
+        with self.lock:
+            changed = False
+            for alarm in self.data["alarms"]:
+                if not self._alarm_targets_player(alarm, player_id):
+                    continue
+                reads = alarm.setdefault("reads", [])
+                if player_id not in reads:
+                    reads.append(player_id)
+                    changed = True
+            if changed:
+                self._save()
+
+    # -- messages (coach -> player / team / staff) -------------------------
+    def list_messages(self) -> list[dict]:
+        """Every message, newest first (coach outbox view)."""
+        with self.lock:
+            return sorted(
+                (dict(m) for m in self.data["messages"]),
+                key=lambda m: m.get("created_at", ""),
+                reverse=True,
+            )
+
+    def add_message(self, payload: dict) -> dict:
+        body = clean_text(payload.get("body"), "Message", MAX_MESSAGE_LEN)
+        audience = payload.get("audience")
+        if audience not in MESSAGE_AUDIENCES:
+            raise ValueError("Choose who to message")
+        with self.lock:
+            recipient_id = None
+            if audience == "team":
+                recipient_name = "Entire team"
+            elif audience == "staff":
+                recipient_name = "All staff"
+            elif audience == "player":
+                recipient_id = payload.get("recipient_id")
+                player = next(
+                    (p for p in self.data["players"] if p.get("id") == recipient_id),
+                    None,
+                )
+                if not player:
+                    raise ValueError("Choose a valid player")
+                recipient_name = player.get("name", "")
+            else:  # staff_member
+                recipient_id = payload.get("recipient_id")
+                member = next(
+                    (s for s in self.data["staff"] if s.get("id") == recipient_id), None
+                )
+                if not member:
+                    raise ValueError("Choose a valid staff member")
+                recipient_name = member.get("name", "")
+            message = {
+                "id": new_id("msg"),
+                "body": body,
+                "audience": audience,
+                "recipient_id": recipient_id,
+                "recipient_name": recipient_name,
+                "created_at": utc_now(),
+                "reads": [],
+            }
+            self.data["messages"].append(message)
+            if len(self.data["messages"]) > MAX_BROADCASTS:
+                self.data["messages"] = self.data["messages"][-MAX_BROADCASTS:]
+            self._save()
+            return dict(message)
+
+    def delete_message(self, message_id: str) -> None:
+        with self.lock:
+            before = len(self.data["messages"])
+            self.data["messages"] = [
+                m for m in self.data["messages"] if m.get("id") != message_id
+            ]
+            if len(self.data["messages"]) == before:
+                raise KeyError("Message not found")
+            self._save()
+
+    def _message_targets_player(self, message: dict, player_id: str) -> bool:
+        if message.get("audience") == "team":
+            return True
+        return (
+            message.get("audience") == "player"
+            and message.get("recipient_id") == player_id
+        )
+
+    def messages_for_player(self, player_id: str) -> list[dict]:
+        with self.lock:
+            result = []
+            for message in self.data["messages"]:
+                if not self._message_targets_player(message, player_id):
+                    continue
+                item = dict(message)
+                item["read"] = player_id in (message.get("reads") or [])
+                item.pop("reads", None)
+                result.append(item)
+            result.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+            return result
+
+    def mark_message_read(self, message_id: str, player_id: str) -> None:
+        with self.lock:
+            message = next(
+                (m for m in self.data["messages"] if m.get("id") == message_id), None
+            )
+            if not message or not self._message_targets_player(message, player_id):
+                raise KeyError("Message not found")
+            reads = message.setdefault("reads", [])
+            if player_id not in reads:
+                reads.append(player_id)
+                self._save()
+
+    def mark_all_messages_read(self, player_id: str) -> None:
+        with self.lock:
+            changed = False
+            for message in self.data["messages"]:
+                if not self._message_targets_player(message, player_id):
+                    continue
+                reads = message.setdefault("reads", [])
+                if player_id not in reads:
+                    reads.append(player_id)
+                    changed = True
+            if changed:
+                self._save()
+
     # -- authentication ----------------------------------------------------
     def ensure_admin_password(self, env_password: str | None = None) -> str | None:
         """Ensure a coach password hash exists.
 
         If ``env_password`` is provided it always governs. Otherwise, if no
-        password has ever been set, a strong one is generated and returned once
-        (to print for first-time setup); only its hash is stored. Returns the
-        generated plaintext when one was created, else None. Never stores or
-        returns an existing plaintext.
+        password has ever been set, the default password (``123``) is stored and
+        returned once (to print for first-time setup); only its hash is stored.
+        The default persists until the coach chooses their own via
+        ``IDEV_ADMIN_PASSWORD``. Returns the default plaintext when one was
+        created, else None. Never stores or returns an existing plaintext.
         """
         with self.lock:
             auth = self.data.setdefault("auth", {})
@@ -974,43 +2082,114 @@ class Store:
                 return None
             if isinstance(auth.get("admin"), dict):
                 return None
-            generated = secrets.token_urlsafe(GENERATED_ADMIN_BYTES)
-            auth["admin"] = hash_password(generated)
+            auth["admin"] = hash_password(DEFAULT_ADMIN_PASSWORD)
             self._save()
-            return generated
+            return DEFAULT_ADMIN_PASSWORD
 
     def verify_admin_password(self, password: object) -> bool:
         with self.lock:
             record = self.data.get("auth", {}).get("admin")
         return verify_password(password, record)
 
-    def set_player_access_code(self, player_id: str) -> str:
-        """Generate a new access code for a player, store only its hash."""
-        code = secrets.token_urlsafe(ACCESS_CODE_BYTES)
-        digest = hash_access_code(code)
-        with self.lock:
-            player = self._player_unlocked(player_id)
-            player["access_code_hash"] = digest
-            self._save()
-        return code
+    def verify_admin_credentials(self, username: object, password: object) -> bool:
+        """The coach signs in with the admin username and admin password."""
+        if not isinstance(username, str):
+            return False
+        if username.strip().casefold() != ADMIN_USERNAME.casefold():
+            return False
+        return self.verify_admin_password(password)
 
-    def clear_player_access_code(self, player_id: str) -> None:
-        with self.lock:
-            player = self._player_unlocked(player_id)
-            if "access_code_hash" in player:
-                player.pop("access_code_hash", None)
-                self._save()
+    def find_staff_by_credentials(self, username: object, password: object) -> dict | None:
+        """Return a public staff record when username + password match, else None.
 
-    def find_player_by_access_code(self, code: object) -> str | None:
-        if not isinstance(code, str) or not code:
+        Staff sign in with the username a coach set for them. For legacy members
+        created before usernames existed (no stored username), their name still
+        works as the username. Matching is case-insensitive; only members with a
+        stored password hash can sign in.
+        """
+        if not isinstance(username, str) or not isinstance(password, str):
             return None
-        digest = hash_access_code(code)
+        wanted = username.strip().casefold()
+        if not wanted:
+            return None
+        with self.lock:
+            candidates = [dict(m) for m in self.data["staff"]]
+        for member in candidates:
+            stored = str(member.get("username", "")).strip().casefold()
+            # Fall back to the name only when no username has been set.
+            identifier = stored or str(member.get("name", "")).strip().casefold()
+            if identifier != wanted:
+                continue
+            record = member.get("password_hash")
+            if record and verify_password(password, record):
+                return public_staff(member)
+        return None
+
+    def _login_username_taken(
+        self,
+        folded: str,
+        *,
+        exclude_player: str | None = None,
+        exclude_staff: str | None = None,
+    ) -> bool:
+        """Whether a sign-in username is already used by a player or staff member.
+
+        Usernames share one namespace so login (coach -> staff -> player) stays
+        unambiguous. Caller must hold self.lock.
+        """
+        for player in self.data["players"]:
+            if exclude_player is not None and player.get("id") == exclude_player:
+                continue
+            if str(player.get("username", "")).casefold() == folded:
+                return True
+        for member in self.data["staff"]:
+            if exclude_staff is not None and member.get("id") == exclude_staff:
+                continue
+            if str(member.get("username", "")).casefold() == folded:
+                return True
+        return False
+
+    def set_player_login(self, player_id: str, username: object, password: object) -> dict:
+        """Set a player's sign-in username and password (only a hash is stored)."""
+        clean_username = parse_login_username(username)
+        secret = parse_login_password(password)
+        folded = clean_username.casefold()
+        if folded == ADMIN_USERNAME.casefold():
+            raise ValueError("That username is reserved")
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            if self._login_username_taken(folded, exclude_player=player_id):
+                raise ValueError("That username is already taken")
+            player["username"] = clean_username
+            player["password_hash"] = hash_password(secret)
+            # Drop any stale legacy access code.
+            player.pop("access_code_hash", None)
+            self._save()
+            return public_player(player)
+
+    def clear_player_login(self, player_id: str) -> dict:
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            player.pop("username", None)
+            player.pop("password_hash", None)
+            player.pop("access_code_hash", None)
+            self._save()
+            return public_player(player)
+
+    def find_player_by_login(self, username: object, password: object) -> str | None:
+        """Return a player id when username + password match, else None."""
+        if not isinstance(username, str) or not isinstance(password, str):
+            return None
+        wanted = username.strip().casefold()
+        if not wanted:
+            return None
         match = None
         with self.lock:
             for player in self.data["players"]:
-                stored = player.get("access_code_hash")
-                # Compare every player (no early break) for uniform timing.
-                if isinstance(stored, str) and hmac.compare_digest(stored, digest):
+                if str(player.get("username", "")).casefold() != wanted:
+                    continue
+                record = player.get("password_hash")
+                if record and verify_password(password, record):
                     match = player.get("id")
         return match
 
@@ -1032,8 +2211,10 @@ def build_progress(skills: list[dict], ratings: list[dict]) -> list[dict]:
         current = history[-1]["score"] if history else None
         first = history[0]["score"] if history else None
         delta = None
-        if isinstance(current, int) and isinstance(first, int):
-            delta = current - first
+        if isinstance(current, (int, float)) and isinstance(first, (int, float)):
+            delta = round(current - first, 1)
+            if float(delta).is_integer():
+                delta = int(delta)
         progress.append(
             {
                 "skill_id": skill_id,
@@ -1221,6 +2402,15 @@ class IdevHandler(BaseHTTPRequestHandler):
                 payload["player"] = {"id": player["id"], "name": player["name"]}
             except KeyError:
                 payload["player"] = None
+        if session["role"] == "staff":
+            payload["access_level"] = session.get("access_level", "")
+            payload["staff_name"] = session.get("staff_name", "")
+        # Capability flags let the UI hide controls the role cannot use.
+        payload["can"] = {
+            "admin": session_is_admin(session),
+            "content": session_is_content(session),
+            "view_all": session_can_view_all(session),
+        }
         return payload
 
     def _guard(self):
@@ -1232,14 +2422,37 @@ class IdevHandler(BaseHTTPRequestHandler):
         if session is None:
             self._reject(401, "Please sign in")
             return session, perm, False
-        if perm == PERM_COACH:
-            if session.get("role") != "coach":
+        if perm == PERM_AUTHED:
+            return session, perm, True
+        if perm == PERM_VIEW:
+            if not session_can_view_all(session):
                 self._reject(403, "Not allowed")
                 return session, perm, False
             return session, perm, True
-        # (PERM_PLAYER_OWN, player_id): coach always; player only for own id.
-        player_id = perm[1]
-        if session.get("role") == "coach":
+        if perm == PERM_CONTENT:
+            if not session_is_content(session):
+                self._reject(403, "Not allowed")
+                return session, perm, False
+            return session, perm, True
+        if perm in (PERM_ADMIN, PERM_COACH):
+            if not session_is_admin(session):
+                self._reject(403, "Not allowed")
+                return session, perm, False
+            return session, perm, True
+        # Tuple perms scoped to a specific player id.
+        tier, player_id = perm
+        if tier == PERM_PLAYER_VIEW:
+            # Coaches and staff may view anyone; a player may view only their own.
+            if session_can_view_all(session):
+                return session, perm, True
+            if session.get("role") == "player" and hmac.compare_digest(
+                session.get("player_id", ""), player_id
+            ):
+                return session, perm, True
+            self._reject(403, "Not allowed")
+            return session, perm, False
+        # (PERM_PLAYER_OWN, player_id): content staff/coach always; player own only.
+        if session_is_content(session):
             return session, perm, True
         if session.get("role") == "player" and hmac.compare_digest(
             session.get("player_id", ""), player_id
@@ -1263,17 +2476,29 @@ class IdevHandler(BaseHTTPRequestHandler):
             self._reject(429, "Too many attempts. Wait a few minutes and try again.")
             return
         payload = json_body(self)
-        mode = payload.get("mode")
+        username = payload.get("username")
+        password = payload.get("password")
         role = None
         player_id = None
-        if mode == "coach" or (mode is None and "password" in payload):
-            if self.store.verify_admin_password(payload.get("password")):
-                role = "coach"
-        elif mode == "player" or (mode is None and "code" in payload):
-            found = self.store.find_player_by_access_code(payload.get("code"))
-            if found:
-                role = "player"
-                player_id = found
+        staff_id = ""
+        access_level = ""
+        staff_name = ""
+        # One username + password box resolves to a role: coach, then staff,
+        # then player. First match wins so the check is deterministic.
+        if self.store.verify_admin_credentials(username, password):
+            role = "coach"
+        else:
+            member = self.store.find_staff_by_credentials(username, password)
+            if member:
+                role = "staff"
+                staff_id = member["id"]
+                access_level = member.get("access_level", "")
+                staff_name = member.get("name", "")
+            else:
+                found = self.store.find_player_by_login(username, password)
+                if found:
+                    role = "player"
+                    player_id = found
         if role is None:
             self.rate_limiter.record_failure(key)
             send_json(self, 401, {"error": "Invalid sign-in details"})
@@ -1282,7 +2507,12 @@ class IdevHandler(BaseHTTPRequestHandler):
         # Regenerate the session identifier on login; drop any prior session.
         self.session_manager.destroy(self._cookie_sid())
         sid, created = self.session_manager.create(
-            role, player_id, self.headers.get("User-Agent", "")
+            role,
+            player_id,
+            self.headers.get("User-Agent", ""),
+            staff_id=staff_id,
+            access_level=access_level,
+            staff_name=staff_name,
         )
         send_json(
             self,
@@ -1319,6 +2549,26 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/players":
                 send_json(self, 200, {"players": self.store.list_players()})
                 return
+            if path == "/api/staff":
+                send_json(self, 200, {"staff": self.store.list_staff()})
+                return
+            if path == "/api/team":
+                send_json(self, 200, {"team": self.store.get_team()})
+                return
+            if path == "/api/alarms":
+                if session and session.get("role") == "player":
+                    pid = session.get("player_id", "")
+                    send_json(self, 200, {"alarms": self.store.alarms_for_player(pid)})
+                else:
+                    send_json(self, 200, {"alarms": self.store.list_alarms()})
+                return
+            if path == "/api/messages":
+                if session and session.get("role") == "player":
+                    pid = session.get("player_id", "")
+                    send_json(self, 200, {"messages": self.store.messages_for_player(pid)})
+                else:
+                    send_json(self, 200, {"messages": self.store.list_messages()})
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.get_player(player_match.group(1)))
@@ -1350,18 +2600,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             if not self._require_csrf(session, perm):
                 return
             payload = json_body(self)
-            access_match = re.fullmatch(
-                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
-            )
-            if access_match:
-                send_json(self, 201, {"code": self.store.set_player_access_code(access_match.group(1))})
-                return
             if path == "/api/players/import":
                 result = self.store.import_roster(payload)
                 send_json(self, 200 if result["preview"] else 201, result)
                 return
             if path == "/api/players":
                 send_json(self, 201, self.store.add_player(payload))
+                return
+            if path == "/api/staff":
+                send_json(self, 201, self.store.add_staff(payload))
                 return
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))
@@ -1375,6 +2622,56 @@ class IdevHandler(BaseHTTPRequestHandler):
             note_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/notes", path)
             if note_match:
                 send_json(self, 201, self.store.add_note(note_match.group(1), payload))
+                return
+            activity_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/activity", path
+            )
+            if activity_match:
+                send_json(
+                    self, 201, self.store.add_activity(activity_match.group(1), payload)
+                )
+                return
+            drill_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/drills", path
+            )
+            if drill_match:
+                send_json(self, 201, self.store.add_drill(drill_match.group(1), payload))
+                return
+            if path == "/api/alarms":
+                send_json(self, 201, self.store.add_alarm(payload))
+                return
+            if path == "/api/messages":
+                send_json(self, 201, self.store.add_message(payload))
+                return
+            if path == "/api/alarms/read":
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_all_alarms_read(pid)
+                send_json(self, 200, {"ok": True})
+                return
+            if path == "/api/messages/read":
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_all_messages_read(pid)
+                send_json(self, 200, {"ok": True})
+                return
+            alarm_read = re.fullmatch(
+                r"/api/alarms/([a-zA-Z0-9_-]{8,64})/read", path
+            )
+            if alarm_read:
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_alarm_read(alarm_read.group(1), pid)
+                send_json(self, 200, {"ok": True})
+                return
+            message_read = re.fullmatch(
+                r"/api/messages/([a-zA-Z0-9_-]{8,64})/read", path
+            )
+            if message_read:
+                pid = session.get("player_id") if session else None
+                if pid:
+                    self.store.mark_message_read(message_read.group(1), pid)
+                send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:
@@ -1396,9 +2693,35 @@ class IdevHandler(BaseHTTPRequestHandler):
             if stats_match:
                 send_json(self, 200, self.store.update_stats(stats_match.group(1), payload))
                 return
+            login_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/login", path)
+            if login_match:
+                member = self.store.set_player_login(
+                    login_match.group(1),
+                    payload.get("username"),
+                    payload.get("password"),
+                )
+                send_json(self, 200, member)
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.update_player(player_match.group(1), payload))
+                return
+            staff_pw_match = re.fullmatch(
+                r"/api/staff/([a-zA-Z0-9_-]{8,64})/password", path
+            )
+            if staff_pw_match:
+                member = self.store.set_staff_password(
+                    staff_pw_match.group(1), payload.get("password")
+                )
+                send_json(self, 200, member)
+                return
+            staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
+            if staff_match:
+                member = self.store.update_staff(staff_match.group(1), payload)
+                send_json(self, 200, member)
+                return
+            if path == "/api/team":
+                send_json(self, 200, {"team": self.store.set_team(payload)})
                 return
             send_json(self, 404, {"error": "Not found"})
         except KeyError as exc:
@@ -1415,12 +2738,11 @@ class IdevHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            access_match = re.fullmatch(
-                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
+            login_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/login", path
             )
-            if access_match:
-                self.store.clear_player_access_code(access_match.group(1))
-                send_json(self, 200, {"ok": True})
+            if login_match:
+                send_json(self, 200, self.store.clear_player_login(login_match.group(1)))
                 return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
@@ -1430,6 +2752,36 @@ class IdevHandler(BaseHTTPRequestHandler):
             note_match = re.fullmatch(r"/api/notes/([a-zA-Z0-9_-]{8,64})", path)
             if note_match:
                 self.store.delete_note(note_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            drill_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/drills/([a-zA-Z0-9_-]{8,64})",
+                path,
+            )
+            if drill_match:
+                self.store.delete_drill(drill_match.group(1), drill_match.group(2))
+                send_json(self, 200, {"ok": True})
+                return
+            staff_pw_match = re.fullmatch(
+                r"/api/staff/([a-zA-Z0-9_-]{8,64})/password", path
+            )
+            if staff_pw_match:
+                member = self.store.clear_staff_password(staff_pw_match.group(1))
+                send_json(self, 200, member)
+                return
+            staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
+            if staff_match:
+                self.store.delete_staff(staff_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            alarm_match = re.fullmatch(r"/api/alarms/([a-zA-Z0-9_-]{8,64})", path)
+            if alarm_match:
+                self.store.delete_alarm(alarm_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            message_match = re.fullmatch(r"/api/messages/([a-zA-Z0-9_-]{8,64})", path)
+            if message_match:
+                self.store.delete_message(message_match.group(1))
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
@@ -1461,9 +2813,10 @@ def main() -> None:
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
     if generated_password:
         print("", flush=True)
-        print("First-time setup: a coach password was created for you:", flush=True)
-        print(f"    {generated_password}", flush=True)
-        print("Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.", flush=True)
+        print("First-time setup. Sign in with:", flush=True)
+        print(f"    username: {ADMIN_USERNAME}", flush=True)
+        print(f"    password: {generated_password}", flush=True)
+        print("Then set IDEV_ADMIN_PASSWORD to change it.", flush=True)
         print("", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:

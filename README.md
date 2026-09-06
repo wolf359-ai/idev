@@ -45,52 +45,74 @@ The first launch creates two sample players so you can click around. Your change
 
 ## Signing in
 
-idev now has a sign-in page with two kinds of access:
+idev has a single sign-in page: everyone enters a **username and password**.
+Which account the credentials belong to decides what they can do:
 
 - **Coach** — full access to the roster, ratings, stats, and notes.
-- **Player** — read-only access to just one player's own development, using an
-  access code the coach hands out.
+- **Staff** — access depends on their level (Full, Manager, or view-only).
+- **Player** — read-only access to just their own development.
 
-### Coach password
+### Coach login
 
-The **first** time you run `app.py`, idev creates a coach password for you and
-prints it once in the terminal, for example:
+The **first** time you run `app.py`, idev sets a default coach password of
+`123` and prints the login once in the terminal:
 
 ```
-First-time setup: a coach password was created for you:
-    Qk7c-3fJ8s2A
-Sign in as Coach with it. Set IDEV_ADMIN_PASSWORD to choose your own.
+First-time setup. Sign in with:
+    username: coach
+    password: 123
+Then set IDEV_ADMIN_PASSWORD to change it.
 ```
 
-Copy that password and use it on the **Coach** tab. It is stored only as a
-salted hash in `data.json`, never in plain text. To choose your own password
-instead, set an environment variable before starting the app:
+Sign in with username `coach` and password `123`. The password is stored only as
+a salted hash in `data.json`, never in plain text. The default `123` stays in
+effect until you choose your own by setting an environment variable before
+starting the app:
 
 ```bash
 IDEV_ADMIN_PASSWORD="your-own-password" python3 app.py
 ```
 
-### Giving a player access
+The coach username defaults to `coach`; change it with `IDEV_ADMIN_USERNAME` if
+you like. `123` is a deliberately weak default that is convenient for local use.
+Change it with `IDEV_ADMIN_PASSWORD` before running idev anywhere others can
+reach it.
+
+### Giving a player a login
 
 1. Sign in as Coach and open a player.
-2. Click **Access code**. idev shows a one-time code — copy it and give it to
-   that player (or their family).
-3. The player opens idev, chooses the **Player** tab, and enters the code. They
-   see only their own skills, ratings, stats, notes, and progress — they cannot
-   see or change anyone else.
-4. To turn off access, open the player and click **Remove access** (or **Reset
-   code** to issue a new one; the old code stops working).
+2. Click **Set login**, then choose a username and password for that player and
+   share it with them (or their family).
+3. The player opens idev and signs in with those credentials. They see only
+   their own skills, ratings, stats, notes, and progress — they cannot see or
+   change anyone else.
+4. To turn off access, open the player and click **Remove login** (or **Reset
+   login** to set new credentials; the old ones stop working).
 
-Access codes are stored only as hashes, never in plain text. If you serve idev
-over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is marked
-`Secure`.
+### Adding a staff member
+
+When you add a staff member (coach or team helper), the **Add staff** form has an
+optional login section: give them a **username** and **password** and they sign
+in with those. Their access level (Full, Manager, Assistant, or Read-only)
+controls what they can see and change. Leave the login blank to add someone to
+the staff list without sign-in access. Staff added before usernames existed can
+still sign in with their name until you set a username for them.
+
+A Full-access user can edit an existing staff member from **Manage staff
+access**: change their access level, update their **email/phone** and
+**username**, set or clear a password, or remove them — all without deleting and
+re-adding the person. Clearing the username reverts them to name-based login.
+
+Passwords are stored only as salted hashes, never in plain text. If you serve
+idev over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is
+marked `Secure`.
 
 ## What you can do
 
 - **Players** — name, position, and jersey number
 - **Roster import** — preview and import players from a GameChanger Stats CSV or pasted list
 - **Skills** — hitting, fielding, throwing, and other softball skills
-- **Ratings** — tap 1–5 on a skill; each tap is saved as a new rating
+- **Ratings** — click 1–5 on a skill; click the left half of a circle for a half point (e.g. 3.5). Each click is saved as a new rating
 - **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
 - **Skill radar** — a spider chart of every skill's current rating, so strengths and weaknesses stand out at a glance
 - **Notes** — short coaching notes for a player
