@@ -1326,11 +1326,16 @@
     let low = null;
     rated.forEach((item) => {
       const v = Number(item.current) || 0;
+      const name = item.skill_name || "Skill";
       if (!top || v > top.value) {
-        top = { name: item.skill_name || "Skill", value: v };
+        top = { name, value: v };
       }
+      // Track every skill tied at the lowest score so the Focus Area card can
+      // list them all (e.g. "Power, Pitching" when both are 2.5).
       if (!low || v < low.value) {
-        low = { name: item.skill_name || "Skill", value: v };
+        low = { name, value: v, names: [name] };
+      } else if (v === low.value) {
+        low.names.push(name);
       }
     });
     const spark = items.map((item) => Number(item.current) || 0);
@@ -1749,7 +1754,8 @@
         accent: m.low ? accentForScore(m.low.value) : "orange",
         // A focus score of 2.5 or lower flags the card as needing attention.
         alarm: m.low && Number(m.low.value) <= 2.5,
-        foot: m.low ? m.low.name : "Rate a skill",
+        // List every skill tied at the lowest score, not just one.
+        foot: m.low ? (m.low.names || [m.low.name]).join(", ") : "Rate a skill",
         notes: { items: notesForCategory(player, "focus"), canEdit: !isReadOnly(), category: "focus" },
       }),
       drillsTile(player),
