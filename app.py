@@ -850,7 +850,15 @@ def public_player(player: dict) -> dict:
     return view
 
 
-PUBLIC_STAFF_FIELDS = ("id", "name", "role", "contact", "access_level", "created_at")
+PUBLIC_STAFF_FIELDS = (
+    "id",
+    "name",
+    "username",
+    "role",
+    "contact",
+    "access_level",
+    "created_at",
+)
 
 
 def public_staff(member: dict) -> dict:
@@ -1428,10 +1436,8 @@ class Store:
                 raise ValueError("That username is reserved")
         with self.lock:
             if want_login:
-                folded = clean_username.casefold()
-                for other in self.data["players"]:
-                    if str(other.get("username", "")).casefold() == folded:
-                        raise ValueError("That username is already taken")
+                if self._login_username_taken(clean_username.casefold()):
+                    raise ValueError("That username is already taken")
                 player["username"] = clean_username
                 player["password_hash"] = hash_password(secret)
             self.data["players"].append(player)
@@ -1730,11 +1736,27 @@ class Store:
     def add_staff(self, payload: dict) -> dict:
         fields = parse_staff(payload)
         member = {"id": new_id("staff"), **fields, "created_at": utc_now()}
-        # Optionally set a sign-in password at creation time.
+        # Optionally set a sign-in login at creation time. Staff sign in with
+        # this username (grouped with the password in the form). A password with
+        # no username keeps the legacy name-based login working.
+        raw_username = payload.get("username") if isinstance(payload, dict) else None
         raw_password = payload.get("password") if isinstance(payload, dict) else None
-        if isinstance(raw_password, str) and raw_password:
-            member["password_hash"] = hash_password(parse_login_password(raw_password))
+        has_username = isinstance(raw_username, str) and bool(raw_username.strip())
+        has_password = isinstance(raw_password, str) and bool(raw_password)
+        clean_username = ""
+        if has_username or has_password:
+            secret = parse_login_password(raw_password)
+            if has_username:
+                clean_username = parse_login_username(raw_username)
+                if clean_username.casefold() == ADMIN_USERNAME.casefold():
+                    raise ValueError("That username is reserved")
         with self.lock:
+            if has_username:
+                if self._login_username_taken(clean_username.casefold()):
+                    raise ValueError("That username is already taken")
+                member["username"] = clean_username
+            if has_username or has_password:
+                member["password_hash"] = hash_password(secret)
             self.data["staff"].append(member)
             self._save()
             return public_staff(member)
@@ -2012,27 +2034,55 @@ class Store:
             return False
         return self.verify_admin_password(password)
 
-    def find_staff_by_credentials(self, name: object, password: object) -> dict | None:
-        """Return a public staff record when name + password match, else None.
+    def find_staff_by_credentials(self, username: object, password: object) -> dict | None:
+        """Return a public staff record when username + password match, else None.
 
-        Staff sign in with their name and the access password a coach set for
-        them. Names are matched case-insensitively; only members that have a
+        Staff sign in with the username a coach set for them. For legacy members
+        created before usernames existed (no stored username), their name still
+        works as the username. Matching is case-insensitive; only members with a
         stored password hash can sign in.
         """
-        if not isinstance(name, str) or not isinstance(password, str):
+        if not isinstance(username, str) or not isinstance(password, str):
             return None
-        wanted = name.strip().casefold()
+        wanted = username.strip().casefold()
         if not wanted:
             return None
         with self.lock:
             candidates = [dict(m) for m in self.data["staff"]]
         for member in candidates:
-            if str(member.get("name", "")).strip().casefold() != wanted:
+            stored = str(member.get("username", "")).strip().casefold()
+            # Fall back to the name only when no username has been set.
+            identifier = stored or str(member.get("name", "")).strip().casefold()
+            if identifier != wanted:
                 continue
             record = member.get("password_hash")
             if record and verify_password(password, record):
                 return public_staff(member)
         return None
+
+    def _login_username_taken(
+        self,
+        folded: str,
+        *,
+        exclude_player: str | None = None,
+        exclude_staff: str | None = None,
+    ) -> bool:
+        """Whether a sign-in username is already used by a player or staff member.
+
+        Usernames share one namespace so login (coach -> staff -> player) stays
+        unambiguous. Caller must hold self.lock.
+        """
+        for player in self.data["players"]:
+            if exclude_player is not None and player.get("id") == exclude_player:
+                continue
+            if str(player.get("username", "")).casefold() == folded:
+                return True
+        for member in self.data["staff"]:
+            if exclude_staff is not None and member.get("id") == exclude_staff:
+                continue
+            if str(member.get("username", "")).casefold() == folded:
+                return True
+        return False
 
     def set_player_login(self, player_id: str, username: object, password: object) -> dict:
         """Set a player's sign-in username and password (only a hash is stored)."""
@@ -2043,11 +2093,8 @@ class Store:
             raise ValueError("That username is reserved")
         with self.lock:
             player = self._player_unlocked(player_id)
-            for other in self.data["players"]:
-                if other.get("id") == player_id:
-                    continue
-                if str(other.get("username", "")).casefold() == folded:
-                    raise ValueError("That username is already taken")
+            if self._login_username_taken(folded, exclude_player=player_id):
+                raise ValueError("That username is already taken")
             player["username"] = clean_username
             player["password_hash"] = hash_password(secret)
             # Drop any stale legacy access code.

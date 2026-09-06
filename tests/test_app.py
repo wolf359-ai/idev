@@ -927,6 +927,57 @@ class StoreTests(unittest.TestCase):
         self.assertIsNotNone(found)
         self.assertEqual(found["id"], member["id"])
 
+    def test_add_staff_with_username_login(self) -> None:
+        member = self.store.add_staff(
+            {
+                "name": "Kyle Wallace",
+                "role": "Assistant Coach",
+                "access_level": "Manager",
+                "username": "kwallace",
+                "password": "manager-pass",
+            }
+        )
+        self.assertEqual(member["username"], "kwallace")
+        self.assertTrue(member["has_password"])
+        self.assertNotIn("password_hash", member)
+        # Sign-in is by username, not the display name.
+        by_username = self.store.find_staff_by_credentials("kwallace", "manager-pass")
+        self.assertIsNotNone(by_username)
+        self.assertEqual(by_username["id"], member["id"])
+        self.assertIsNone(
+            self.store.find_staff_by_credentials("Kyle Wallace", "manager-pass")
+        )
+
+    def test_add_staff_username_must_be_unique(self) -> None:
+        self.store.add_player(
+            {
+                "name": "Rowan",
+                "position": "Center Field",
+                "username": "shared1",
+                "password": "pw12",
+            }
+        )
+        with self.assertRaises(ValueError):
+            self.store.add_staff(
+                {
+                    "name": "Sam",
+                    "role": "Coach",
+                    "access_level": "Full",
+                    "username": "shared1",
+                    "password": "staff-pass",
+                }
+            )
+        with self.assertRaises(ValueError):
+            self.store.add_staff(
+                {
+                    "name": "Reserved",
+                    "role": "Coach",
+                    "access_level": "Full",
+                    "username": app.ADMIN_USERNAME,
+                    "password": "staff-pass",
+                }
+            )
+
 
 COACH_PASSWORD = "coach-secret-pass"
 

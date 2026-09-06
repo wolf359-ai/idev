@@ -2811,8 +2811,10 @@
       contact: form.get("contact"),
       access_level: form.get("access_level"),
     };
+    const username = (form.get("username") || "").trim();
     const password = (form.get("password") || "").trim();
-    if (password) {
+    if (username || password) {
+      body.username = username;
       body.password = password;
     }
     try {

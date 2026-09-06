@@ -89,6 +89,15 @@ reach it.
 4. To turn off access, open the player and click **Remove login** (or **Reset
    login** to set new credentials; the old ones stop working).
 
+### Adding a staff member
+
+When you add a staff member (coach or team helper), the **Add staff** form has an
+optional login section: give them a **username** and **password** and they sign
+in with those. Their access level (Full, Manager, Assistant, or Read-only)
+controls what they can see and change. Leave the login blank to add someone to
+the staff list without sign-in access. Staff added before usernames existed can
+still sign in with their name until you set a username for them.
+
 Passwords are stored only as salted hashes, never in plain text. If you serve
 idev over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is
 marked `Secure`.
