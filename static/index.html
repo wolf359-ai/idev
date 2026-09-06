@@ -13,36 +13,15 @@
         <img class="logo" src="/static/logo.png" alt="Alpha logo" width="135" height="44">
         <p class="wordmark tagline">Player development portal</p>
       </div>
-      <div class="login-tabs" role="tablist">
-        <button type="button" id="tab-player" class="btn tab active">Player</button>
-        <button type="button" id="tab-staff" class="btn tab">Staff</button>
-        <button type="button" id="tab-coach" class="btn tab">Coach</button>
-      </div>
-      <form id="player-login-form" class="form login-form" autocomplete="off">
-        <p class="meta">Enter the access code your coach gave you to see your own development.</p>
+      <form id="login-form" class="form login-form" autocomplete="off">
+        <p class="meta">Sign in with the username and password your coach gave you.</p>
         <label>
-          Access code
-          <input id="player-code" name="code" type="password" autocomplete="one-time-code" required>
-        </label>
-        <button type="submit" class="btn btn-primary">Sign in</button>
-      </form>
-      <form id="staff-login-form" class="form login-form hidden" autocomplete="off">
-        <p class="meta">Staff sign in with their name and the access password a coach set for them.</p>
-        <label>
-          Name
-          <input id="staff-name" name="name" type="text" autocomplete="off" required>
+          Username
+          <input id="login-username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required>
         </label>
         <label>
           Password
-          <input id="staff-password" name="password" type="password" autocomplete="current-password" required>
-        </label>
-        <button type="submit" class="btn btn-primary">Sign in</button>
-      </form>
-      <form id="coach-login-form" class="form login-form hidden" autocomplete="off">
-        <p class="meta">Coaches manage the full roster, ratings, stats, and notes.</p>
-        <label>
-          Coach password
-          <input id="coach-password" name="password" type="password" autocomplete="current-password" required>
+          <input id="login-password" name="password" type="password" autocomplete="current-password" required>
         </label>
         <button type="submit" class="btn btn-primary">Sign in</button>
       </form>
@@ -398,29 +377,43 @@
         </div>
       </form>
     </dialog>
-    <dialog id="access-code-modal" class="modal" aria-labelledby="access-code-title">
-      <form id="access-code-form" class="form" autocomplete="off">
-        <h3 class="modal-title" id="access-code-title">Set access code</h3>
-        <p class="meta" id="access-code-help">
-          Enter an access code for this player. They'll use it to sign in and view
-          their information. 4–64 characters.
+    <dialog id="player-login-modal" class="modal" aria-labelledby="player-login-title">
+      <form id="player-login-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="player-login-title">Set player login</h3>
+        <p class="meta" id="player-login-help">
+          Give this player a username and password so they can sign in and view
+          their own development.
         </p>
         <label>
-          Access code
+          Username
           <input
-            id="access-code-input"
-            name="code"
-            minlength="4"
-            maxlength="64"
+            id="player-login-username"
+            name="username"
+            minlength="3"
+            maxlength="32"
             required
             autocomplete="off"
+            autocapitalize="none"
             spellcheck="false"
-            placeholder="e.g. rivera-2026"
+            placeholder="e.g. rivera7"
+          >
+        </label>
+        <label>
+          Password
+          <input
+            id="player-login-password"
+            name="password"
+            type="password"
+            minlength="4"
+            maxlength="128"
+            required
+            autocomplete="new-password"
+            placeholder="At least 4 characters"
           >
         </label>
         <div class="row modal-actions">
-          <button type="submit" class="btn btn-primary">Save code</button>
-          <button type="button" id="cancel-access-code" class="btn">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save login</button>
+          <button type="button" id="cancel-player-login" class="btn">Cancel</button>
         </div>
       </form>
     </dialog>

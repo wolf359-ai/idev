@@ -45,49 +45,53 @@ The first launch creates two sample players so you can click around. Your change
 
 ## Signing in
 
-idev now has a sign-in page with two kinds of access:
+idev has a single sign-in page: everyone enters a **username and password**.
+Which account the credentials belong to decides what they can do:
 
 - **Coach** — full access to the roster, ratings, stats, and notes.
-- **Player** — read-only access to just one player's own development, using an
-  access code the coach hands out.
+- **Staff** — access depends on their level (Full, Manager, or view-only).
+- **Player** — read-only access to just their own development.
 
-### Coach password
+### Coach login
 
 The **first** time you run `app.py`, idev sets a default coach password of
-`123` and prints it once in the terminal:
+`123` and prints the login once in the terminal:
 
 ```
-First-time setup: the default coach password is:
-    123
-Sign in as Coach with it, then set IDEV_ADMIN_PASSWORD to change it.
+First-time setup. Sign in with:
+    username: coach
+    password: 123
+Then set IDEV_ADMIN_PASSWORD to change it.
 ```
 
-Sign in on the **Coach** tab with `123`. It is stored only as a salted hash in
-`data.json`, never in plain text. The default `123` stays in effect until you
-choose your own password by setting an environment variable before starting the
-app:
+Sign in with username `coach` and password `123`. The password is stored only as
+a salted hash in `data.json`, never in plain text. The default `123` stays in
+effect until you choose your own by setting an environment variable before
+starting the app:
 
 ```bash
 IDEV_ADMIN_PASSWORD="your-own-password" python3 app.py
 ```
 
-`123` is a deliberately weak default that is convenient for local use. Change it
-with `IDEV_ADMIN_PASSWORD` before running idev anywhere others can reach it.
+The coach username defaults to `coach`; change it with `IDEV_ADMIN_USERNAME` if
+you like. `123` is a deliberately weak default that is convenient for local use.
+Change it with `IDEV_ADMIN_PASSWORD` before running idev anywhere others can
+reach it.
 
-### Giving a player access
+### Giving a player a login
 
 1. Sign in as Coach and open a player.
-2. Click **Access code**. idev shows a one-time code — copy it and give it to
-   that player (or their family).
-3. The player opens idev, chooses the **Player** tab, and enters the code. They
-   see only their own skills, ratings, stats, notes, and progress — they cannot
-   see or change anyone else.
-4. To turn off access, open the player and click **Remove access** (or **Reset
-   code** to issue a new one; the old code stops working).
+2. Click **Set login**, then choose a username and password for that player and
+   share it with them (or their family).
+3. The player opens idev and signs in with those credentials. They see only
+   their own skills, ratings, stats, notes, and progress — they cannot see or
+   change anyone else.
+4. To turn off access, open the player and click **Remove login** (or **Reset
+   login** to set new credentials; the old ones stop working).
 
-Access codes are stored only as hashes, never in plain text. If you serve idev
-over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is marked
-`Secure`.
+Passwords are stored only as salted hashes, never in plain text. If you serve
+idev over HTTPS behind a proxy, set `IDEV_HTTPS=1` so the session cookie is
+marked `Secure`.
 
 ## What you can do
 

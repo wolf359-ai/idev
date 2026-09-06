@@ -79,9 +79,6 @@ COOKIE_SECURE = os.environ.get("IDEV_HTTPS", "").strip().lower() in {"1", "true"
 # Human-chosen coach password: slow, salted KDF (PBKDF2-HMAC-SHA256, >=600k).
 PBKDF2_ALGO = "pbkdf2_sha256"
 PBKDF2_ITERATIONS = 600_000
-# Player access codes are high-entropy random tokens, so a single SHA-256 is
-# appropriate (brute force is infeasible) and keeps per-login lookup cheap.
-ACCESS_CODE_BYTES = 18
 GENERATED_ADMIN_BYTES = 12
 # Weak, well-known default coach password used only until the coach picks their
 # own (via IDEV_ADMIN_PASSWORD). Fine for a local, single-user app; change it
@@ -91,6 +88,8 @@ LOGIN_MAX_FAILURES = 10
 LOGIN_WINDOW_SECONDS = 5 * 60
 LOGIN_BLOCK_SECONDS = 5 * 60
 ADMIN_PASSWORD_ENV = os.environ.get("IDEV_ADMIN_PASSWORD")
+# The coach signs in with this username plus the admin password.
+ADMIN_USERNAME = os.environ.get("IDEV_ADMIN_USERNAME", "coach").strip() or "coach"
 
 PERM_PUBLIC = "public"
 PERM_COACH = "coach"
@@ -827,6 +826,7 @@ def build_stats_view(raw: object) -> dict:
 PUBLIC_PLAYER_FIELDS = (
     "id",
     "name",
+    "username",
     "position",
     "secondary_position",
     "team_year",
@@ -844,8 +844,10 @@ PUBLIC_PLAYER_FIELDS = (
 
 
 def public_player(player: dict) -> dict:
-    """Copy only non-sensitive player fields (never the access-code hash)."""
-    return {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+    """Copy only non-sensitive player fields (never the password hash)."""
+    view = {key: player.get(key) for key in PUBLIC_PLAYER_FIELDS if key in player}
+    view["has_login"] = bool(player.get("password_hash"))
+    return view
 
 
 PUBLIC_STAFF_FIELDS = ("id", "name", "role", "contact", "access_level", "created_at")
@@ -885,22 +887,30 @@ def verify_password(password: object, record: object) -> bool:
     return hmac.compare_digest(derived, expected)
 
 
-def hash_access_code(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+USERNAME_RE = re.compile(r"^[A-Za-z0-9._-]{3,32}$")
 
 
-def parse_access_code(value: object) -> str:
-    """A coach-provided access code the player uses to sign in (4-64 chars)."""
+def parse_login_username(value: object) -> str:
+    """A sign-in username: 3-32 chars of letters, digits, dot, dash, underscore."""
     if not isinstance(value, str):
-        raise ValueError("Enter an access code")
-    code = value.strip()
-    if len(code) < 4:
-        raise ValueError("Access code must be at least 4 characters")
-    if len(code) > 64:
-        raise ValueError("Access code must be 64 characters or fewer")
-    if any(ord(ch) < 32 for ch in code):
-        raise ValueError("Access code contains invalid characters")
-    return code
+        raise ValueError("Enter a username")
+    username = value.strip()
+    if not USERNAME_RE.fullmatch(username):
+        raise ValueError(
+            "Username must be 3-32 characters using letters, numbers, '.', '_', or '-'"
+        )
+    return username
+
+
+def parse_login_password(value: object) -> str:
+    """A sign-in password: 4-128 characters."""
+    if not isinstance(value, str) or not value:
+        raise ValueError("Password is required")
+    if len(value) < 4:
+        raise ValueError("Password must be at least 4 characters")
+    if len(value) > 128:
+        raise ValueError("Password must be 128 characters or fewer")
+    return value
 
 
 class SessionManager:
@@ -1343,7 +1353,6 @@ class Store:
         with self.lock:
             record = self._player_unlocked(player_id)
             raw_stats = record.get("stats")
-            has_access_code = bool(record.get("access_code_hash"))
             player = public_player(record)
             ratings = [
                 dict(item)
@@ -1376,7 +1385,6 @@ class Store:
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
-        player["has_access_code"] = has_access_code
         player["ratings"] = ratings
         player["notes"] = notes
         player["activity"] = activity[:MAX_ACTIVITY]
@@ -1972,6 +1980,14 @@ class Store:
             record = self.data.get("auth", {}).get("admin")
         return verify_password(password, record)
 
+    def verify_admin_credentials(self, username: object, password: object) -> bool:
+        """The coach signs in with the admin username and admin password."""
+        if not isinstance(username, str):
+            return False
+        if username.strip().casefold() != ADMIN_USERNAME.casefold():
+            return False
+        return self.verify_admin_password(password)
+
     def find_staff_by_credentials(self, name: object, password: object) -> dict | None:
         """Return a public staff record when name + password match, else None.
 
@@ -1994,40 +2010,50 @@ class Store:
                 return public_staff(member)
         return None
 
-    def set_player_access_code(self, player_id: str, code: object = None) -> str:
-        """Set a player's access code, storing only its hash.
-
-        Uses the coach-provided ``code`` when given; otherwise generates a
-        high-entropy random one.
-        """
-        if code is None or (isinstance(code, str) and not code.strip()):
-            code = secrets.token_urlsafe(ACCESS_CODE_BYTES)
-        else:
-            code = parse_access_code(code)
-        digest = hash_access_code(code)
+    def set_player_login(self, player_id: str, username: object, password: object) -> dict:
+        """Set a player's sign-in username and password (only a hash is stored)."""
+        clean_username = parse_login_username(username)
+        secret = parse_login_password(password)
+        folded = clean_username.casefold()
+        if folded == ADMIN_USERNAME.casefold():
+            raise ValueError("That username is reserved")
         with self.lock:
             player = self._player_unlocked(player_id)
-            player["access_code_hash"] = digest
+            for other in self.data["players"]:
+                if other.get("id") == player_id:
+                    continue
+                if str(other.get("username", "")).casefold() == folded:
+                    raise ValueError("That username is already taken")
+            player["username"] = clean_username
+            player["password_hash"] = hash_password(secret)
+            # Drop any stale legacy access code.
+            player.pop("access_code_hash", None)
             self._save()
-        return code
+            return public_player(player)
 
-    def clear_player_access_code(self, player_id: str) -> None:
+    def clear_player_login(self, player_id: str) -> dict:
         with self.lock:
             player = self._player_unlocked(player_id)
-            if "access_code_hash" in player:
-                player.pop("access_code_hash", None)
-                self._save()
+            player.pop("username", None)
+            player.pop("password_hash", None)
+            player.pop("access_code_hash", None)
+            self._save()
+            return public_player(player)
 
-    def find_player_by_access_code(self, code: object) -> str | None:
-        if not isinstance(code, str) or not code:
+    def find_player_by_login(self, username: object, password: object) -> str | None:
+        """Return a player id when username + password match, else None."""
+        if not isinstance(username, str) or not isinstance(password, str):
             return None
-        digest = hash_access_code(code)
+        wanted = username.strip().casefold()
+        if not wanted:
+            return None
         match = None
         with self.lock:
             for player in self.data["players"]:
-                stored = player.get("access_code_hash")
-                # Compare every player (no early break) for uniform timing.
-                if isinstance(stored, str) and hmac.compare_digest(stored, digest):
+                if str(player.get("username", "")).casefold() != wanted:
+                    continue
+                record = player.get("password_hash")
+                if record and verify_password(password, record):
                     match = player.get("id")
         return match
 
@@ -2314,29 +2340,29 @@ class IdevHandler(BaseHTTPRequestHandler):
             self._reject(429, "Too many attempts. Wait a few minutes and try again.")
             return
         payload = json_body(self)
-        mode = payload.get("mode")
+        username = payload.get("username")
+        password = payload.get("password")
         role = None
         player_id = None
         staff_id = ""
         access_level = ""
         staff_name = ""
-        if mode == "coach" or (mode is None and "password" in payload and "name" not in payload):
-            if self.store.verify_admin_password(payload.get("password")):
-                role = "coach"
-        elif mode == "player" or (mode is None and "code" in payload):
-            found = self.store.find_player_by_access_code(payload.get("code"))
-            if found:
-                role = "player"
-                player_id = found
-        elif mode == "staff":
-            member = self.store.find_staff_by_credentials(
-                payload.get("name"), payload.get("password")
-            )
+        # One username + password box resolves to a role: coach, then staff,
+        # then player. First match wins so the check is deterministic.
+        if self.store.verify_admin_credentials(username, password):
+            role = "coach"
+        else:
+            member = self.store.find_staff_by_credentials(username, password)
             if member:
                 role = "staff"
                 staff_id = member["id"]
                 access_level = member.get("access_level", "")
                 staff_name = member.get("name", "")
+            else:
+                found = self.store.find_player_by_login(username, password)
+                if found:
+                    role = "player"
+                    player_id = found
         if role is None:
             self.rate_limiter.record_failure(key)
             send_json(self, 401, {"error": "Invalid sign-in details"})
@@ -2438,17 +2464,6 @@ class IdevHandler(BaseHTTPRequestHandler):
             if not self._require_csrf(session, perm):
                 return
             payload = json_body(self)
-            access_match = re.fullmatch(
-                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
-            )
-            if access_match:
-                code = payload.get("code") if isinstance(payload, dict) else None
-                send_json(
-                    self,
-                    201,
-                    {"code": self.store.set_player_access_code(access_match.group(1), code)},
-                )
-                return
             if path == "/api/players/import":
                 result = self.store.import_roster(payload)
                 send_json(self, 200 if result["preview"] else 201, result)
@@ -2542,6 +2557,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             if stats_match:
                 send_json(self, 200, self.store.update_stats(stats_match.group(1), payload))
                 return
+            login_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/login", path)
+            if login_match:
+                member = self.store.set_player_login(
+                    login_match.group(1),
+                    payload.get("username"),
+                    payload.get("password"),
+                )
+                send_json(self, 200, member)
+                return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
                 send_json(self, 200, self.store.update_player(player_match.group(1), payload))
@@ -2573,12 +2597,11 @@ class IdevHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
         try:
-            access_match = re.fullmatch(
-                r"/api/players/([a-zA-Z0-9_-]{8,64})/access-code", path
+            login_match = re.fullmatch(
+                r"/api/players/([a-zA-Z0-9_-]{8,64})/login", path
             )
-            if access_match:
-                self.store.clear_player_access_code(access_match.group(1))
-                send_json(self, 200, {"ok": True})
+            if login_match:
+                send_json(self, 200, self.store.clear_player_login(login_match.group(1)))
                 return
             player_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})", path)
             if player_match:
@@ -2649,9 +2672,10 @@ def main() -> None:
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
     if generated_password:
         print("", flush=True)
-        print("First-time setup: the default coach password is:", flush=True)
-        print(f"    {generated_password}", flush=True)
-        print("Sign in as Coach with it, then set IDEV_ADMIN_PASSWORD to change it.", flush=True)
+        print("First-time setup. Sign in with:", flush=True)
+        print(f"    username: {ADMIN_USERNAME}", flush=True)
+        print(f"    password: {generated_password}", flush=True)
+        print("Then set IDEV_ADMIN_PASSWORD to change it.", flush=True)
         print("", flush=True)
     print("Press Ctrl+C to stop.", flush=True)
     try:

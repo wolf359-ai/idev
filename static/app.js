@@ -1,12 +1,9 @@
 (() => {
   const loginView = document.getElementById("login-view");
   const appView = document.getElementById("app-view");
-  const playerLoginForm = document.getElementById("player-login-form");
-  const coachLoginForm = document.getElementById("coach-login-form");
-  const staffLoginForm = document.getElementById("staff-login-form");
-  const tabPlayer = document.getElementById("tab-player");
-  const tabStaff = document.getElementById("tab-staff");
-  const tabCoach = document.getElementById("tab-coach");
+  const loginForm = document.getElementById("login-form");
+  const loginUsername = document.getElementById("login-username");
+  const loginPassword = document.getElementById("login-password");
   const loginError = document.getElementById("login-error");
   const logoutBtn = document.getElementById("logout-btn");
   const sessionLabel = document.getElementById("session-label");
@@ -47,10 +44,11 @@
   const editPlayerModal = document.getElementById("edit-player-modal");
   const editPlayerForm = document.getElementById("edit-player-form");
   const cancelEditPlayer = document.getElementById("cancel-edit-player");
-  const accessCodeModal = document.getElementById("access-code-modal");
-  const accessCodeForm = document.getElementById("access-code-form");
-  const accessCodeInput = document.getElementById("access-code-input");
-  const cancelAccessCode = document.getElementById("cancel-access-code");
+  const playerLoginModal = document.getElementById("player-login-modal");
+  const playerLoginForm = document.getElementById("player-login-form");
+  const playerLoginUsername = document.getElementById("player-login-username");
+  const playerLoginPassword = document.getElementById("player-login-password");
+  const cancelPlayerLogin = document.getElementById("cancel-player-login");
   const noteModal = document.getElementById("note-modal");
   const noteForm = document.getElementById("note-form");
   const noteInput = document.getElementById("note-input");
@@ -1145,16 +1143,16 @@
       actions.push(
         el(
           "button",
-          { type: "button", className: "btn", onClick: manageAccessCode },
-          player.has_access_code ? "Reset code" : "Access code",
+          { type: "button", className: "btn", onClick: managePlayerLogin },
+          player.has_login ? "Reset login" : "Set login",
         ),
       );
-      if (player.has_access_code) {
+      if (player.has_login) {
         actions.push(
           el(
             "button",
-            { type: "button", className: "btn btn-danger", onClick: revokeAccessCode },
-            "Remove access",
+            { type: "button", className: "btn btn-danger", onClick: clearPlayerLogin },
+            "Remove login",
           ),
         );
       }
@@ -1652,10 +1650,10 @@
     if (player.grad_year) {
       tags.push(el("span", { className: "tag" }, `Class of ${player.grad_year}`));
     }
-    if (player.has_access_code) {
-      tags.push(el("span", { className: "tag on" }, "Access on"));
+    if (player.has_login) {
+      tags.push(el("span", { className: "tag on" }, "Login set"));
     } else {
-      tags.push(el("span", { className: "tag" }, "No access code"));
+      tags.push(el("span", { className: "tag" }, "No login"));
     }
     const idPanel = el(
       "section",
@@ -2273,49 +2271,52 @@
     editPlayerForm.reset();
   }
 
-  function manageAccessCode() {
-    if (!state.selectedId || !state.detail || !accessCodeModal) {
+  function managePlayerLogin() {
+    if (!state.selectedId || !state.detail || !playerLoginModal) {
       return;
     }
-    const has = state.detail.has_access_code;
-    const title = document.getElementById("access-code-title");
-    const help = document.getElementById("access-code-help");
+    const has = state.detail.has_login;
+    const title = document.getElementById("player-login-title");
+    const help = document.getElementById("player-login-help");
     if (title) {
-      title.textContent = has ? "Reset access code" : "Set access code";
+      title.textContent = has ? "Reset player login" : "Set player login";
     }
     if (help) {
       help.textContent = has
-        ? "Enter a new access code for this player. The current code will stop working. They'll use this to sign in and view their information. 4–64 characters."
-        : "Enter an access code for this player. They'll use it to sign in and view their information. 4–64 characters.";
+        ? "Enter a new username and password for this player. The current login will stop working."
+        : "Give this player a username and password so they can sign in and view their own development.";
     }
-    accessCodeForm.reset();
-    if (typeof accessCodeModal.showModal === "function") {
-      accessCodeModal.showModal();
+    playerLoginForm.reset();
+    if (playerLoginUsername) {
+      playerLoginUsername.value = state.detail.username || "";
+    }
+    if (typeof playerLoginModal.showModal === "function") {
+      playerLoginModal.showModal();
     } else {
-      accessCodeModal.setAttribute("open", "");
+      playerLoginModal.setAttribute("open", "");
     }
-    if (accessCodeInput) {
-      accessCodeInput.focus();
+    if (playerLoginUsername) {
+      playerLoginUsername.focus();
     }
   }
 
-  function closeAccessCodeModal() {
-    if (accessCodeModal.open) {
-      accessCodeModal.close();
+  function closePlayerLoginModal() {
+    if (playerLoginModal.open) {
+      playerLoginModal.close();
     } else {
-      accessCodeModal.removeAttribute("open");
+      playerLoginModal.removeAttribute("open");
     }
   }
 
-  async function revokeAccessCode() {
+  async function clearPlayerLogin() {
     if (!state.selectedId) {
       return;
     }
-    if (!window.confirm("Remove this player's access code? They will no longer be able to sign in.")) {
+    if (!window.confirm("Remove this player's login? They will no longer be able to sign in.")) {
       return;
     }
     try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}/access-code`, {
+      await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
         method: "DELETE",
       });
       await loadDetail(state.selectedId);
@@ -2325,17 +2326,6 @@
   }
 
   // -- authentication ----------------------------------------------------
-  function selectTab(which) {
-    const mode = which === "coach" || which === "staff" ? which : "player";
-    tabPlayer.classList.toggle("active", mode === "player");
-    if (tabStaff) tabStaff.classList.toggle("active", mode === "staff");
-    tabCoach.classList.toggle("active", mode === "coach");
-    playerLoginForm.classList.toggle("hidden", mode !== "player");
-    if (staffLoginForm) staffLoginForm.classList.toggle("hidden", mode !== "staff");
-    coachLoginForm.classList.toggle("hidden", mode !== "coach");
-    loginError.textContent = "";
-  }
-
   function showLogin() {
     state.role = null;
     state.csrf = null;
@@ -2417,8 +2407,7 @@
         loginError.textContent = payload.error || "Could not sign in";
         return;
       }
-      playerLoginForm.reset();
-      coachLoginForm.reset();
+      if (loginForm) loginForm.reset();
       applySession(payload);
     } catch (_error) {
       loginError.textContent = "Could not sign in. Please try again.";
@@ -2438,30 +2427,15 @@
     }
   }
 
-  tabPlayer.addEventListener("click", () => selectTab("player"));
-  if (tabStaff) tabStaff.addEventListener("click", () => selectTab("staff"));
-  tabCoach.addEventListener("click", () => selectTab("coach"));
-
-  playerLoginForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    doLogin({ mode: "player", code: document.getElementById("player-code").value });
-  });
-
-  if (staffLoginForm) {
-    staffLoginForm.addEventListener("submit", (event) => {
+  if (loginForm) {
+    loginForm.addEventListener("submit", (event) => {
       event.preventDefault();
       doLogin({
-        mode: "staff",
-        name: document.getElementById("staff-name").value,
-        password: document.getElementById("staff-password").value,
+        username: loginUsername ? loginUsername.value : "",
+        password: loginPassword ? loginPassword.value : "",
       });
     });
   }
-
-  coachLoginForm.addEventListener("submit", (event) => {
-    event.preventDefault();
-    doLogin({ mode: "coach", password: document.getElementById("coach-password").value });
-  });
 
   logoutBtn.addEventListener("click", async () => {
     try {
@@ -2690,29 +2664,30 @@
     });
   }
 
-  if (cancelAccessCode) {
-    cancelAccessCode.addEventListener("click", closeAccessCodeModal);
+  if (cancelPlayerLogin) {
+    cancelPlayerLogin.addEventListener("click", closePlayerLoginModal);
   }
-  if (accessCodeModal) {
-    accessCodeModal.addEventListener("click", (event) => {
-      if (event.target === accessCodeModal) {
-        closeAccessCodeModal();
+  if (playerLoginModal) {
+    playerLoginModal.addEventListener("click", (event) => {
+      if (event.target === playerLoginModal) {
+        closePlayerLoginModal();
       }
     });
   }
-  if (accessCodeForm) {
-    accessCodeForm.addEventListener("submit", async (event) => {
+  if (playerLoginForm) {
+    playerLoginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.selectedId) {
         return;
       }
-      const code = accessCodeInput.value.trim();
+      const username = playerLoginUsername.value.trim();
+      const password = playerLoginPassword.value;
       try {
-        await request(`/api/players/${encodeURIComponent(state.selectedId)}/access-code`, {
-          method: "POST",
-          body: JSON.stringify({ code }),
+        await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
+          method: "PUT",
+          body: JSON.stringify({ username, password }),
         });
-        closeAccessCodeModal();
+        closePlayerLoginModal();
         await loadDetail(state.selectedId);
       } catch (error) {
         showError(error.message);

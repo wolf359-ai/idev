@@ -832,45 +832,55 @@ class StoreTests(unittest.TestCase):
         self.assertTrue(self.store.verify_admin_password("my-own-pass"))
         self.assertFalse(self.store.verify_admin_password("123"))
 
-    def test_access_code_roundtrip_and_not_leaked(self) -> None:
+    def test_player_login_roundtrip_and_not_leaked(self) -> None:
         player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
-        self.assertNotIn("access_code_hash", player)
-        code = self.store.set_player_access_code(player["id"])
-        self.assertEqual(self.store.find_player_by_access_code(code), player["id"])
-        self.assertIsNone(self.store.find_player_by_access_code("nope"))
+        self.assertNotIn("password_hash", player)
+        self.assertFalse(player["has_login"])
+        self.store.set_player_login(player["id"], "samlee", "secret-pass")
+        self.assertEqual(
+            self.store.find_player_by_login("samlee", "secret-pass"), player["id"]
+        )
+        # Username match is case-insensitive; wrong password does not match.
+        self.assertEqual(
+            self.store.find_player_by_login("SamLee", "secret-pass"), player["id"]
+        )
+        self.assertIsNone(self.store.find_player_by_login("samlee", "nope"))
+        self.assertIsNone(self.store.find_player_by_login("nobody", "secret-pass"))
         detail = self.store.get_player(player["id"])
-        self.assertTrue(detail["has_access_code"])
-        self.assertNotIn("access_code_hash", detail)
-        # Stored value is a SHA-256 hash, never the plaintext code.
-        stored = self.store.data["players"][0]["access_code_hash"]
-        self.assertEqual(len(stored), 64)
-        self.assertNotEqual(stored, code)
-        self.store.clear_player_access_code(player["id"])
-        self.assertIsNone(self.store.find_player_by_access_code(code))
+        self.assertTrue(detail["has_login"])
+        self.assertEqual(detail["username"], "samlee")
+        self.assertNotIn("password_hash", detail)
+        # Stored value is a salted PBKDF2 hash, never the plaintext password.
+        stored = self.store.data["players"][0]["password_hash"]
+        self.assertIsInstance(stored, dict)
+        self.assertNotIn("secret-pass", json.dumps(stored))
+        self.store.clear_player_login(player["id"])
+        self.assertIsNone(self.store.find_player_by_login("samlee", "secret-pass"))
 
-    def test_access_code_accepts_coach_provided_value(self) -> None:
-        player = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
-        # A coach-provided code is used verbatim (after trimming).
-        returned = self.store.set_player_access_code(player["id"], "  rivera-2026  ")
-        self.assertEqual(returned, "rivera-2026")
-        self.assertEqual(
-            self.store.find_player_by_access_code("rivera-2026"), player["id"]
-        )
-        # Too-short codes are rejected.
+    def test_player_login_validation_and_uniqueness(self) -> None:
+        one = self.store.add_player({"name": "Sam Lee", "position": "Catcher"})
+        two = self.store.add_player({"name": "Pat Roe", "position": "Utility"})
+        self.store.set_player_login(one["id"], "rivera7", "good-pass")
+        # Duplicate username (case-insensitive) is rejected.
         with self.assertRaises(ValueError):
-            self.store.set_player_access_code(player["id"], "ab")
-        # Blank falls back to a generated random code.
-        generated = self.store.set_player_access_code(player["id"], "   ")
-        self.assertTrue(len(generated) >= 8)
-        self.assertEqual(
-            self.store.find_player_by_access_code(generated), player["id"]
-        )
+            self.store.set_player_login(two["id"], "RIVERA7", "other-pass")
+        # Invalid username characters / length are rejected.
+        with self.assertRaises(ValueError):
+            self.store.set_player_login(two["id"], "ab", "good-pass")
+        with self.assertRaises(ValueError):
+            self.store.set_player_login(two["id"], "has spaces", "good-pass")
+        # Too-short password is rejected.
+        with self.assertRaises(ValueError):
+            self.store.set_player_login(two["id"], "patroe", "no")
+        # The admin username is reserved.
+        with self.assertRaises(ValueError):
+            self.store.set_player_login(two["id"], app.ADMIN_USERNAME, "good-pass")
 
-    def test_public_player_hides_access_code_hash(self) -> None:
+    def test_public_player_hides_password_hash(self) -> None:
         player = self.store.add_player({"name": "Pat", "position": "Utility"})
-        self.store.set_player_access_code(player["id"])
+        self.store.set_player_login(player["id"], "patutil", "secret-pass")
         listed = self.store.list_players()
-        self.assertTrue(all("access_code_hash" not in item for item in listed))
+        self.assertTrue(all("password_hash" not in item for item in listed))
 
 
 COACH_PASSWORD = "coach-secret-pass"
@@ -938,13 +948,25 @@ class HttpTests(unittest.TestCase):
         return response.status, parsed
 
     def login_coach(self, password: str = COACH_PASSWORD) -> tuple[int, object]:
-        return self._login({"mode": "coach", "password": password})
+        return self._login({"username": app.ADMIN_USERNAME, "password": password})
 
-    def login_player(self, code: str) -> tuple[int, object]:
-        return self._login({"mode": "player", "code": code})
+    def login_player(self, username: str, password: str) -> tuple[int, object]:
+        return self._login({"username": username, "password": password})
 
     def login_staff(self, name: str, password: str) -> tuple[int, object]:
-        return self._login({"mode": "staff", "name": name, "password": password})
+        return self._login({"username": name, "password": password})
+
+    def give_player_login(
+        self, pid: str, username: str = "player1", password: str = "player-pass"
+    ) -> tuple[str, str]:
+        """Set a player's sign-in username/password (as the signed-in coach)."""
+        status, member = self.call(
+            "PUT",
+            f"/api/players/{pid}/login",
+            {"username": username, "password": password},
+        )
+        self.assertEqual(status, 200, member)
+        return username, password
 
     def make_staff(self, name: str, access_level: str, password: str) -> str:
         """Create a staff member with a login password (as the signed-in coach)."""
@@ -1111,7 +1133,7 @@ class HttpTests(unittest.TestCase):
         status, payload = self.login_coach(password="wrong-password")
         self.assertEqual(status, 401)
         self.assertIsNone(self.cookie)
-        status, _payload = self.login_player(code="not-a-real-code")
+        status, _payload = self.login_player("nobody", "not-a-real-code")
         self.assertEqual(status, 401)
 
     def test_coach_session_and_logout(self) -> None:
@@ -1149,10 +1171,9 @@ class HttpTests(unittest.TestCase):
             "POST", "/api/players", {"name": "Pat Lane", "position": "Utility"}
         )
         self.assertEqual(status, 201)
-        status, access = self.call("POST", f"/api/players/{player['id']}/access-code")
-        self.assertEqual(status, 201)
+        self.give_player_login(player["id"], "patlane", "player-pass")
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("patlane", "player-pass")
         status, _payload = self.call("GET", "/api/staff")
         self.assertEqual(status, 403)
         status, _payload = self.call(
@@ -1231,10 +1252,9 @@ class HttpTests(unittest.TestCase):
             "POST", "/api/players", {"name": "Pat Lane", "position": "Utility"}
         )
         self.assertEqual(status, 201)
-        status, access = self.call("POST", f"/api/players/{player['id']}/access-code")
-        self.assertEqual(status, 201)
+        self.give_player_login(player["id"], "patlane", "player-pass")
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("patlane", "player-pass")
         # A player may read team info (it appears in the header) ...
         status, listing = self.call("GET", "/api/team")
         self.assertEqual(status, 200)
@@ -1266,11 +1286,10 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 400)
 
-        # Give the player an access code and sign in as them.
-        status, access = self.call("POST", f"/api/players/{pid}/access-code")
-        self.assertEqual(status, 201)
+        # Give the player a login and sign in as them.
+        self.give_player_login(pid, "drewkim", "player-pass")
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("drewkim", "player-pass")
 
         # The player can see their own drills...
         status, detail = self.call("GET", f"/api/players/{pid}")
@@ -1311,11 +1330,10 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 201)
         self.assertEqual(entry["text"], "Reviewed drill: Long toss")
 
-        # Give the player an access code and sign in as them.
-        status, access = self.call("POST", f"/api/players/{pid}/access-code")
-        self.assertEqual(status, 201)
+        # Give the player a login and sign in as them.
+        self.give_player_login(pid, "jamiefox", "player-pass")
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("jamiefox", "player-pass")
 
         # The owning player can log their own activity and see it in Progress.
         status, _entry = self.call(
@@ -1337,10 +1355,9 @@ class HttpTests(unittest.TestCase):
         _status, other = self.call(
             "POST", "/api/players", {"name": "Stranger", "position": "Catcher"}
         )
-        status, access = self.call("POST", f"/api/players/{mine['id']}/access-code")
-        self.assertEqual(status, 201)
+        self.give_player_login(mine["id"], "owner1", "player-pass")
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("owner1", "player-pass")
         # Logging to a different player's profile is forbidden.
         status, _payload = self.call(
             "POST",
@@ -1366,14 +1383,10 @@ class HttpTests(unittest.TestCase):
         _status, other = self.call(
             "POST", "/api/players", {"name": "Other", "position": "Catcher"}
         )
-        status, code_payload = self.call(
-            "POST", f"/api/players/{mine['id']}/access-code"
-        )
-        self.assertEqual(status, 201)
-        code = code_payload["code"]
+        self.give_player_login(mine["id"], "mineuser", "player-pass")
 
         self.sign_out()
-        status, session = self.login_player(code)
+        status, session = self.login_player("mineuser", "player-pass")
         self.assertEqual(status, 200)
         self.assertEqual(session["role"], "player")
         self.assertEqual(session["player"]["id"], mine["id"])
@@ -1382,7 +1395,7 @@ class HttpTests(unittest.TestCase):
         status, detail = self.call("GET", f"/api/players/{mine['id']}")
         self.assertEqual(status, 200)
         self.assertEqual(detail["name"], "Mine")
-        self.assertNotIn("access_code_hash", detail)
+        self.assertNotIn("password_hash", detail)
 
         # Cannot list the roster, read another player, or make changes.
         status, _payload = self.call("GET", "/api/players")
@@ -1404,11 +1417,10 @@ class HttpTests(unittest.TestCase):
             "POST", "/api/alarms", {"text": "Bring cleats", "target": "all"}
         )
         self.assertEqual(status, 201)
-        status, access = self.call("POST", f"/api/players/{pid}/access-code")
-        self.assertEqual(status, 201)
+        self.give_player_login(pid, "novauser", "player-pass")
 
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("novauser", "player-pass")
         # The player sees the alarm as unread and cannot create alarms.
         status, listing = self.call("GET", "/api/alarms")
         self.assertEqual(status, 200)
@@ -1449,11 +1461,10 @@ class HttpTests(unittest.TestCase):
             {"body": "See coach", "audience": "player", "recipient_id": pid},
         )
         self.assertEqual(status, 201)
-        status, access = self.call("POST", f"/api/players/{pid}/access-code")
-        self.assertEqual(status, 201)
+        self.give_player_login(pid, "oakuser", "player-pass")
 
         self.sign_out()
-        self.login_player(code=access["code"])
+        self.login_player("oakuser", "player-pass")
         status, listing = self.call("GET", "/api/messages")
         self.assertEqual(status, 200)
         self.assertEqual({m["body"] for m in listing["messages"]}, {"Great game", "See coach"})
@@ -1463,19 +1474,24 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
 
-    def test_access_code_login_and_revocation(self) -> None:
+    def test_player_login_and_revocation(self) -> None:
         _status, player = self.call(
             "POST", "/api/players", {"name": "Rae", "position": "Pitcher"}
         )
-        _status, code_payload = self.call(
-            "POST", f"/api/players/{player['id']}/access-code"
-        )
-        code = code_payload["code"]
-        # Revoke as coach.
-        status, _payload = self.call("DELETE", f"/api/players/{player['id']}/access-code")
-        self.assertEqual(status, 200)
+        self.give_player_login(player["id"], "raeuser", "player-pass")
+        # The login works before it is cleared.
         self.sign_out()
-        status, _payload = self.login_player(code)
+        status, session = self.login_player("raeuser", "player-pass")
+        self.assertEqual(status, 200)
+        self.assertEqual(session["role"], "player")
+        # Clear the login as coach.
+        self.login_coach()
+        status, cleared = self.call("DELETE", f"/api/players/{player['id']}/login")
+        self.assertEqual(status, 200)
+        self.assertFalse(cleared["has_login"])
+        # The old credentials no longer work.
+        self.sign_out()
+        status, _payload = self.login_player("raeuser", "player-pass")
         self.assertEqual(status, 401)
 
     # -- staff login + role-based permissions ------------------------------
@@ -1549,7 +1565,11 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 403)
         status, _ = self.call("PUT", f"/api/players/{pid}", {"name": "Renamed"})
         self.assertEqual(status, 403)
-        status, _ = self.call("POST", f"/api/players/{pid}/access-code")
+        status, _ = self.call(
+            "PUT",
+            f"/api/players/{pid}/login",
+            {"username": "blocked", "password": "player-pass"},
+        )
         self.assertEqual(status, 403)
 
     def test_view_only_staff_is_read_only(self) -> None:
