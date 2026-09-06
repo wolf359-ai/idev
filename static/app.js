@@ -333,9 +333,13 @@
     }
     state.staff.forEach((member) => {
       const details = [member.role, member.contact].filter(Boolean).join(" · ");
-      const meta = [details, member.has_password ? "Password set" : "No password"]
-        .filter(Boolean)
-        .join(" · ");
+      // Show how they sign in: their username, or a hint that no login is set.
+      const loginBit = member.username
+        ? `Login: ${member.username}`
+        : member.has_password
+          ? "Login: their name"
+          : "No login";
+      const meta = [details, loginBit].filter(Boolean).join(" · ");
       const info = el(
         "div",
         { className: "staff-info" },
@@ -422,7 +426,14 @@
         el(
           "div",
           { className: "meta staff-meta" },
-          [details, member.has_password ? "Password set" : "No password"]
+          [
+            details,
+            member.username
+              ? `Login: ${member.username}`
+              : member.has_password
+                ? "Login: their name"
+                : "No login",
+          ]
             .filter(Boolean)
             .join(" · "),
         ),
