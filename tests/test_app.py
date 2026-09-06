@@ -768,6 +768,30 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.update_stats(player["id"], {"h": 10000})
 
+    def test_pitches_seen_and_per_pa(self) -> None:
+        player = self.store.add_player({"name": "Blake", "position": "Utility"})
+        # Pitches seen is an editable offense count; P/PA is derived from PA.
+        updated = self.store.update_stats(
+            player["id"], {"pa": 8, "pitches": 30}
+        )
+        self.assertEqual(updated["counts"]["pitches"], 30)
+        self.assertEqual(updated["computed"]["p_pa"], 3.75)
+        self.assertEqual(
+            next(i["display"] for i in updated["offense"] if i["key"] == "pitches"),
+            "30",
+        )
+        self.assertEqual(
+            next(i["display"] for i in updated["offense"] if i["key"] == "p_pa"),
+            "3.75",
+        )
+        # With no plate appearances, P/PA is undefined and shows a dash.
+        zeroed = self.store.update_stats(player["id"], {"pa": 0, "pitches": 5})
+        self.assertIsNone(zeroed["computed"]["p_pa"])
+        self.assertEqual(
+            next(i["display"] for i in zeroed["offense"] if i["key"] == "p_pa"),
+            "—",
+        )
+
     def test_preview_and_import_gamechanger_roster(self) -> None:
         csv_text = (
             "#,Roster,GP,PA,AB,H\n"

@@ -217,6 +217,7 @@ OFFENSE_COUNT_FIELDS = (
     ("sac", "SAC", "Sacrifice bunts"),
     ("sb", "SB", "Stolen bases"),
     ("cs", "CS", "Caught stealing"),
+    ("pitches", "PIT", "Pitches seen"),
 )
 
 DEFENSE_COUNT_FIELDS = (
@@ -234,6 +235,7 @@ OFFENSE_COMPUTED_FIELDS = (
     ("ops", "OPS", "On-base plus slugging"),
     ("tb", "TB", "Total bases"),
     ("xbh", "XBH", "Extra-base hits"),
+    ("p_pa", "P/PA", "Pitches per plate appearance"),
 )
 
 DEFENSE_COMPUTED_FIELDS = (
@@ -762,6 +764,9 @@ def compute_game_stats(counts: dict) -> dict:
     obp = (on_base / on_base_chances) if on_base_chances else None
     slg = (total_bases / at_bats) if at_bats else None
     ops = (obp + slg) if obp is not None and slg is not None else None
+    plate_appearances = int(counts["pa"])
+    pitches_seen = int(counts["pitches"])
+    p_pa = (pitches_seen / plate_appearances) if plate_appearances else None
     total_chances = int(counts["po"]) + int(counts["a"]) + int(counts["e"])
     fpct = ((int(counts["po"]) + int(counts["a"])) / total_chances) if total_chances else None
     return {
@@ -771,6 +776,7 @@ def compute_game_stats(counts: dict) -> dict:
         "ops": None if ops is None else round(ops, 3),
         "tb": total_bases,
         "xbh": extra_base,
+        "p_pa": None if p_pa is None else round(p_pa, 2),
         "tc": total_chances,
         "fpct": None if fpct is None else round(fpct, 3),
     }
@@ -801,6 +807,9 @@ def build_stats_view(raw: object) -> dict:
             value = computed[key]
             if key in {"tb", "xbh", "tc"}:
                 display = str(value)
+            elif key == "p_pa":
+                # Pitches per PA is a plain average (e.g. 3.75), not a .xxx rate.
+                display = "—" if value is None else f"{value:.2f}"
             else:
                 display = format_rate(value)
             items.append(
