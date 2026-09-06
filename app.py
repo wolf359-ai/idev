@@ -1761,6 +1761,17 @@ class Store:
             self._save()
             return public_staff(member)
 
+    def update_staff_access(self, staff_id: str, access_level: object) -> dict:
+        """Change a staff member's admin access level (Full-access action)."""
+        level = clean_text(access_level, "Access level", 40)
+        if level not in STAFF_ACCESS_LEVELS:
+            raise ValueError("Choose an access level from the list")
+        with self.lock:
+            member = self._staff_unlocked(staff_id)
+            member["access_level"] = level
+            self._save()
+            return public_staff(member)
+
     def set_staff_password(self, staff_id: str, password: object) -> dict:
         """Store only a salted hash of the staff member's access password."""
         secret = parse_staff_password(password)
@@ -2647,6 +2658,13 @@ class IdevHandler(BaseHTTPRequestHandler):
             if staff_pw_match:
                 member = self.store.set_staff_password(
                     staff_pw_match.group(1), payload.get("password")
+                )
+                send_json(self, 200, member)
+                return
+            staff_match = re.fullmatch(r"/api/staff/([a-zA-Z0-9_-]{8,64})", path)
+            if staff_match:
+                member = self.store.update_staff_access(
+                    staff_match.group(1), payload.get("access_level")
                 )
                 send_json(self, 200, member)
                 return

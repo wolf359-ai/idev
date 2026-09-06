@@ -367,6 +367,24 @@
     }
   }
 
+  async function updateStaffAccess(member, level) {
+    if (level === member.access_level) {
+      return;
+    }
+    try {
+      await request(`/api/staff/${encodeURIComponent(member.id)}`, {
+        method: "PUT",
+        body: JSON.stringify({ access_level: level }),
+      });
+      await loadStaff();
+      renderManageStaff();
+    } catch (error) {
+      showError(error.message);
+      // Revert the dropdown to the stored value on failure.
+      renderManageStaff();
+    }
+  }
+
   async function setStaffPassword(member, password) {
     const value = (password || "").trim();
     if (value.length < 4) {
@@ -413,6 +431,21 @@
     }
     state.staff.forEach((member) => {
       const details = [member.role, member.contact].filter(Boolean).join(" · ");
+      // Full-access users can change a member's access level in place.
+      const accessSelect = el(
+        "select",
+        {
+          className: "staff-access-select",
+          "aria-label": `Access level for ${member.name}`,
+        },
+        ...["Full", "Manager", "Assistant", "Read-only"].map((lvl) =>
+          el("option", { value: lvl }, lvl),
+        ),
+      );
+      accessSelect.value = member.access_level || "Full";
+      accessSelect.addEventListener("change", () => {
+        updateStaffAccess(member, accessSelect.value);
+      });
       const info = el(
         "div",
         { className: "staff-info" },
@@ -420,7 +453,7 @@
           "div",
           { className: "staff-top" },
           el("strong", {}, member.name),
-          el("span", { className: "staff-access" }, member.access_level || ""),
+          accessSelect,
         ),
         el(
           "div",

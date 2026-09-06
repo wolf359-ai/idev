@@ -978,6 +978,21 @@ class StoreTests(unittest.TestCase):
                 }
             )
 
+    def test_update_staff_access(self) -> None:
+        member = self.store.add_staff(
+            {"name": "Dana", "role": "Coach", "access_level": "Assistant"}
+        )
+        updated = self.store.update_staff_access(member["id"], "Manager")
+        self.assertEqual(updated["access_level"], "Manager")
+        # The change persists on the stored record.
+        self.assertEqual(
+            self.store._staff_unlocked(member["id"])["access_level"], "Manager"
+        )
+        with self.assertRaises(ValueError):
+            self.store.update_staff_access(member["id"], "Emperor")
+        with self.assertRaises(KeyError):
+            self.store.update_staff_access("staff-does-not-exist", "Full")
+
 
 COACH_PASSWORD = "coach-secret-pass"
 
@@ -1665,6 +1680,33 @@ class HttpTests(unittest.TestCase):
             "PUT",
             f"/api/players/{pid}/login",
             {"username": "blocked", "password": "player-pass"},
+        )
+        self.assertEqual(status, 403)
+
+    def test_full_access_can_change_staff_access_level(self) -> None:
+        # Coach (full access) can change another staff member's access level.
+        target = self.make_staff("Jamie Reed", "Assistant", "reed-pass")
+        status, updated = self.call(
+            "PUT", f"/api/staff/{target}", {"access_level": "Manager"}
+        )
+        self.assertEqual(status, 200, updated)
+        self.assertEqual(updated["access_level"], "Manager")
+        # A rejected level returns 400 and leaves the record unchanged.
+        status, _ = self.call("PUT", f"/api/staff/{target}", {"access_level": "Boss"})
+        self.assertEqual(status, 400)
+        status, listing = self.call("GET", "/api/staff")
+        self.assertEqual(status, 200)
+        member = next(m for m in listing["staff"] if m["id"] == target)
+        self.assertEqual(member["access_level"], "Manager")
+
+    def test_manager_cannot_change_staff_access_level(self) -> None:
+        target = self.make_staff("Alex Stone", "Assistant", "stone-pass")
+        self.make_staff("Kyle Wallace", "Manager", "manager-pass")
+        self.sign_out()
+        self.login_staff("Kyle Wallace", "manager-pass")
+        # Changing access level is an admin-only action.
+        status, _ = self.call(
+            "PUT", f"/api/staff/{target}", {"access_level": "Full"}
         )
         self.assertEqual(status, 403)
 
