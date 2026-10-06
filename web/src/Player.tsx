@@ -202,13 +202,15 @@ function Skills({
       </p>
       {progress.map((item) => (
         <article key={item.skill_id} className="card skill">
-          <h2>{item.skill_name}</h2>
+          <div className="skill-top">
+            <h2>{item.skill_name}</h2>
+            <p className="meta">{item.current ? `${item.current} / 5` : "—"}</p>
+          </div>
           <ScoreDots
             value={item.current}
             readOnly={readOnly}
             onRate={(score) => onRate(item.skill_id, score)}
           />
-          <p className="meta">{item.current ? `${item.current} / 5` : "—"}</p>
         </article>
       ))}
       <article className="card">

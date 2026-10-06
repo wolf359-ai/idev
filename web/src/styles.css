@@ -336,20 +336,36 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
 }
 .login-card .btn { margin-top: 0.4rem; }
 
-.skills-list { gap: 0.35rem; }
+.skills-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.skills-list > .meta,
+.skills-list > .card:not(.skill) {
+  grid-column: 1 / -1;
+}
 
 .card.skill {
-  display: grid;
-  grid-template-columns: minmax(5.5rem, 1fr) auto auto;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.28rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  padding: 0.4rem 0.45rem;
   border-radius: 12px;
+}
+
+.skill-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem;
 }
 
 .card.skill h2 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.82rem;
   line-height: 1.15;
 }
 
