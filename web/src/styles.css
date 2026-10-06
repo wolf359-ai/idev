@@ -89,7 +89,33 @@ button { cursor: pointer; }
   white-space: nowrap;
 }
 
-.who-row .alarm-btn { flex: none; }
+.player-name-block {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) 36px;
+  column-gap: 0.45rem;
+  align-items: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.player-name-block h1 {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.player-name-block > .meta {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+}
+
+.player-name-block > .alarm-btn {
+  grid-column: 2;
+  grid-row: 2;
+}
 
 .top-actions {
   display: flex;

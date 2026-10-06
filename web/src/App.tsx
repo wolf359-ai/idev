@@ -101,6 +101,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
       .catch(() => undefined);
   }, []);
 
+  const alarmsCurrent = screen.name === "alarms";
   const teamLabel = [team.name, team.season, team.year].filter(Boolean).join(" · ");
   const who =
     session.role === "coach"
@@ -126,18 +127,6 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           <p className="brand-title">{teamLabel || "Player development"}</p>
           <div className="who-row">
             <p className="meta">{who}</p>
-            <button
-              type="button"
-              className={screen.name === "alarms" ? "alarm-btn on" : "alarm-btn"}
-              aria-label={unread.alarms ? `Alarms, ${unread.alarms} unread` : "Alarms"}
-              aria-current={screen.name === "alarms" ? "page" : undefined}
-              onClick={() => setScreen({ name: "alarms" })}
-            >
-              <AlarmIcon />
-              {unread.alarms ? (
-                <span className="badge">{unread.alarms > 99 ? "99+" : unread.alarms}</span>
-              ) : null}
-            </button>
           </div>
         </div>
         <div className="top-actions">
@@ -162,6 +151,9 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             tab={screen.tab}
             can={can}
             showBack={can.view_all}
+            alarmUnread={unread.alarms}
+            alarmsCurrent={alarmsCurrent}
+            onAlarms={() => setScreen({ name: "alarms" })}
             onTab={(tab) => setScreen({ name: "player", id: screen.id, tab })}
             onBack={() => {
               refreshRoster();
@@ -216,28 +208,6 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         ) : null}
       </nav>
     </div>
-  );
-}
-
-function AlarmIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M6.2 16.5h11.6c-.7-1.1-1.3-2.3-1.3-4.2V10a4.5 4.5 0 0 0-9 0v2.3c0 1.9-.6 3.1-1.3 4.2Z"
-      />
-      <path
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
-        strokeLinecap="round"
-        d="M10 16.8a2 2 0 0 0 4 0"
-      />
-    </svg>
   );
 }
 

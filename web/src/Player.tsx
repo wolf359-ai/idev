@@ -21,6 +21,9 @@ export function PlayerScreen({
   onTab,
   onBack,
   showBack,
+  onAlarms,
+  alarmUnread = 0,
+  alarmsCurrent = false,
 }: {
   playerId: string;
   tab: PlayerTab;
@@ -28,6 +31,9 @@ export function PlayerScreen({
   onTab: (tab: PlayerTab) => void;
   onBack: () => void;
   showBack: boolean;
+  onAlarms: () => void;
+  alarmUnread?: number;
+  alarmsCurrent?: boolean;
 }) {
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const [error, setError] = useState("");
@@ -89,9 +95,21 @@ export function PlayerScreen({
         ) : null}
         <div className="player-title">
           <span className="jersey">{player.number ?? "–"}</span>
-          <div>
+          <div className="player-name-block">
             <h1>{player.name}</h1>
             <p className="meta">{positionLabel(player)}</p>
+            <button
+              type="button"
+              className={alarmsCurrent ? "alarm-btn on" : "alarm-btn"}
+              aria-label={alarmUnread ? `Alarms, ${alarmUnread} unread` : "Alarms"}
+              aria-current={alarmsCurrent ? "page" : undefined}
+              onClick={onAlarms}
+            >
+              <AlarmIcon />
+              {alarmUnread ? (
+                <span className="badge">{alarmUnread > 99 ? "99+" : alarmUnread}</span>
+              ) : null}
+            </button>
           </div>
         </div>
         {can.admin ? (
@@ -185,6 +203,28 @@ export function PlayerScreen({
       ) : null}
       {tab === "progress" ? <Progress player={player} /> : null}
     </section>
+  );
+}
+
+function AlarmIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M6.2 16.5h11.6c-.7-1.1-1.3-2.3-1.3-4.2V10a4.5 4.5 0 0 0-9 0v2.3c0 1.9-.6 3.1-1.3 4.2Z"
+      />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M10 16.8a2 2 0 0 0 4 0"
+      />
+    </svg>
   );
 }
 
