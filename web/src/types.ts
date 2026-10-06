@@ -49,6 +49,16 @@ export type ProgressItem = {
   history: HistoryPoint[];
 };
 
+export type SkillRef = {
+  id: string;
+  name: string;
+};
+
+export type SkillGroup = {
+  position: string;
+  skills: SkillRef[];
+};
+
 export type Note = {
   id: string;
   text: string;
@@ -96,6 +106,7 @@ export type PlayerDetail = PlayerSummary & {
   drills?: Drill[];
   records?: RecordItem[];
   progress?: ProgressItem[];
+  skill_groups?: SkillGroup[];
   stats?: {
     offense?: StatItem[];
     defense?: StatItem[];

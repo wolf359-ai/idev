@@ -91,6 +91,16 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ skill_id: skillId, score }),
     }),
+  attachPositionSkill: (position: string, name: string) =>
+    request<{ id: string; name: string }>(
+      `/api/positions/${encodeURIComponent(position)}/skills`,
+      { method: "POST", body: JSON.stringify({ name }) },
+    ),
+  detachPositionSkill: (position: string, skillId: string) =>
+    request<{ ok: boolean }>(
+      `/api/positions/${encodeURIComponent(position)}/skills/${encodeURIComponent(skillId)}`,
+      { method: "DELETE" },
+    ),
   addNote: (id: string, text: string, category: string) =>
     request<unknown>(`/api/players/${encodeURIComponent(id)}/notes`, {
       method: "POST",

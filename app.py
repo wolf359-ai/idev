@@ -197,6 +197,54 @@ DEFAULT_SKILLS = (
     "Catching",
 )
 
+# Pitching and Catching are position-specific. Every other name, including
+# coach-created skills, is shared so a custom skill is never hidden.
+def positions_for_skill_name(name: str) -> tuple[str, ...]:
+    folded = " ".join(name.split()).casefold()
+    if folded == "pitching":
+        return ("Pitcher",)
+    if folded == "catching":
+        return ("Catcher",)
+    return POSITIONS
+
+
+def default_position_skills(skills: list[dict]) -> dict[str, list[str]]:
+    """Assign existing skills to positions from their names."""
+    mapping: dict[str, list[str]] = {position: [] for position in POSITIONS}
+    for skill in skills:
+        skill_id = skill.get("id")
+        skill_name = skill.get("name")
+        if not isinstance(skill_id, str) or not isinstance(skill_name, str):
+            continue
+        for position in positions_for_skill_name(skill_name):
+            mapping[position].append(skill_id)
+    return mapping
+
+
+def sanitize_position_skills(raw: dict) -> dict[str, list[str]]:
+    """Keep coach assignments and fill any position that has no key yet."""
+    mapping: dict[str, list[str]] = {}
+    for position in POSITIONS:
+        values = raw.get(position, [])
+        ids: list[str] = []
+        seen: set[str] = set()
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, str) and item not in seen:
+                    seen.add(item)
+                    ids.append(item)
+        mapping[position] = ids
+    return mapping
+
+
+def player_positions(player: dict) -> list[str]:
+    found: list[str] = []
+    for key in ("position", "secondary_position"):
+        value = player.get(key)
+        if isinstance(value, str) and value in POSITIONS and value not in found:
+            found.append(value)
+    return found
+
 SAFE_ID = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
 
 # Standard GameChanger batting and fielding totals coaches copy from a season page.
@@ -1076,11 +1124,15 @@ def required_permission(method: str, path: str):
             return PERM_CONTENT
         if re.fullmatch(rf"/api/players/({ID_RE})/(?:ratings|notes|drills)", path):
             return PERM_CONTENT
+        if re.fullmatch(r"/api/positions/[^/]+/skills", path):
+            return PERM_CONTENT
         # Everything else (add/import players, staff, access codes) is admin.
         return PERM_ADMIN
     if method == "DELETE":
         # Removing notes, drills, alarms, and messages is a content action.
         if re.fullmatch(r"/api/notes/" + ID_RE, path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/positions/[^/]+/skills/{ID_RE}", path):
             return PERM_CONTENT
         if re.fullmatch(rf"/api/players/{ID_RE}/drills/{ID_RE}", path):
             return PERM_CONTENT
@@ -1112,6 +1164,7 @@ class Store:
             "messages": [],
             "team": {},
             "auth": {},
+            "position_skills": {},
         }
 
     def _normalize(self, raw: object) -> dict | None:
@@ -1138,6 +1191,13 @@ class Store:
         team = raw.get("team")
         if isinstance(team, dict):
             data["team"] = team
+        raw_map = raw.get("position_skills")
+        # An empty or missing map is derived once from skill names. A saved map
+        # is kept as the coach left it, with any new position filled in empty.
+        if isinstance(raw_map, dict) and raw_map:
+            data["position_skills"] = sanitize_position_skills(raw_map)
+        else:
+            data["position_skills"] = default_position_skills(data["skills"])
         return data
 
     def _read_file(self, path: Path) -> dict | None:
@@ -1333,15 +1393,45 @@ class Store:
                     "created_at": now,
                 },
             ]
+            self.data["position_skills"] = default_position_skills(skills)
             self._save()
 
     def list_skills(self) -> list[dict]:
         with self.lock:
             return list(self.data["skills"])
 
+    def _ensure_position_skills(self) -> None:
+        """Derive a missing map. Leave a saved map in place."""
+        raw = self.data.get("position_skills")
+        if not isinstance(raw, dict) or not raw:
+            self.data["position_skills"] = default_position_skills(
+                self.data.get("skills") or []
+            )
+            return
+        sanitized = sanitize_position_skills(raw)
+        if sanitized != raw:
+            self.data["position_skills"] = sanitized
+
+    def _skills_for_position(self, position: str) -> list[dict]:
+        wanted = {
+            skill_id
+            for skill_id in self.data["position_skills"].get(position, [])
+            if isinstance(skill_id, str)
+        }
+        return [skill for skill in self.data["skills"] if skill.get("id") in wanted]
+
+    def _skill_ids_for_player(self, player: dict) -> set[str]:
+        allowed: set[str] = set()
+        for position in player_positions(player):
+            for skill_id in self.data["position_skills"].get(position, []):
+                if isinstance(skill_id, str):
+                    allowed.add(skill_id)
+        return allowed
+
     def add_skill(self, name: object) -> dict:
         skill_name = clean_text(name, "Skill name", MAX_SKILL_LEN)
         with self.lock:
+            self._ensure_position_skills()
             existing = {
                 skill["name"].casefold()
                 for skill in self.data["skills"]
@@ -1351,8 +1441,59 @@ class Store:
                 raise ValueError("That skill already exists")
             skill = {"id": new_id("skill"), "name": skill_name}
             self.data["skills"].append(skill)
+            # The roster-wide add keeps current callers working: the new skill
+            # shows up for every position.
+            for position in POSITIONS:
+                bucket = self.data["position_skills"].setdefault(position, [])
+                if skill["id"] not in bucket:
+                    bucket.append(skill["id"])
             self._save()
             return dict(skill)
+
+    def attach_position_skill(self, position: object, name: object) -> tuple[dict, bool]:
+        """Find or create a skill and attach it to one position.
+
+        Returns the skill and whether a new skill record was created.
+        Attaching a skill that is already on the position is a no-op.
+        """
+        parsed = parse_position(position)
+        skill_name = clean_text(name, "Skill name", MAX_SKILL_LEN)
+        with self.lock:
+            self._ensure_position_skills()
+            skill = None
+            for item in self.data["skills"]:
+                item_name = item.get("name")
+                if isinstance(item_name, str) and item_name.casefold() == skill_name.casefold():
+                    skill = item
+                    break
+            created = skill is None
+            if skill is None:
+                skill = {"id": new_id("skill"), "name": skill_name}
+                self.data["skills"].append(skill)
+            bucket = self.data["position_skills"].setdefault(parsed, [])
+            changed = created
+            if skill["id"] not in bucket:
+                bucket.append(skill["id"])
+                changed = True
+            if changed:
+                self._save()
+            return dict(skill), created
+
+    def detach_position_skill(self, position: object, skill_id: object) -> None:
+        """Drop a skill from one position. The skill and its ratings stay."""
+        parsed = parse_position(position)
+        if not isinstance(skill_id, str) or not SAFE_ID.match(skill_id):
+            raise ValueError("Choose a skill")
+        with self.lock:
+            self._ensure_position_skills()
+            if not any(skill.get("id") == skill_id for skill in self.data["skills"]):
+                raise KeyError("Skill not found")
+            bucket = self.data["position_skills"].get(parsed, [])
+            if skill_id in bucket:
+                self.data["position_skills"][parsed] = [
+                    item for item in bucket if item != skill_id
+                ]
+                self._save()
 
     def list_players(self) -> list[dict]:
         with self.lock:
@@ -1368,6 +1509,7 @@ class Store:
 
     def get_player(self, player_id: str) -> dict:
         with self.lock:
+            self._ensure_position_skills()
             record = self._player_unlocked(player_id)
             raw_stats = record.get("stats")
             player = public_player(record)
@@ -1398,7 +1540,26 @@ class Store:
                 for item in record.get("records", [])
                 if isinstance(item, dict) and item.get("delta") is not None
             ]
-            skills = list(self.data["skills"])
+            positions = player_positions(record)
+            skill_groups = []
+            seen: set[str] = set()
+            for position in positions:
+                group_skills = self._skills_for_position(position)
+                skill_groups.append(
+                    {
+                        "position": position,
+                        "skills": [
+                            {"id": skill.get("id"), "name": skill.get("name")}
+                            for skill in group_skills
+                        ],
+                    }
+                )
+                for skill in group_skills:
+                    skill_id = skill.get("id")
+                    if isinstance(skill_id, str):
+                        seen.add(skill_id)
+            # Progress and the radar use the union of primary and secondary.
+            skills = [skill for skill in self.data["skills"] if skill.get("id") in seen]
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
@@ -1408,6 +1569,7 @@ class Store:
         player["drills"] = drills
         player["records"] = records[:MAX_RECORDS]
         player["progress"] = build_progress(skills, ratings)
+        player["skill_groups"] = skill_groups
         player["stats"] = build_stats_view(raw_stats)
         return player
 
@@ -1619,9 +1781,12 @@ class Store:
         if not isinstance(skill_id, str) or not SAFE_ID.match(skill_id):
             raise ValueError("Choose a skill")
         with self.lock:
-            self._player_unlocked(player_id)
+            player = self._player_unlocked(player_id)
             if not any(skill.get("id") == skill_id for skill in self.data["skills"]):
                 raise ValueError("Choose a skill")
+            self._ensure_position_skills()
+            if skill_id not in self._skill_ids_for_player(player):
+                raise ValueError("That skill is not used for this position")
             rating = {
                 "id": new_id("rating"),
                 "player_id": player_id,
@@ -2613,6 +2778,13 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))
                 return
+            position_skill = re.fullmatch(r"/api/positions/([^/]+)/skills", path)
+            if position_skill:
+                skill, created = self.store.attach_position_skill(
+                    unquote(position_skill.group(1)), payload.get("name")
+                )
+                send_json(self, 201 if created else 200, skill)
+                return
             rating_match = re.fullmatch(
                 r"/api/players/([a-zA-Z0-9_-]{8,64})/ratings", path
             )
@@ -2782,6 +2954,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             message_match = re.fullmatch(r"/api/messages/([a-zA-Z0-9_-]{8,64})", path)
             if message_match:
                 self.store.delete_message(message_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            position_skill = re.fullmatch(
+                r"/api/positions/([^/]+)/skills/([a-zA-Z0-9_-]{8,64})", path
+            )
+            if position_skill:
+                self.store.detach_position_skill(
+                    unquote(position_skill.group(1)), position_skill.group(2)
+                )
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})

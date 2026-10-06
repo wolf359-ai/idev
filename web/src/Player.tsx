@@ -1,9 +1,9 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
 import { api } from "./api";
 import { Radar, ScoreDots } from "./charts";
 import { NOTE_CATEGORIES, POSITIONS } from "./constants";
 import { deltaText, formatWhen, positionLabel, safeHttpUrl } from "./format";
-import type { Capabilities, PlayerDetail, PlayerTab, StatItem } from "./types";
+import type { Capabilities, PlayerDetail, PlayerTab, SkillGroup, StatItem } from "./types";
 import { ErrorNote, Field, FormActions } from "./ui";
 
 const TABS: { id: PlayerTab; label: string }[] = [
@@ -167,7 +167,12 @@ export function PlayerScreen({
         ))}
       </div>
       {tab === "skills" ? (
-        <Skills player={player} readOnly={!can.content} onRate={(skillId, score) => run(() => api.rate(player.id, skillId, score).then(() => undefined))} />
+        <Skills
+          player={player}
+          readOnly={!can.content}
+          onRate={(skillId, score) => run(() => api.rate(player.id, skillId, score).then(() => undefined))}
+          onChange={run}
+        />
       ) : null}
       {tab === "stats" ? (
         <Stats player={player} canEdit={can.admin} onSave={(counts) => run(() => api.saveStats(player.id, counts).then(() => undefined))} />
@@ -183,16 +188,31 @@ export function PlayerScreen({
   );
 }
 
+function skillGroupsOf(player: PlayerDetail): SkillGroup[] {
+  if (player.skill_groups) return player.skill_groups;
+  const progress = player.progress || [];
+  return [
+    {
+      position: player.position || "Skills",
+      skills: progress.map((item) => ({ id: item.skill_id, name: item.skill_name })),
+    },
+  ];
+}
+
 function Skills({
   player,
   readOnly,
   onRate,
+  onChange,
 }: {
   player: PlayerDetail;
   readOnly: boolean;
   onRate: (skillId: string, score: number) => void;
+  onChange: (action: () => Promise<void>) => void;
 }) {
   const progress = player.progress || [];
+  const groups = skillGroupsOf(player);
+  const byId = new Map(progress.map((item) => [item.skill_id, item]));
   return (
     <div className="stack skills-list">
       <p className="meta">
@@ -200,18 +220,47 @@ function Skills({
           ? "Your latest rating for each skill (1–5)."
           : "Tap a circle to rate 1–5. Tap the left half for a half point, such as 3.5."}
       </p>
-      {progress.map((item) => (
-        <article key={item.skill_id} className="card skill">
-          <div className="skill-top">
-            <h2>{item.skill_name}</h2>
-            <p className="meta">{item.current ? `${item.current} / 5` : "—"}</p>
-          </div>
-          <ScoreDots
-            value={item.current}
-            readOnly={readOnly}
-            onRate={(score) => onRate(item.skill_id, score)}
-          />
-        </article>
+      <p className="meta">Skills are shared by every player of that position.</p>
+      {groups.map((group) => (
+        <Fragment key={group.position}>
+          <h2 className="position-heading">{group.position}</h2>
+          {group.skills.length === 0 ? (
+            <p className="meta">No skills for this position yet.</p>
+          ) : null}
+          {group.skills.map((skill) => {
+            const item = byId.get(skill.id);
+            const current = item?.current ?? null;
+            return (
+              <article key={`${group.position}:${skill.id}`} className="card skill">
+                <div className="skill-top">
+                  <h2>{skill.name}</h2>
+                  <p className="meta">{current ? `${current} / 5` : "—"}</p>
+                </div>
+                <ScoreDots
+                  value={current}
+                  readOnly={readOnly}
+                  onRate={(score) => onRate(skill.id, score)}
+                />
+                {readOnly ? null : (
+                  <button
+                    type="button"
+                    className="btn tiny danger skill-remove"
+                    onClick={() => {
+                      const ok = window.confirm(
+                        `Remove ${skill.name} from ${group.position}? Every player who plays ${group.position} will lose this skill.`,
+                      );
+                      if (!ok) return;
+                      onChange(() => api.detachPositionSkill(group.position, skill.id).then(() => undefined));
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
+              </article>
+            );
+          })}
+          {readOnly ? null : <SkillAddForm position={group.position} onChange={onChange} />}
+        </Fragment>
       ))}
       <article className="card">
         <h2>Performance profile</h2>
@@ -223,6 +272,41 @@ function Skills({
         />
       </article>
     </div>
+  );
+}
+
+function SkillAddForm({
+  position,
+  onChange,
+}: {
+  position: string;
+  onChange: (action: () => Promise<void>) => void;
+}) {
+  const [name, setName] = useState("");
+  return (
+    <form
+      className="skill-add"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const skillName = name.trim();
+        if (!skillName) return;
+        onChange(async () => {
+          await api.attachPositionSkill(position, skillName);
+          setName("");
+        });
+      }}
+    >
+      <input
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        placeholder={`Add a ${position} skill`}
+        aria-label={`Add a skill for ${position}`}
+        maxLength={40}
+      />
+      <button type="submit" className="btn tiny">
+        Add
+      </button>
+    </form>
   );
 }
 

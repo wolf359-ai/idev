@@ -10,6 +10,7 @@ import threading
 import unittest
 from http.client import HTTPConnection
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -1069,6 +1070,177 @@ class StoreTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.update_staff(member["id"], {"username": app.ADMIN_USERNAME})
 
+    def test_seeded_players_see_skills_for_their_positions(self) -> None:
+        self.store.seed_demo_if_empty()
+        alex = next(
+            player for player in self.store.list_players() if player["name"] == "Alex Rivera"
+        )
+        jordan = next(
+            player for player in self.store.list_players() if player["name"] == "Jordan Blake"
+        )
+        alex_detail = self.store.get_player(alex["id"])
+        jordan_detail = self.store.get_player(jordan["id"])
+        alex_names = {item["skill_name"] for item in alex_detail["progress"]}
+        jordan_names = {item["skill_name"] for item in jordan_detail["progress"]}
+        self.assertIn("Fielding", alex_names)
+        self.assertNotIn("Pitching", alex_names)
+        self.assertNotIn("Catching", alex_names)
+        self.assertIn("Pitching", jordan_names)
+        self.assertNotIn("Catching", jordan_names)
+        self.assertIn("Fielding", jordan_names)
+        alex_groups = {group["position"]: group for group in alex_detail["skill_groups"]}
+        self.assertEqual(list(alex_groups), ["Shortstop", "Second Base"])
+        jordan_groups = {group["position"]: group for group in jordan_detail["skill_groups"]}
+        self.assertEqual(list(jordan_groups), ["Pitcher", "First Base"])
+        pitcher_names = {skill["name"] for skill in jordan_groups["Pitcher"]["skills"]}
+        first_names = {skill["name"] for skill in jordan_groups["First Base"]["skills"]}
+        self.assertIn("Pitching", pitcher_names)
+        self.assertNotIn("Pitching", first_names)
+        self.assertNotIn("Catching", pitcher_names)
+        # Utility and DP/Flex keep the shared skills and skip pitching and catching.
+        utility = self.store.add_player({"name": "Util", "position": "Utility"})
+        flex = self.store.add_player({"name": "Flex", "position": "DP/Flex"})
+        for player in (utility, flex):
+            names = {item["skill_name"] for item in self.store.get_player(player["id"])["progress"]}
+            self.assertIn("Hitting", names)
+            self.assertNotIn("Pitching", names)
+            self.assertNotIn("Catching", names)
+
+    def test_detach_one_position_keeps_the_other_and_ratings(self) -> None:
+        self.store.seed_demo_if_empty()
+        alex = next(
+            player for player in self.store.list_players() if player["name"] == "Alex Rivera"
+        )
+        fielding = next(skill for skill in self.store.list_skills() if skill["name"] == "Fielding")
+        self.store.detach_position_skill("Shortstop", fielding["id"])
+        detail = self.store.get_player(alex["id"])
+        groups = {
+            group["position"]: {skill["name"] for skill in group["skills"]}
+            for group in detail["skill_groups"]
+        }
+        self.assertNotIn("Fielding", groups["Shortstop"])
+        self.assertIn("Fielding", groups["Second Base"])
+        self.assertIn("Fielding", {item["skill_name"] for item in detail["progress"]})
+
+        left = self.store.add_player({"name": "Lou", "position": "Left Field"})
+        skill, created = self.store.attach_position_skill("Left Field", "Pickoff")
+        self.assertTrue(created)
+        again, created_again = self.store.attach_position_skill("Left Field", "pickoff")
+        self.assertFalse(created_again)
+        self.assertEqual(again["id"], skill["id"])
+        self.assertEqual(
+            self.store.data["position_skills"]["Left Field"].count(skill["id"]), 1
+        )
+        self.store.add_rating(left["id"], {"skill_id": skill["id"], "score": 2})
+        self.store.add_rating(left["id"], {"skill_id": skill["id"], "score": 4.5})
+        self.store.detach_position_skill("Left Field", skill["id"])
+        hidden = self.store.get_player(left["id"])
+        self.assertNotIn("Pickoff", {item["skill_name"] for item in hidden["progress"]})
+        self.assertTrue(any(item["skill_id"] == skill["id"] for item in hidden["ratings"]))
+        self.assertTrue(any(item["name"] == "Pickoff" for item in self.store.list_skills()))
+        self.store.attach_position_skill("Left Field", "Pickoff")
+        shown = self.store.get_player(left["id"])
+        pickoff = next(item for item in shown["progress"] if item["skill_id"] == skill["id"])
+        self.assertEqual(pickoff["first"], 2)
+        self.assertEqual(pickoff["current"], 4.5)
+        # A center fielder does not pick up a skill attached only to left field.
+        center = self.store.add_player({"name": "Cee", "position": "Center Field"})
+        center_names = {
+            item["skill_name"] for item in self.store.get_player(center["id"])["progress"]
+        }
+        self.assertNotIn("Pickoff", center_names)
+
+    def test_add_skill_attaches_to_every_position(self) -> None:
+        self.store.seed_demo_if_empty()
+        fielding = next(skill for skill in self.store.list_skills() if skill["name"] == "Fielding")
+        self.store.detach_position_skill("Pitcher", fielding["id"])
+        skill = self.store.add_skill("Slapping")
+        mapping = self.store.data["position_skills"]
+        for position in app.POSITIONS:
+            self.assertIn(skill["id"], mapping[position])
+        self.assertNotIn(fielding["id"], mapping["Pitcher"])
+        self.assertIn(fielding["id"], mapping["Shortstop"])
+
+    def test_missing_position_map_is_derived_once(self) -> None:
+        hitting = {"id": "skill-hitting01", "name": "Hitting"}
+        pitching = {"id": "skill-pitching1", "name": "pitching"}
+        custom = {"id": "skill-custom001", "name": "Slapping"}
+        path = Path(self.tmp.name) / "legacy.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "skills": [hitting, pitching, custom],
+                    "players": [
+                        {
+                            "id": "player-ss000001",
+                            "name": "Sam",
+                            "position": "Shortstop",
+                            "secondary_position": "",
+                        }
+                    ],
+                    "ratings": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        store = app.Store(path)
+        names = {
+            item["skill_name"].casefold()
+            for item in store.get_player("player-ss000001")["progress"]
+        }
+        self.assertIn("hitting", names)
+        self.assertIn("slapping", names)
+        self.assertNotIn("pitching", names)
+        self.assertEqual(
+            store.data["position_skills"]["Pitcher"],
+            [hitting["id"], pitching["id"], custom["id"]],
+        )
+        self.assertEqual(
+            store.data["position_skills"]["Shortstop"],
+            [hitting["id"], custom["id"]],
+        )
+        self.assertNotIn(pitching["id"], store.data["position_skills"]["Left Field"])
+        self.assertIn(custom["id"], store.data["position_skills"]["Left Field"])
+        store.detach_position_skill("Shortstop", hitting["id"])
+        reloaded = app.Store(path)
+        reloaded_names = {
+            item["skill_name"] for item in reloaded.get_player("player-ss000001")["progress"]
+        }
+        self.assertNotIn("Hitting", reloaded_names)
+        self.assertIn("Slapping", reloaded_names)
+
+        partial = Path(self.tmp.name) / "partial.json"
+        partial.write_text(
+            json.dumps(
+                {
+                    "skills": [hitting, pitching],
+                    "players": [],
+                    "position_skills": {"Pitcher": [hitting["id"]]},
+                }
+            ),
+            encoding="utf-8",
+        )
+        kept = app.Store(partial)
+        self.assertEqual(kept.data["position_skills"]["Pitcher"], [hitting["id"]])
+        self.assertEqual(kept.data["position_skills"]["Catcher"], [])
+        self.assertEqual(kept.data["position_skills"]["DP/Flex"], [])
+        self.assertNotIn(pitching["id"], kept.data["position_skills"]["Pitcher"])
+
+    def test_invalid_score_is_rejected_before_position_check(self) -> None:
+        self.store.seed_demo_if_empty()
+        alex = next(
+            player for player in self.store.list_players() if player["name"] == "Alex Rivera"
+        )
+        pitching = next(skill for skill in self.store.list_skills() if skill["name"] == "Pitching")
+        with self.assertRaises(ValueError) as bad_score:
+            self.store.add_rating(alex["id"], {"skill_id": pitching["id"], "score": 6})
+        self.assertNotIn("position", str(bad_score.exception).lower())
+        with self.assertRaises(ValueError) as wrong_position:
+            self.store.add_rating(alex["id"], {"skill_id": pitching["id"], "score": 4})
+        self.assertEqual(
+            str(wrong_position.exception), "That skill is not used for this position"
+        )
+
 
 COACH_PASSWORD = "coach-secret-pass"
 
@@ -1858,6 +2030,108 @@ class HttpTests(unittest.TestCase):
         self.assertIsNone(
             self.store.find_staff_by_credentials("Casey Match", "nope")
         )
+
+    def test_position_skill_endpoints(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Lou Lane", "position": "Left Field"}
+        )
+        self.assertEqual(status, 201)
+        left_id = player["id"]
+        status, other = self.call(
+            "POST", "/api/players", {"name": "Cee Field", "position": "Center Field"}
+        )
+        self.assertEqual(status, 201)
+
+        status, skill = self.call(
+            "POST", "/api/positions/Left%20Field/skills", {"name": "Pickoff"}
+        )
+        self.assertEqual(status, 201)
+        status, again = self.call(
+            "POST", "/api/positions/Left%20Field/skills", {"name": "pickoff"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(again["id"], skill["id"])
+        self.assertEqual(len(self.store.list_skills()), 1)
+
+        status, detail = self.call("GET", f"/api/players/{left_id}")
+        self.assertEqual(status, 200)
+        self.assertIn("Pickoff", {item["skill_name"] for item in detail["progress"]})
+        status, center = self.call("GET", f"/api/players/{other['id']}")
+        self.assertNotIn("Pickoff", {item["skill_name"] for item in center["progress"]})
+
+        status, _rating = self.call(
+            "POST",
+            f"/api/players/{left_id}/ratings",
+            {"skill_id": skill["id"], "score": 3.5},
+        )
+        self.assertEqual(status, 201)
+        status, _payload = self.call(
+            "DELETE", f"/api/positions/Left%20Field/skills/{skill['id']}"
+        )
+        self.assertEqual(status, 200)
+        status, hidden = self.call("GET", f"/api/players/{left_id}")
+        self.assertNotIn("Pickoff", {item["skill_name"] for item in hidden["progress"]})
+        self.assertTrue(any(item["skill_id"] == skill["id"] for item in hidden["ratings"]))
+        status, restored = self.call(
+            "POST", "/api/positions/Left%20Field/skills", {"name": "Pickoff"}
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(restored["id"], skill["id"])
+        status, shown = self.call("GET", f"/api/players/{left_id}")
+        pickoff = next(item for item in shown["progress"] if item["skill_id"] == skill["id"])
+        self.assertEqual(pickoff["current"], 3.5)
+
+        self.give_player_login(left_id, "loulane", "player-pass")
+        self.sign_out()
+        self.login_player("loulane", "player-pass")
+        status, _payload = self.call(
+            "POST", "/api/positions/Left%20Field/skills", {"name": "Sneaky"}
+        )
+        self.assertEqual(status, 403)
+        status, _payload = self.call(
+            "DELETE", f"/api/positions/Left%20Field/skills/{skill['id']}"
+        )
+        self.assertEqual(status, 403)
+
+        self.sign_out()
+        self.login_coach()
+        flex_path = "/api/positions/" + quote("DP/Flex", safe="") + "/skills"
+        self.assertIn("DP%2FFlex", flex_path)
+        status, flex_skill = self.call("POST", flex_path, {"name": "Slash"})
+        self.assertEqual(status, 201)
+        status, flex_player = self.call(
+            "POST", "/api/players", {"name": "Dee Flex", "position": "DP/Flex"}
+        )
+        self.assertEqual(status, 201)
+        status, flex_detail = self.call("GET", f"/api/players/{flex_player['id']}")
+        self.assertIn("Slash", {item["skill_name"] for item in flex_detail["progress"]})
+        self.assertNotIn("Pitching", {item["skill_name"] for item in flex_detail["progress"]})
+        status, left_detail = self.call("GET", f"/api/players/{left_id}")
+        self.assertNotIn("Slash", {item["skill_name"] for item in left_detail["progress"]})
+
+        status, shared = self.call("POST", "/api/skills", {"name": "Infield"})
+        self.assertEqual(status, 201)
+        for position in app.POSITIONS:
+            self.assertIn(shared["id"], self.store.data["position_skills"][position])
+        status, pitcher = self.call(
+            "POST", "/api/players", {"name": "Pat Pitch", "position": "Pitcher"}
+        )
+        status, bad = self.call(
+            "POST",
+            f"/api/players/{pitcher['id']}/ratings",
+            {"skill_id": flex_skill["id"], "score": 9},
+        )
+        self.assertEqual(status, 400)
+        self.assertNotIn("position", bad["error"].lower())
+        status, blocked = self.call(
+            "POST",
+            f"/api/players/{pitcher['id']}/ratings",
+            {"skill_id": flex_skill["id"], "score": 3},
+        )
+        self.assertEqual(status, 400)
+        self.assertEqual(blocked["error"], "That skill is not used for this position")
+        status, pitcher_detail = self.call("GET", f"/api/players/{pitcher['id']}")
+        self.assertIn("Infield", {item["skill_name"] for item in pitcher_detail["progress"]})
 
 
 if __name__ == "__main__":

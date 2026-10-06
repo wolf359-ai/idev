@@ -391,8 +391,38 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
 }
 
 .skills-list > .meta,
-.skills-list > .card:not(.skill) {
+.skills-list > .card:not(.skill),
+.skills-list > .position-heading,
+.skills-list > .skill-add {
   grid-column: 1 / -1;
+}
+
+.position-heading {
+  margin: 0.45rem 0 0;
+  font-size: 0.95rem;
+}
+
+.skill-add {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.skill-add input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  font-size: 1rem;
+}
+
+.skill-remove {
+  align-self: flex-start;
+  min-height: 28px;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.75rem;
 }
 
 .card.skill {
