@@ -6,6 +6,7 @@ import { unreadCount } from "./format";
 import { LoginScreen } from "./Login";
 import { PlayerScreen } from "./Player";
 import { RosterScreen } from "./Roster";
+import { ScheduleScreen } from "./Schedule";
 import type { Capabilities, PlayerSummary, Screen, Session, TeamInfo } from "./types";
 
 const EMPTY_CAN: Capabilities = { admin: false, content: false, view_all: false };
@@ -151,7 +152,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             tab={screen.tab}
             can={can}
             showBack={can.view_all}
-            alarmUnread={unread.alarms}
+            alarmUnread={unread.alarms + unread.messages}
             alarmsCurrent={alarmsCurrent}
             onAlarms={() => setScreen({ name: "alarms" })}
             onTab={(tab) => setScreen({ name: "player", id: screen.id, tab })}
@@ -161,6 +162,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             }}
           />
         ) : null}
+        {screen.name === "schedule" ? <ScheduleScreen /> : null}
         {screen.name === "alarms" ? (
           <AlarmsScreen can={can} players={players} isPlayer={isPlayer} onRead={refreshInbox} />
         ) : null}
@@ -195,9 +197,14 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           />
         )}
         <NavButton
+          label="Schedule"
+          icon={<CalendarIcon />}
+          current={screen.name === "schedule"}
+          onClick={() => setScreen({ name: "schedule" })}
+        />
+        <NavButton
           label="Messages"
           icon={<MessagesIcon />}
-          count={unread.messages}
           current={screen.name === "messages"}
           onClick={() => setScreen({ name: "messages" })}
         />
@@ -241,6 +248,18 @@ function PersonIcon() {
         strokeLinecap="round"
         d="M7.35 16.85c.65-1.85 2.3-2.9 4.65-2.9s4 .95 4.65 2.9"
       />
+    </svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="4.2" y="5.2" width="15.6" height="14.2" rx="2" />
+        <path d="M4.2 9.4h15.6" />
+        <path d="M8 3.5v3.2M16 3.5v3.2" />
+      </g>
     </svg>
   );
 }

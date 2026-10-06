@@ -168,6 +168,7 @@ export type AdminPanel = "home" | "add-player" | "import" | "staff" | "team";
 export type Screen =
   | { name: "roster" }
   | { name: "player"; id: string; tab: PlayerTab }
+  | { name: "schedule" }
   | { name: "alarms" }
   | { name: "messages" }
   | { name: "admin"; panel: AdminPanel };
