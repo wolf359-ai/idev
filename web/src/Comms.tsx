@@ -1,8 +1,38 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "./api";
 import { formatWhen } from "./format";
-import type { Alarm, Capabilities, Message, PlayerSummary, StaffMember } from "./types";
+import type {
+  Alarm,
+  AlarmAcknowledgment,
+  Capabilities,
+  Message,
+  PlayerSummary,
+  StaffMember,
+} from "./types";
 import { ErrorNote, Field } from "./ui";
+
+type NoticeItem =
+  | { kind: "alarm"; key: string; at: string; alarm: Alarm }
+  | { kind: "response"; key: string; at: string; alarm: Alarm; ack: AlarmAcknowledgment };
+
+function notificationItems(alarms: Alarm[], isPlayer: boolean): NoticeItem[] {
+  const items: NoticeItem[] = [];
+  for (const alarm of alarms) {
+    items.push({ kind: "alarm", key: alarm.id, at: alarm.created_at || "", alarm });
+    if (isPlayer) continue;
+    for (const ack of alarm.acknowledgments || []) {
+      items.push({
+        kind: "response",
+        key: `${alarm.id}:${ack.player_id}`,
+        at: ack.acknowledged_at || "",
+        alarm,
+        ack,
+      });
+    }
+  }
+  items.sort((left, right) => (left.at < right.at ? 1 : left.at > right.at ? -1 : 0));
+  return items;
+}
 
 export function AlarmsScreen({
   can,
@@ -19,6 +49,7 @@ export function AlarmsScreen({
   const [error, setError] = useState("");
   const [text, setText] = useState("");
   const [target, setTarget] = useState("all");
+  const [pendingId, setPendingId] = useState("");
 
   const onReadRef = useRef(onRead);
   onReadRef.current = onRead;
@@ -39,7 +70,7 @@ export function AlarmsScreen({
         const payload = await api.alarms();
         if (!cancelled) setAlarms(payload.alarms);
       } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load alarms");
+        if (!cancelled) setError(err instanceof Error ? err.message : "Could not load notifications");
       }
     })();
     return () => {
@@ -60,11 +91,26 @@ export function AlarmsScreen({
     }
   }
 
+  async function acknowledge(id: string) {
+    setError("");
+    setPendingId(id);
+    try {
+      await api.acknowledgeAlarm(id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not acknowledge");
+    } finally {
+      setPendingId("");
+    }
+  }
+
+  const notices = notificationItems(alarms, isPlayer);
+
   return (
     <section className="panel">
       <header className="panel-head">
         <div>
-          <h1>Alarms</h1>
+          <h1>Notifications</h1>
           <p className="meta">Practice changes and reminders.</p>
         </div>
       </header>
@@ -96,32 +142,59 @@ export function AlarmsScreen({
           </button>
         </form>
       ) : null}
-      {alarms.length === 0 ? <p className="empty">No alarms.</p> : null}
+      {notices.length === 0 ? <p className="empty">No notifications.</p> : null}
       <ul className="feed">
-        {alarms.map((alarm) => (
-          <li key={alarm.id} className="card">
-            <p className="meta">
-              {alarm.target_name || "Team"} · {formatWhen(alarm.created_at)}
-              {alarm.read === false ? " · Unread" : ""}
-            </p>
-            <p>{alarm.text}</p>
-            {can.content ? (
-              <button
-                type="button"
-                className="btn danger"
-                onClick={() => {
-                  if (!window.confirm("Delete this alarm?")) return;
-                  api
-                    .deleteAlarm(alarm.id)
-                    .then(load)
-                    .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not delete"));
-                }}
-              >
-                Delete
-              </button>
-            ) : null}
-          </li>
-        ))}
+        {notices.map((item) =>
+          item.kind === "response" ? (
+            <li key={item.key} className="card response">
+              <p className="meta">Response · {formatWhen(item.ack.acknowledged_at)}</p>
+              <p>
+                {item.ack.player_name} acknowledged: {item.alarm.text}
+              </p>
+            </li>
+          ) : (
+            <li key={item.key} className="card">
+              <p className="meta">
+                {item.alarm.target_name || "Team"} · {formatWhen(item.alarm.created_at)}
+                {item.alarm.read === false ? " · Unread" : ""}
+              </p>
+              <p>{item.alarm.text}</p>
+              {isPlayer ? (
+                <div className="actions">
+                  {item.alarm.acknowledged ? (
+                    <button type="button" className="btn ack-done" disabled>
+                      Acknowledged
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn primary"
+                      disabled={pendingId === item.alarm.id}
+                      onClick={() => void acknowledge(item.alarm.id)}
+                    >
+                      {pendingId === item.alarm.id ? "Acknowledging…" : "Acknowledge"}
+                    </button>
+                  )}
+                </div>
+              ) : null}
+              {can.content ? (
+                <button
+                  type="button"
+                  className="btn danger"
+                  onClick={() => {
+                    if (!window.confirm("Delete this alarm?")) return;
+                    api
+                      .deleteAlarm(item.alarm.id)
+                      .then(load)
+                      .catch((err: unknown) => setError(err instanceof Error ? err.message : "Could not delete"));
+                  }}
+                >
+                  Delete
+                </button>
+              ) : null}
+            </li>
+          ),
+        )}
       </ul>
     </section>
   );

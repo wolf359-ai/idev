@@ -38,8 +38,11 @@ NOTE_CATEGORIES = ("focus", "top")
 DEFAULT_NOTE_CATEGORY = "focus"
 MAX_ACTIVITY_LEN = 200
 MAX_ACTIVITY = 50
-# Coach-to-player alarms (reminders/alerts) and coach messages. Both are
-# broadcast from a coach; recipients (players) track per-item read state.
+# Coach-to-player alarms (practice reminders) and coach messages. Recipients
+# track per-item read state. A player can separately acknowledge an alarm
+# sent to them; that response is shown to the assigning coach on the same list.
+# The head-coach account has no staff id, so alarms it sends use this author id.
+COACH_AUTHOR_ID = "coach"
 MAX_ALARM_LEN = 500
 MAX_MESSAGE_LEN = 2000
 MAX_BROADCASTS = 500
@@ -131,6 +134,47 @@ def session_is_content(session: dict | None) -> bool:
 
 def session_can_view_all(session: dict | None) -> bool:
     return bool(session) and session.get("role") in ("coach", "staff")
+
+
+def session_sees_alarm_acknowledgments(session: dict | None, alarm: dict) -> bool:
+    """Who sees acknowledgment responses on the Notifications page.
+
+    The head coach and Full-access staff (``session_is_admin``) see every
+    acknowledgment on the team. A Manager sees acknowledgments only for alarms
+    they sent. Assistant and Read-only staff see the alarms but not responses.
+    Players never receive other players' acknowledgments; their own flag is
+    attached in ``alarms_for_player``.
+    """
+    if session_is_admin(session):
+        return True
+    if not session or session.get("role") != "staff" or not session_is_content(session):
+        return False
+    author_id = alarm.get("author_id") or COACH_AUTHOR_ID
+    return author_id == session.get("staff_id")
+
+
+def alarm_author(session: dict | None) -> dict:
+    """Identity stored on an alarm so an acknowledgment can be routed back."""
+    if session and session.get("role") == "staff":
+        staff_id = session.get("staff_id") or ""
+        if isinstance(staff_id, str) and staff_id.strip():
+            name = session.get("staff_name") or ""
+            if not isinstance(name, str) or not name.strip():
+                name = "Staff"
+            return {
+                "author_id": staff_id.strip(),
+                "author_name": name.strip(),
+                "author_role": "staff",
+            }
+    return {
+        "author_id": COACH_AUTHOR_ID,
+        "author_name": "Coach",
+        "author_role": "coach",
+    }
+
+
+class NotAllowed(Exception):
+    """The signed-in user may not perform this action on the resource."""
 
 POSITIONS = (
     "Pitcher",
@@ -1132,8 +1176,12 @@ def required_permission(method: str, path: str):
             # A player may log activity (e.g. opening a drill link) on their own
             # profile; a coach or content staff may log it for anyone.
             return (PERM_PLAYER_OWN, act_match.group(1))
-        # Any signed-in player may mark their own alarms/messages read.
+        # Any signed-in player may mark their own alarms/messages read, or
+        # acknowledge an alarm that was sent to them. Coaches are rejected
+        # inside the handler: this route is not a way to ack for a player.
         if path in ("/api/alarms/read", "/api/messages/read"):
+            return PERM_AUTHED
+        if re.fullmatch(rf"/api/alarms/({ID_RE})/acknowledge", path):
             return PERM_AUTHED
         if re.fullmatch(rf"/api/(?:alarms|messages)/({ID_RE})/read", path):
             return PERM_AUTHED
@@ -1786,6 +1834,12 @@ class Store:
             for alarm in self.data["alarms"]:
                 if isinstance(alarm.get("reads"), list):
                     alarm["reads"] = [r for r in alarm["reads"] if r != player_id]
+                if isinstance(alarm.get("acknowledgments"), list):
+                    alarm["acknowledgments"] = [
+                        ack
+                        for ack in alarm["acknowledgments"]
+                        if not (isinstance(ack, dict) and ack.get("player_id") == player_id)
+                    ]
             self.data["messages"] = [
                 m
                 for m in self.data["messages"]
@@ -2058,9 +2112,24 @@ class Store:
                 reverse=True,
             )
 
-    def add_alarm(self, payload: dict) -> dict:
+    def add_alarm(self, payload: dict, author: dict | None = None) -> dict:
         text = clean_text(payload.get("text"), "Alarm", MAX_ALARM_LEN)
         target = payload.get("target")
+        author_fields = alarm_author(None)
+        if isinstance(author, dict) and isinstance(author.get("author_id"), str):
+            author_id = author["author_id"].strip()
+            if author_id:
+                author_name = author.get("author_name")
+                author_role = author.get("author_role")
+                author_fields = {
+                    "author_id": author_id,
+                    "author_name": author_name.strip()
+                    if isinstance(author_name, str) and author_name.strip()
+                    else ("Coach" if author_role == "coach" else "Staff"),
+                    "author_role": author_role
+                    if isinstance(author_role, str) and author_role.strip()
+                    else "staff",
+                }
         with self.lock:
             if target in (None, "", "all"):
                 target = "all"
@@ -2079,6 +2148,10 @@ class Store:
                 "target_name": target_name,
                 "created_at": utc_now(),
                 "reads": [],
+                "acknowledgments": [],
+                "author_id": author_fields["author_id"],
+                "author_name": author_fields["author_name"],
+                "author_role": author_fields["author_role"],
             }
             self.data["alarms"].append(alarm)
             if len(self.data["alarms"]) > MAX_BROADCASTS:
@@ -2100,7 +2173,11 @@ class Store:
         return alarm.get("target") == "all" or alarm.get("target") == player_id
 
     def alarms_for_player(self, player_id: str) -> list[dict]:
-        """Alarms visible to a player, each annotated with a read flag."""
+        """Alarms visible to a player, with their own read and ack flags.
+
+        Other players' acknowledgments are omitted. A player only learns
+        whether they themselves have acknowledged each alarm.
+        """
         with self.lock:
             result = []
             for alarm in self.data["alarms"]:
@@ -2108,10 +2185,125 @@ class Store:
                     continue
                 item = dict(alarm)
                 item["read"] = player_id in (alarm.get("reads") or [])
+                mine = self._acknowledgment_for(alarm, player_id)
+                item["acknowledged"] = mine is not None
+                item["acknowledged_at"] = mine.get("acknowledged_at") if mine else None
                 item.pop("reads", None)
+                item.pop("acknowledgments", None)
                 result.append(item)
             result.sort(key=lambda a: a.get("created_at", ""), reverse=True)
             return result
+
+    @staticmethod
+    def _acknowledgment_for(alarm: dict, player_id: str) -> dict | None:
+        for ack in alarm.get("acknowledgments") or []:
+            if isinstance(ack, dict) and ack.get("player_id") == player_id:
+                return ack
+        return None
+
+    @staticmethod
+    def _public_acknowledgments(alarm: dict) -> list[dict]:
+        public = []
+        for ack in alarm.get("acknowledgments") or []:
+            if not isinstance(ack, dict):
+                continue
+            public.append(
+                {
+                    "player_id": ack.get("player_id", ""),
+                    "player_name": ack.get("player_name", ""),
+                    "acknowledged_at": ack.get("acknowledged_at", ""),
+                }
+            )
+        return public
+
+    def alarms_for_staff(self, session: dict | None) -> list[dict]:
+        """Alarms for a coach or staff member, newest first.
+
+        Acknowledgment responses are included only when this viewer is allowed
+        to see them (the author, or an admin / head coach).
+        """
+        result = []
+        for alarm in self.list_alarms():
+            item = dict(alarm)
+            if not item.get("author_id"):
+                item["author_id"] = COACH_AUTHOR_ID
+                item["author_name"] = item.get("author_name") or "Coach"
+                item["author_role"] = item.get("author_role") or "coach"
+            if session_sees_alarm_acknowledgments(session, item):
+                item["acknowledgments"] = self._public_acknowledgments(alarm)
+            else:
+                item["acknowledgments"] = []
+            result.append(item)
+        return result
+
+    def alarms_for_session(self, session: dict | None) -> list[dict]:
+        if session and session.get("role") == "player":
+            return self.alarms_for_player(session.get("player_id") or "")
+        return self.alarms_for_staff(session)
+
+    def acknowledge_alarm(self, alarm_id: str, player_id: str) -> dict:
+        """Record that this player acknowledged this alarm. Idempotent.
+
+        Only a player the alarm was sent to may acknowledge it. A second
+        acknowledgment by the same player does not add another response.
+        Alarms created before an author was stored are attributed to the
+        head coach so the response still has someone to go back to.
+        """
+        if not isinstance(player_id, str) or not player_id:
+            raise NotAllowed("Not allowed")
+        with self.lock:
+            alarm = next(
+                (a for a in self.data["alarms"] if a.get("id") == alarm_id), None
+            )
+            if not alarm:
+                raise KeyError("Alarm not found")
+            if not self._alarm_targets_player(alarm, player_id):
+                raise NotAllowed("Not allowed")
+            if not alarm.get("author_id"):
+                alarm["author_id"] = COACH_AUTHOR_ID
+                alarm["author_name"] = alarm.get("author_name") or "Coach"
+                alarm["author_role"] = alarm.get("author_role") or "coach"
+            player = next(
+                (p for p in self.data["players"] if p.get("id") == player_id), None
+            )
+            player_name = player.get("name", "") if player else ""
+            if not isinstance(player_name, str) or not player_name.strip():
+                player_name = "Player"
+            else:
+                player_name = player_name.strip()
+            acks = alarm.get("acknowledgments")
+            if not isinstance(acks, list):
+                acks = []
+                alarm["acknowledgments"] = acks
+            existing = self._acknowledgment_for(alarm, player_id)
+            if existing:
+                return {
+                    "ok": True,
+                    "acknowledged": True,
+                    "created": False,
+                    "alarm_id": alarm_id,
+                    "player_id": player_id,
+                    "player_name": existing.get("player_name") or player_name,
+                    "acknowledged_at": existing.get("acknowledged_at", ""),
+                }
+            stamp = utc_now()
+            acks.append(
+                {
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "acknowledged_at": stamp,
+                }
+            )
+            self._save()
+            return {
+                "ok": True,
+                "acknowledged": True,
+                "created": True,
+                "alarm_id": alarm_id,
+                "player_id": player_id,
+                "player_name": player_name,
+                "acknowledged_at": stamp,
+            }
 
     def mark_alarm_read(self, alarm_id: str, player_id: str) -> None:
         with self.lock:
@@ -2742,11 +2934,7 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 200, {"team": self.store.get_team()})
                 return
             if path == "/api/alarms":
-                if session and session.get("role") == "player":
-                    pid = session.get("player_id", "")
-                    send_json(self, 200, {"alarms": self.store.alarms_for_player(pid)})
-                else:
-                    send_json(self, 200, {"alarms": self.store.list_alarms()})
+                send_json(self, 200, {"alarms": self.store.alarms_for_session(session)})
                 return
             if path == "/api/messages":
                 if session and session.get("role") == "player":
@@ -2831,7 +3019,7 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 201, self.store.add_drill(drill_match.group(1), payload))
                 return
             if path == "/api/alarms":
-                send_json(self, 201, self.store.add_alarm(payload))
+                send_json(self, 201, self.store.add_alarm(payload, alarm_author(session)))
                 return
             if path == "/api/messages":
                 send_json(self, 201, self.store.add_message(payload))
@@ -2866,7 +3054,30 @@ class IdevHandler(BaseHTTPRequestHandler):
                     self.store.mark_message_read(message_read.group(1), pid)
                 send_json(self, 200, {"ok": True})
                 return
+            alarm_ack = re.fullmatch(
+                r"/api/alarms/([a-zA-Z0-9_-]{8,64})/acknowledge", path
+            )
+            if alarm_ack:
+                # Only the player it was sent to may acknowledge. A coach or
+                # staff member cannot acknowledge on a player's behalf.
+                if (
+                    not session
+                    or session.get("role") != "player"
+                    or not session.get("player_id")
+                ):
+                    send_json(self, 403, {"error": "Not allowed"})
+                    return
+                send_json(
+                    self,
+                    200,
+                    self.store.acknowledge_alarm(
+                        alarm_ack.group(1), session["player_id"]
+                    ),
+                )
+                return
             send_json(self, 404, {"error": "Not found"})
+        except NotAllowed as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:

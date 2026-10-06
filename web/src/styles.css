@@ -230,6 +230,18 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
 .btn.danger { background: transparent; color: var(--red); border-color: #4c2430; }
 .btn.tiny { min-height: 36px; padding: 0.35rem 0.65rem; }
 .btn:disabled { opacity: 0.6; }
+.btn.ack-done:disabled {
+  opacity: 1;
+  color: var(--green);
+  border-color: rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.08);
+  cursor: default;
+}
+.card.response {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: #0f1c18;
+}
+.card.response .meta { color: var(--green); }
 
 .actions, .chip-row {
   display: flex;

@@ -104,7 +104,7 @@ export function PlayerScreen({
             <button
               type="button"
               className={alarmsCurrent ? "alarm-btn on" : "alarm-btn"}
-              aria-label={alarmUnread ? `Alarms, ${alarmUnread} unread` : "Alarms"}
+              aria-label={alarmUnread ? `Notifications, ${alarmUnread} unread` : "Notifications"}
               aria-current={alarmsCurrent ? "page" : undefined}
               onClick={onAlarms}
             >

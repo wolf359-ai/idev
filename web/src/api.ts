@@ -159,6 +159,11 @@ export const api = {
   deleteAlarm: (id: string) =>
     request<{ ok: boolean }>(`/api/alarms/${encodeURIComponent(id)}`, { method: "DELETE" }),
   markAlarmsRead: () => request<{ ok: boolean }>("/api/alarms/read", { method: "POST" }),
+  acknowledgeAlarm: (id: string) =>
+    request<{ ok: boolean; acknowledged: boolean; acknowledged_at?: string; created?: boolean }>(
+      `/api/alarms/${encodeURIComponent(id)}/acknowledge`,
+      { method: "POST", body: JSON.stringify({}) },
+    ),
   messages: () => request<{ messages: Message[] }>("/api/messages"),
   addMessage: (body: { body: string; audience: string; recipient_id?: string }) =>
     request<Message>("/api/messages", { method: "POST", body: JSON.stringify(body) }),

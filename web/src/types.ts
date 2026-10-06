@@ -135,6 +135,12 @@ export type TeamInfo = {
   play_year?: string;
 };
 
+export type AlarmAcknowledgment = {
+  player_id: string;
+  player_name: string;
+  acknowledged_at?: string;
+};
+
 export type Alarm = {
   id: string;
   text: string;
@@ -142,6 +148,12 @@ export type Alarm = {
   target_name?: string;
   created_at?: string;
   read?: boolean;
+  author_id?: string;
+  author_name?: string;
+  author_role?: string;
+  acknowledgments?: AlarmAcknowledgment[];
+  acknowledged?: boolean;
+  acknowledged_at?: string | null;
 };
 
 export type Message = {

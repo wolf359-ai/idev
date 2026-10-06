@@ -668,6 +668,8 @@ class StoreTests(unittest.TestCase):
         broadcast = self.store.add_alarm({"text": "All", "target": "all"})
         self.store.add_alarm({"text": "Direct", "target": player["id"]})
         self.store.mark_alarm_read(broadcast["id"], player["id"])
+        self.store.acknowledge_alarm(broadcast["id"], player["id"])
+        self.store.acknowledge_alarm(broadcast["id"], keep["id"])
         self.store.add_message(
             {"body": "For Fin", "audience": "player", "recipient_id": player["id"]}
         )
@@ -677,6 +679,10 @@ class StoreTests(unittest.TestCase):
         alarms = self.store.list_alarms()
         self.assertEqual({a["text"] for a in alarms}, {"All"})
         self.assertNotIn(player["id"], alarms[0].get("reads", []))
+        self.assertEqual(
+            [ack["player_id"] for ack in alarms[0].get("acknowledgments", [])],
+            [keep["id"]],
+        )
         messages = self.store.list_messages()
         self.assertEqual({m["body"] for m in messages}, {"Team"})
         self.assertEqual(self.store.messages_for_player(keep["id"]), self.store.messages_for_player(keep["id"]))
@@ -2147,6 +2153,222 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(blocked["error"], "That skill is not used for this position")
         status, pitcher_detail = self.call("GET", f"/api/players/{pitcher['id']}")
         self.assertIn("Infield", {item["skill_name"] for item in pitcher_detail["progress"]})
+
+    def test_player_can_acknowledge_alarm_and_author_sees_it(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Alex Rivera", "position": "Shortstop"}
+        )
+        self.assertEqual(status, 201)
+        status, created = self.call(
+            "POST",
+            "/api/alarms",
+            {"text": "Stretch before you take the field.", "target": player["id"]},
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(created["author_id"], app.COACH_AUTHOR_ID)
+        self.assertEqual(created["author_role"], "coach")
+        self.assertEqual(created["acknowledgments"], [])
+        alarm_id = created["id"]
+        self.give_player_login(player["id"], "rivera7", "player-pass")
+
+        self.sign_out()
+        self.login_player("rivera7", "player-pass")
+        status, before = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        self.assertFalse(before["alarms"][0]["acknowledged"])
+        self.assertIsNone(before["alarms"][0]["acknowledged_at"])
+        status, ack = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, ack)
+        self.assertTrue(ack["acknowledged"])
+        self.assertTrue(ack["created"])
+        self.assertEqual(ack["player_id"], player["id"])
+        self.assertEqual(ack["player_name"], "Alex Rivera")
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        item = listing["alarms"][0]
+        self.assertTrue(item["acknowledged"])
+        self.assertEqual(item["acknowledged_at"], ack["acknowledged_at"])
+        self.assertFalse(item["read"])
+        self.assertNotIn("acknowledgments", item)
+        self.assertNotIn("reads", item)
+
+        self.sign_out()
+        self.login_coach()
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        seen = next(alarm for alarm in listing["alarms"] if alarm["id"] == alarm_id)
+        self.assertEqual(seen["text"], "Stretch before you take the field.")
+        self.assertEqual(len(seen["acknowledgments"]), 1)
+        self.assertEqual(seen["acknowledgments"][0]["player_id"], player["id"])
+        self.assertEqual(seen["acknowledgments"][0]["player_name"], "Alex Rivera")
+        self.assertEqual(
+            seen["acknowledgments"][0]["acknowledged_at"], ack["acknowledged_at"]
+        )
+
+    def test_second_acknowledge_does_not_duplicate(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Alex Rivera", "position": "Shortstop"}
+        )
+        self.assertEqual(status, 201)
+        status, created = self.call(
+            "POST", "/api/alarms", {"text": "Bring cleats", "target": player["id"]}
+        )
+        self.assertEqual(status, 201)
+        alarm_id = created["id"]
+        self.give_player_login(player["id"], "rivera7", "player-pass")
+        self.sign_out()
+        self.login_player("rivera7", "player-pass")
+        status, first = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, first)
+        status, second = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, second)
+        self.assertFalse(second["created"])
+        self.assertEqual(second["acknowledged_at"], first["acknowledged_at"])
+        self.sign_out()
+        self.login_coach()
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        seen = next(alarm for alarm in listing["alarms"] if alarm["id"] == alarm_id)
+        self.assertEqual(len(seen["acknowledgments"]), 1)
+        self.assertEqual(
+            seen["acknowledgments"][0]["acknowledged_at"], first["acknowledged_at"]
+        )
+
+    def test_player_cannot_acknowledge_alarm_not_sent_to_them(self) -> None:
+        status, owner = self.call(
+            "POST", "/api/players", {"name": "Ann", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        status, other = self.call(
+            "POST", "/api/players", {"name": "Bea", "position": "Catcher"}
+        )
+        self.assertEqual(status, 201)
+        status, created = self.call(
+            "POST", "/api/alarms", {"text": "See me", "target": owner["id"]}
+        )
+        self.assertEqual(status, 201)
+        alarm_id = created["id"]
+        self.give_player_login(other["id"], "beauser", "player-pass")
+        self.sign_out()
+        self.login_player("beauser", "player-pass")
+        status, payload = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 403, payload)
+        status, missing = self.call(
+            "POST", "/api/alarms/alarm-doesnotexist/acknowledge", {}
+        )
+        self.assertEqual(status, 404, missing)
+        self.sign_out()
+        self.login_coach()
+        status, listing = self.call("GET", "/api/alarms")
+        seen = next(alarm for alarm in listing["alarms"] if alarm["id"] == alarm_id)
+        self.assertEqual(seen["acknowledgments"], [])
+
+    def test_coach_cannot_acknowledge_for_a_player(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Alex Rivera", "position": "Shortstop"}
+        )
+        self.assertEqual(status, 201)
+        status, created = self.call(
+            "POST",
+            "/api/alarms",
+            {"text": "Stretch before you take the field.", "target": player["id"]},
+        )
+        self.assertEqual(status, 201)
+        status, payload = self.call(
+            "POST", f"/api/alarms/{created['id']}/acknowledge", {}
+        )
+        self.assertEqual(status, 403, payload)
+        status, listing = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        seen = next(alarm for alarm in listing["alarms"] if alarm["id"] == created["id"])
+        self.assertEqual(seen["acknowledgments"], [])
+        stored = next(
+            alarm for alarm in self.store.list_alarms() if alarm["id"] == created["id"]
+        )
+        self.assertEqual(stored.get("acknowledgments"), [])
+
+    def test_each_player_acks_broadcast_author_and_head_coach_see_them(self) -> None:
+        status, ann = self.call(
+            "POST", "/api/players", {"name": "Ann", "position": "Pitcher"}
+        )
+        self.assertEqual(status, 201)
+        status, bea = self.call(
+            "POST", "/api/players", {"name": "Bea", "position": "Catcher"}
+        )
+        self.assertEqual(status, 201)
+        self.give_player_login(ann["id"], "annuser", "player-pass")
+        self.give_player_login(bea["id"], "beauser", "player-pass")
+        author_id = self.make_staff("Kay Author", "Manager", "author-pass")
+        self.make_staff("Lee Other", "Manager", "other-pass")
+        self.make_staff("Tom Full", "Full", "full-pass")
+        self.make_staff("Pat Viewer", "Read-only", "view-pass")
+
+        self.sign_out()
+        self.login_staff("Kay Author", "author-pass")
+        status, created = self.call(
+            "POST", "/api/alarms", {"text": "Bring water", "target": "all"}
+        )
+        self.assertEqual(status, 201, created)
+        self.assertEqual(created["author_id"], author_id)
+        alarm_id = created["id"]
+        status, denied = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 403, denied)
+
+        self.sign_out()
+        self.login_player("annuser", "player-pass")
+        status, ann_ack = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, ann_ack)
+        self.assertTrue(ann_ack["created"])
+        self.sign_out()
+        self.login_player("beauser", "player-pass")
+        status, bea_ack = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, bea_ack)
+        self.assertTrue(bea_ack["created"])
+        status, bea_again = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 200, bea_again)
+        self.assertFalse(bea_again["created"])
+
+        self.sign_out()
+        self.login_player("annuser", "player-pass")
+        status, ann_list = self.call("GET", "/api/alarms")
+        self.assertEqual(status, 200)
+        ann_item = next(alarm for alarm in ann_list["alarms"] if alarm["id"] == alarm_id)
+        self.assertTrue(ann_item["acknowledged"])
+        self.assertNotIn("acknowledgments", ann_item)
+        self.assertNotIn("Bea", json.dumps(ann_list))
+
+        def acknowledgments() -> list[dict]:
+            status, listing = self.call("GET", "/api/alarms")
+            self.assertEqual(status, 200, listing)
+            alarm = next(item for item in listing["alarms"] if item["id"] == alarm_id)
+            return alarm["acknowledgments"]
+
+        self.sign_out()
+        self.login_staff("Kay Author", "author-pass")
+        author_acks = acknowledgments()
+        self.assertEqual(
+            {ack["player_name"] for ack in author_acks}, {"Ann", "Bea"}
+        )
+        self.assertEqual(len(author_acks), 2)
+
+        self.sign_out()
+        self.login_staff("Lee Other", "other-pass")
+        self.assertEqual(acknowledgments(), [])
+
+        self.sign_out()
+        self.login_coach()
+        coach_acks = acknowledgments()
+        self.assertEqual({ack["player_id"] for ack in coach_acks}, {ann["id"], bea["id"]})
+
+        self.sign_out()
+        self.login_staff("Tom Full", "full-pass")
+        self.assertEqual(len(acknowledgments()), 2)
+
+        self.sign_out()
+        self.login_staff("Pat Viewer", "view-pass")
+        self.assertEqual(acknowledgments(), [])
+        status, denied = self.call("POST", f"/api/alarms/{alarm_id}/acknowledge", {})
+        self.assertEqual(status, 403, denied)
 
 
 if __name__ == "__main__":
