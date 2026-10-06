@@ -355,12 +355,12 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
 
 .card.skill .dots {
   margin: 0;
-  gap: 0.28rem;
+  gap: 0.2rem;
 }
 
 .card.skill .dot {
-  width: 32px;
-  height: 32px;
+  width: 22px;
+  height: 22px;
   border-width: 1.5px;
 }
 
