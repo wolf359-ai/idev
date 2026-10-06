@@ -336,7 +336,40 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
 }
 .login-card .btn { margin-top: 0.4rem; }
 
-.skill h2 { margin-bottom: 0.2rem; }
+.skills-list { gap: 0.35rem; }
+
+.card.skill {
+  display: grid;
+  grid-template-columns: minmax(5.5rem, 1fr) auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 12px;
+}
+
+.card.skill h2 {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.15;
+}
+
+.card.skill .dots {
+  margin: 0;
+  gap: 0.28rem;
+}
+
+.card.skill .dot {
+  width: 32px;
+  height: 32px;
+  border-width: 1.5px;
+}
+
+.card.skill .meta {
+  margin: 0;
+  min-width: 2.2rem;
+  text-align: right;
+  font-size: 0.78rem;
+}
 
 @media (min-width: 800px) {
   .shell { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 100vh; }

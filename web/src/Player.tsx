@@ -194,7 +194,7 @@ function Skills({
 }) {
   const progress = player.progress || [];
   return (
-    <div className="stack">
+    <div className="stack skills-list">
       <p className="meta">
         {readOnly
           ? "Your latest rating for each skill (1–5)."
@@ -208,7 +208,7 @@ function Skills({
             readOnly={readOnly}
             onRate={(score) => onRate(item.skill_id, score)}
           />
-          <p className="meta">{item.current ? `${item.current} / 5` : "Not rated yet"}</p>
+          <p className="meta">{item.current ? `${item.current} / 5` : "—"}</p>
         </article>
       ))}
       <article className="card">
