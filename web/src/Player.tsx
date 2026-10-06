@@ -98,6 +98,9 @@ export function PlayerScreen({
           <div className="player-name-block">
             <h1>{player.name}</h1>
             <p className="meta">{positionLabel(player)}</p>
+          </div>
+          <div className="player-actions">
+            <EmailButton email={player.email} />
             <button
               type="button"
               className={alarmsCurrent ? "alarm-btn on" : "alarm-btn"}
@@ -203,6 +206,48 @@ export function PlayerScreen({
       ) : null}
       {tab === "progress" ? <Progress player={player} /> : null}
     </section>
+  );
+}
+
+function EmailButton({ email }: { email?: string }) {
+  const address = (email || "").trim();
+  const icon = <EmailIcon />;
+  if (!address) {
+    return (
+      <button type="button" className="email-btn" disabled aria-label="Email">
+        {icon}
+      </button>
+    );
+  }
+  return (
+    <a className="email-btn" href={`mailto:${address}`} aria-label="Email">
+      {icon}
+    </a>
+  );
+}
+
+function EmailIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect
+        x="3.5"
+        y="5.5"
+        width="17"
+        height="13"
+        rx="2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="m4.2 7.2 7.8 6.1 7.8-6.1"
+      />
+    </svg>
   );
 }
 
@@ -660,6 +705,7 @@ function EditPlayer({
     const data = new FormData(event.currentTarget);
     const body: Record<string, unknown> = {
       name: String(data.get("name") || ""),
+      email: String(data.get("email") || ""),
       position: String(data.get("position") || ""),
       secondary_position: String(data.get("secondary_position") || ""),
       number: data.get("number") === "" ? null : Number(data.get("number")),
@@ -684,6 +730,18 @@ function EditPlayer({
     <form className="card" onSubmit={submit}>
       <Field label="Name">
         <input name="name" required maxLength={80} defaultValue={player.name} />
+      </Field>
+      <Field label="Email">
+        <input
+          name="email"
+          type="email"
+          inputMode="email"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={120}
+          placeholder="name@example.com"
+          defaultValue={player.email || ""}
+        />
       </Field>
       <PositionFields position={player.position} secondary={player.secondary_position} />
       <Field label="Jersey number">

@@ -68,6 +68,7 @@ button { cursor: pointer; }
   gap: 0.6rem;
   align-items: center;
   min-width: 0;
+  width: 100%;
 }
 
 .logo { height: 32px; width: auto; display: block; }
@@ -90,31 +91,27 @@ button { cursor: pointer; }
 }
 
 .player-name-block {
-  display: grid;
-  grid-template-columns: minmax(0, max-content) 36px;
-  column-gap: 0.45rem;
-  align-items: start;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  max-width: 100%;
+  flex: 1 1 auto;
 }
 
-.player-name-block h1 {
-  grid-column: 1;
-  grid-row: 1;
-  justify-self: start;
-  min-width: 0;
-  max-width: 100%;
-}
-
+.player-name-block h1,
 .player-name-block > .meta {
-  grid-column: 1;
-  grid-row: 2;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.player-name-block > .alarm-btn {
-  grid-column: 2;
-  grid-row: 2;
+.player-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
 }
 
 .top-actions {
@@ -124,7 +121,8 @@ button { cursor: pointer; }
   align-self: flex-start;
 }
 
-.alarm-btn {
+.alarm-btn,
+.email-btn {
   position: relative;
   width: 36px;
   height: 36px;
@@ -136,15 +134,22 @@ button { cursor: pointer; }
   color: var(--muted);
   display: grid;
   place-items: center;
+  text-decoration: none;
+  flex: none;
 }
 
-.alarm-btn svg { width: 18px; height: 18px; display: block; }
+.alarm-btn svg,
+.email-btn svg { width: 18px; height: 18px; display: block; }
 .alarm-btn.on {
   color: var(--cyan);
   border-color: rgba(34, 211, 238, 0.45);
   background: rgba(34, 211, 238, 0.1);
 }
 .alarm-btn .badge { top: -5px; right: -6px; }
+.email-btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
 .brand-title {
   font-weight: 650;
   white-space: nowrap;

@@ -497,6 +497,23 @@ def parse_distance(value: object) -> object:
     return round(feet, 2)
 
 
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def parse_optional_email(value: object) -> str:
+    """Optional player email; blank means none. Used only for a mailto link."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 120:
+        raise ValueError("Email must be 120 characters or fewer")
+    if not EMAIL_RE.fullmatch(text):
+        raise ValueError("Enter a valid email address")
+    return text
+
+
 def parse_optional_contact(value: object) -> str:
     """Contact info (email or phone) is optional; blank means none."""
     if value is None:
@@ -883,6 +900,7 @@ def build_stats_view(raw: object) -> dict:
 PUBLIC_PLAYER_FIELDS = (
     "id",
     "name",
+    "email",
     "username",
     "position",
     "secondary_position",
@@ -1577,6 +1595,7 @@ class Store:
         player = {
             "id": new_id("player"),
             "name": clean_text(payload.get("name"), "Player name", MAX_NAME_LEN),
+            "email": parse_optional_email(payload.get("email")),
             "position": parse_position(payload.get("position")),
             "secondary_position": parse_optional_position(payload.get("secondary_position")),
             "team_year": parse_team_year(payload.get("team_year")),
@@ -1670,6 +1689,8 @@ class Store:
             player = self._player_unlocked(player_id)
             if "name" in payload:
                 player["name"] = clean_text(payload.get("name"), "Player name", MAX_NAME_LEN)
+            if "email" in payload:
+                player["email"] = parse_optional_email(payload.get("email"))
             if "position" in payload:
                 player["position"] = parse_position(payload.get("position"))
             if "secondary_position" in payload:

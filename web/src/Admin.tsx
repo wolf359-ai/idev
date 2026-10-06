@@ -54,6 +54,7 @@ function AddPlayer({ onBack, onSaved }: { onBack: () => void; onSaved: () => voi
     const data = new FormData(event.currentTarget);
     const body: Record<string, string | number | null> = {
       name: String(data.get("name") || ""),
+      email: String(data.get("email") || ""),
       position: String(data.get("position") || ""),
       secondary_position: String(data.get("secondary_position") || ""),
       number: data.get("number") === "" ? null : Number(data.get("number")),
@@ -84,6 +85,17 @@ function AddPlayer({ onBack, onSaved }: { onBack: () => void; onSaved: () => voi
       <form onSubmit={submit}>
         <Field label="Name">
           <input name="name" required maxLength={80} />
+        </Field>
+        <Field label="Email">
+          <input
+            name="email"
+            type="email"
+            inputMode="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            maxLength={120}
+            placeholder="name@example.com"
+          />
         </Field>
         <PositionFields />
         <Field label="Jersey number">

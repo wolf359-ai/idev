@@ -19,6 +19,7 @@ export type Session = {
 export type PlayerSummary = {
   id: string;
   name: string;
+  email?: string;
   username?: string;
   position?: string;
   secondary_position?: string;

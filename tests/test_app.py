@@ -37,6 +37,21 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(len(listed), 1)
         self.assertEqual(listed[0]["name"], "Sam Lee")
 
+    def test_optional_player_email(self) -> None:
+        created = self.store.add_player(
+            {"name": "Sky", "position": "Shortstop", "email": " sky@example.com "}
+        )
+        self.assertEqual(created["email"], "sky@example.com")
+        plain = self.store.add_player({"name": "Rowan", "position": "Catcher"})
+        self.assertEqual(plain["email"], "")
+        updated = self.store.update_player(created["id"], {"email": "sky.lee@example.com"})
+        self.assertEqual(updated["email"], "sky.lee@example.com")
+        self.assertEqual(updated["name"], "Sky")
+        cleared = self.store.update_player(created["id"], {"email": "  "})
+        self.assertEqual(cleared["email"], "")
+        with self.assertRaises(ValueError):
+            self.store.update_player(created["id"], {"email": "not-an-email"})
+
     def test_rejects_empty_name(self) -> None:
         with self.assertRaises(ValueError):
             self.store.add_player({"name": "   ", "position": "Pitcher"})
