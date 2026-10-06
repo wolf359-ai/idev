@@ -65,3 +65,8 @@ export function safeHttpUrl(value: string | undefined): string | null {
 export function unreadCount(items: { read?: boolean }[]): number {
   return items.filter((item) => item.read === false).length;
 }
+
+/** Alarms sent to this player that they have not acknowledged yet. */
+export function unacknowledgedCount(items: { acknowledged?: boolean }[]): number {
+  return items.filter((item) => item.acknowledged !== true).length;
+}

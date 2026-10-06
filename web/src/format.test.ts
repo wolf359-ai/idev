@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deltaText, safeHttpUrl, scoreFromTap, unreadCount } from "./format";
+import { deltaText, safeHttpUrl, scoreFromTap, unacknowledgedCount, unreadCount } from "./format";
 
 describe("scoreFromTap", () => {
   it("keeps the first dot at the minimum valid rating", () => {
@@ -41,5 +41,22 @@ describe("deltaText", () => {
 describe("unreadCount", () => {
   it("counts only explicit unread items", () => {
     expect(unreadCount([{ read: false }, { read: true }, {}])).toBe(1);
+  });
+});
+
+describe("unacknowledgedCount", () => {
+  it("counts alarms that are not acknowledged, ignoring the read flag", () => {
+    const items: { acknowledged?: boolean; read?: boolean }[] = [
+      { acknowledged: false, read: true },
+      { acknowledged: true, read: false },
+      { read: false },
+      {},
+    ];
+    expect(unacknowledgedCount(items)).toBe(3);
+  });
+
+  it("is zero when every alarm is acknowledged", () => {
+    expect(unacknowledgedCount([{ acknowledged: true }, { acknowledged: true }])).toBe(0);
+    expect(unacknowledgedCount([])).toBe(0);
   });
 });

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AdminScreen } from "./Admin";
 import { api, setCsrf } from "./api";
 import { AlarmsScreen, MessagesScreen } from "./Comms";
-import { unreadCount } from "./format";
+import { unacknowledgedCount } from "./format";
 import { LoginScreen } from "./Login";
 import { PlayerScreen } from "./Player";
 import { RosterScreen } from "./Roster";
@@ -56,7 +56,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   );
   const [players, setPlayers] = useState<PlayerSummary[]>([]);
   const [team, setTeam] = useState<TeamInfo>({});
-  const [unread, setUnread] = useState({ alarms: 0, messages: 0 });
+  const [unacknowledged, setUnacknowledged] = useState(0);
   const [rosterError, setRosterError] = useState("");
 
   const refreshRoster = useCallback(() => {
@@ -74,15 +74,13 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
 
   const refreshInbox = useCallback(() => {
     if (!isPlayer) {
-      setUnread({ alarms: 0, messages: 0 });
+      setUnacknowledged(0);
       return;
     }
-    Promise.all([api.alarms(), api.messages()])
-      .then(([alarms, messages]) => {
-        setUnread({
-          alarms: unreadCount(alarms.alarms),
-          messages: unreadCount(messages.messages),
-        });
+    api
+      .alarms()
+      .then((payload) => {
+        setUnacknowledged(unacknowledgedCount(payload.alarms));
       })
       .catch(() => undefined);
   }, [isPlayer]);
@@ -103,6 +101,8 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   }, []);
 
   const alarmsCurrent = screen.name === "alarms";
+  const playerId = screen.name === "player" ? screen.id : isPlayer && alarmsCurrent ? ownId : "";
+  const playerTab = screen.name === "player" ? screen.tab : "skills";
   const teamLabel = [team.name, team.season, team.year].filter(Boolean).join(" · ");
   const who =
     session.role === "coach"
@@ -146,16 +146,19 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
             />
           </>
         ) : null}
-        {screen.name === "player" ? (
+        {playerId ? (
           <PlayerScreen
-            playerId={screen.id}
-            tab={screen.tab}
+            playerId={playerId}
+            tab={playerTab}
             can={can}
-            showBack={can.view_all}
-            alarmUnread={unread.alarms + unread.messages}
+            showBack={screen.name === "player" && can.view_all}
+            unacknowledged={unacknowledged}
             alarmsCurrent={alarmsCurrent}
+            headerOnly={alarmsCurrent}
             onAlarms={() => setScreen({ name: "alarms" })}
-            onTab={(tab) => setScreen({ name: "player", id: screen.id, tab })}
+            onTab={(tab) => {
+              if (screen.name === "player") setScreen({ name: "player", id: screen.id, tab });
+            }}
             onBack={() => {
               refreshRoster();
               setScreen({ name: "roster" });

@@ -96,6 +96,7 @@ export function AlarmsScreen({
     setPendingId(id);
     try {
       await api.acknowledgeAlarm(id);
+      onRead();
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not acknowledge");

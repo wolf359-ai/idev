@@ -22,8 +22,9 @@ export function PlayerScreen({
   onBack,
   showBack,
   onAlarms,
-  alarmUnread = 0,
+  unacknowledged = 0,
   alarmsCurrent = false,
+  headerOnly = false,
 }: {
   playerId: string;
   tab: PlayerTab;
@@ -32,8 +33,10 @@ export function PlayerScreen({
   onBack: () => void;
   showBack: boolean;
   onAlarms: () => void;
-  alarmUnread?: number;
+  unacknowledged?: number;
   alarmsCurrent?: boolean;
+  /** Keep the name row and bell visible above Notifications. */
+  headerOnly?: boolean;
 }) {
   const [player, setPlayer] = useState<PlayerDetail | null>(null);
   const [error, setError] = useState("");
@@ -104,13 +107,17 @@ export function PlayerScreen({
             <button
               type="button"
               className={alarmsCurrent ? "alarm-btn on" : "alarm-btn"}
-              aria-label={alarmUnread ? `Notifications, ${alarmUnread} unread` : "Notifications"}
+              aria-label={
+                unacknowledged > 0
+                  ? `Notifications, ${unacknowledged} unacknowledged`
+                  : "Notifications"
+              }
               aria-current={alarmsCurrent ? "page" : undefined}
               onClick={onAlarms}
             >
               <AlarmIcon />
-              {alarmUnread ? (
-                <span className="badge">{alarmUnread > 99 ? "99+" : alarmUnread}</span>
+              {unacknowledged > 0 ? (
+                <span className="badge">{unacknowledged > 99 ? "99+" : unacknowledged}</span>
               ) : null}
             </button>
           </div>
@@ -152,59 +159,63 @@ export function PlayerScreen({
           </div>
         ) : null}
       </header>
-      <ErrorNote message={error} />
-      {editing && can.admin ? (
-        <EditPlayer
-          player={player}
-          onDone={() => {
-            setEditing(false);
-            void reload();
-          }}
-          onError={setError}
-        />
-      ) : null}
-      {loginOpen && can.admin ? (
-        <LoginForm
-          player={player}
-          onDone={() => {
-            setLoginOpen(false);
-            void reload();
-          }}
-          onError={setError}
-        />
-      ) : null}
-      <div className="tabs" role="tablist">
-        {TABS.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            role="tab"
-            aria-selected={tab === item.id}
-            className={tab === item.id ? "tab on" : "tab"}
-            onClick={() => onTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
-      {tab === "skills" ? (
-        <Skills
-          player={player}
-          readOnly={!can.content}
-          onRate={(skillId, score) => run(() => api.rate(player.id, skillId, score).then(() => undefined))}
-          onChange={run}
-        />
-      ) : null}
-      {tab === "stats" ? (
-        <Stats player={player} canEdit={can.admin} onSave={(counts) => run(() => api.saveStats(player.id, counts).then(() => undefined))} />
-      ) : null}
-      {tab === "notes" ? (
-        <Notes player={player} canEdit={can.content} onChange={run} />
-      ) : null}
-      {tab === "drills" ? (
-        <Drills player={player} canEdit={can.content} onChange={run} />
-      ) : null}
-      {tab === "progress" ? <Progress player={player} /> : null}
+      {headerOnly ? null : (
+        <>
+          <ErrorNote message={error} />
+          {editing && can.admin ? (
+            <EditPlayer
+              player={player}
+              onDone={() => {
+                setEditing(false);
+                void reload();
+              }}
+              onError={setError}
+            />
+          ) : null}
+          {loginOpen && can.admin ? (
+            <LoginForm
+              player={player}
+              onDone={() => {
+                setLoginOpen(false);
+                void reload();
+              }}
+              onError={setError}
+            />
+          ) : null}
+          <div className="tabs" role="tablist">
+            {TABS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={tab === item.id}
+                className={tab === item.id ? "tab on" : "tab"}
+                onClick={() => onTab(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+          {tab === "skills" ? (
+            <Skills
+              player={player}
+              readOnly={!can.content}
+              onRate={(skillId, score) => run(() => api.rate(player.id, skillId, score).then(() => undefined))}
+              onChange={run}
+            />
+          ) : null}
+          {tab === "stats" ? (
+            <Stats
+              player={player}
+              canEdit={can.admin}
+              onSave={(counts) => run(() => api.saveStats(player.id, counts).then(() => undefined))}
+            />
+          ) : null}
+          {tab === "notes" ? <Notes player={player} canEdit={can.content} onChange={run} /> : null}
+          {tab === "drills" ? <Drills player={player} canEdit={can.content} onChange={run} /> : null}
+          {tab === "progress" ? <Progress player={player} /> : null}
+        </>
+      )}
     </section>
   );
 }
