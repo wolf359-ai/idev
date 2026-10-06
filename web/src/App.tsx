@@ -182,6 +182,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         {can.view_all ? (
           <NavButton
             label="Players"
+            icon={<PlayersIcon />}
             current={screen.name === "roster" || screen.name === "player"}
             onClick={() => setScreen({ name: "roster" })}
           />
@@ -195,6 +196,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         )}
         <NavButton
           label="Messages"
+          icon={<MessagesIcon />}
           count={unread.messages}
           current={screen.name === "messages"}
           onClick={() => setScreen({ name: "messages" })}
@@ -202,6 +204,7 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         {can.admin ? (
           <NavButton
             label="Admin"
+            icon={<AdminIcon />}
             current={screen.name === "admin"}
             onClick={() => setScreen({ name: "admin", panel: "home" })}
           />
@@ -211,18 +214,62 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
   );
 }
 
+function PlayersIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="5.4" cy="8.4" r="1.9" />
+        <path d="M1.8 16.6c.4-2.2 2-3.4 3.6-3.4s3.2 1.2 3.6 3.4" />
+        <circle cx="18.6" cy="8.4" r="1.9" />
+        <path d="M15 16.6c.4-2.2 2-3.4 3.6-3.4s3.2 1.2 3.6 3.4" />
+        <circle cx="12" cy="9.1" r="2.2" />
+        <path d="M7.2 18.7c.65-2.6 2.4-4 4.8-4s4.15 1.4 4.8 4" />
+      </g>
+    </svg>
+  );
+}
+
 function PersonIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <circle cx="12" cy="8" r="3.25" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <circle cx="12" cy="12" r="8.7" fill="none" stroke="currentColor" strokeWidth="1.7" />
+      <circle cx="12" cy="10" r="2.35" fill="none" stroke="currentColor" strokeWidth="1.7" />
       <path
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.7"
         strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M5.2 19.4v-.6c0-2.7 2.4-4.6 6.8-4.6s6.8 1.9 6.8 4.6v.6"
+        d="M7.35 16.85c.65-1.85 2.3-2.9 4.65-2.9s4 .95 4.65 2.9"
       />
+    </svg>
+  );
+}
+
+function MessagesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        d="M7.1 6.7h9.8a2.3 2.3 0 0 1 2.3 2.3v5.1a2.3 2.3 0 0 1-2.3 2.3h-6.4L7.2 19.2v-2.8H7.1a2.3 2.3 0 0 1-2.3-2.3V9a2.3 2.3 0 0 1 2.3-2.3Z"
+      />
+    </svg>
+  );
+}
+
+function AdminIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
+        <path d="M4 7.2h3.1M12.4 7.2H20" />
+        <path d="M4 12h7.4M16.6 12H20" />
+        <path d="M4 16.8h4.6M13.8 16.8H20" />
+        <circle cx="9.15" cy="7.2" r="1.95" />
+        <circle cx="14.15" cy="12" r="1.95" />
+        <circle cx="11.15" cy="16.8" r="1.95" />
+      </g>
     </svg>
   );
 }
@@ -237,21 +284,23 @@ function NavButton({
   label: string;
   current: boolean;
   count?: number;
-  icon?: ReactNode;
+  icon: ReactNode;
   onClick: () => void;
 }) {
-  const className = icon
-    ? current
-      ? "nav-btn profile on"
-      : "nav-btn profile"
-    : current
-      ? "nav-btn on"
-      : "nav-btn";
+  const className = ["nav-btn", label === "Profile" ? "profile" : "", current ? "on" : ""].filter(Boolean).join(" ");
   return (
-    <button type="button" className={className} aria-current={current ? "page" : undefined} onClick={onClick}>
-      {icon}
-      <span>{label}</span>
-      {count ? <span className="badge">{count > 99 ? "99+" : count}</span> : null}
+    <button
+      type="button"
+      className={className}
+      aria-current={current ? "page" : undefined}
+      aria-label={count ? `${label}, ${count} unread` : undefined}
+      onClick={onClick}
+    >
+      <span className="nav-icon">
+        {icon}
+        {count ? <span className="badge">{count > 99 ? "99+" : count}</span> : null}
+      </span>
+      <span className="nav-label">{label}</span>
     </button>
   );
 }
