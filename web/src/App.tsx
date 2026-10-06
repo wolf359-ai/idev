@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AdminScreen } from "./Admin";
 import { api, setCsrf } from "./api";
 import { AlarmsScreen, MessagesScreen } from "./Comms";
@@ -193,7 +193,8 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           />
         ) : (
           <NavButton
-            label="Me"
+            label="Profile"
+            icon={<PersonIcon />}
             current={screen.name === "player"}
             onClick={() => ownId && setScreen({ name: "player", id: ownId, tab: "skills" })}
           />
@@ -238,19 +239,45 @@ function AlarmIcon() {
   );
 }
 
+function PersonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <circle cx="12" cy="8" r="3.25" fill="none" stroke="currentColor" strokeWidth="1.8" />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M5.2 19.4v-.6c0-2.7 2.4-4.6 6.8-4.6s6.8 1.9 6.8 4.6v.6"
+      />
+    </svg>
+  );
+}
+
 function NavButton({
   label,
   current,
   count,
+  icon,
   onClick,
 }: {
   label: string;
   current: boolean;
   count?: number;
+  icon?: ReactNode;
   onClick: () => void;
 }) {
+  const className = icon
+    ? current
+      ? "nav-btn profile on"
+      : "nav-btn profile"
+    : current
+      ? "nav-btn on"
+      : "nav-btn";
   return (
-    <button type="button" className={current ? "nav-btn on" : "nav-btn"} aria-current={current ? "page" : undefined} onClick={onClick}>
+    <button type="button" className={className} aria-current={current ? "page" : undefined} onClick={onClick}>
+      {icon}
       <span>{label}</span>
       {count ? <span className="badge">{count > 99 ? "99+" : count}</span> : null}
     </button>
