@@ -54,7 +54,7 @@ button { cursor: pointer; }
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
-  align-items: center;
+  align-items: flex-start;
   padding: 0.75rem 1rem;
   border-bottom: 1px solid var(--line);
   background: #0c1119;
@@ -74,12 +74,28 @@ button { cursor: pointer; }
 
 .top-copy { flex: 1; min-width: 0; }
 
+.who-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.who-row .meta {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.who-row .alarm-btn { flex: none; }
+
 .top-actions {
   display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 0.35rem;
+  align-items: flex-start;
   flex: none;
+  align-self: flex-start;
 }
 
 .alarm-btn {

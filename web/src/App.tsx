@@ -124,23 +124,25 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         <img className="logo" src="/static/logo.png" alt="Alpha logo" />
         <div className="top-copy">
           <p className="brand-title">{teamLabel || "Player development"}</p>
-          <p className="meta">{who}</p>
+          <div className="who-row">
+            <p className="meta">{who}</p>
+            <button
+              type="button"
+              className={screen.name === "alarms" ? "alarm-btn on" : "alarm-btn"}
+              aria-label={unread.alarms ? `Alarms, ${unread.alarms} unread` : "Alarms"}
+              aria-current={screen.name === "alarms" ? "page" : undefined}
+              onClick={() => setScreen({ name: "alarms" })}
+            >
+              <AlarmIcon />
+              {unread.alarms ? (
+                <span className="badge">{unread.alarms > 99 ? "99+" : unread.alarms}</span>
+              ) : null}
+            </button>
+          </div>
         </div>
         <div className="top-actions">
           <button type="button" className="btn tiny" onClick={() => void logout()}>
             Sign out
-          </button>
-          <button
-            type="button"
-            className={screen.name === "alarms" ? "alarm-btn on" : "alarm-btn"}
-            aria-label={unread.alarms ? `Alarms, ${unread.alarms} unread` : "Alarms"}
-            aria-current={screen.name === "alarms" ? "page" : undefined}
-            onClick={() => setScreen({ name: "alarms" })}
-          >
-            <AlarmIcon />
-            {unread.alarms ? (
-              <span className="badge">{unread.alarms > 99 ? "99+" : unread.alarms}</span>
-            ) : null}
           </button>
         </div>
       </header>
