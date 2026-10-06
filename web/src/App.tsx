@@ -126,9 +126,23 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           <p className="brand-title">{teamLabel || "Player development"}</p>
           <p className="meta">{who}</p>
         </div>
-        <button type="button" className="btn tiny" onClick={() => void logout()}>
-          Sign out
-        </button>
+        <div className="top-actions">
+          <button type="button" className="btn tiny" onClick={() => void logout()}>
+            Sign out
+          </button>
+          <button
+            type="button"
+            className={screen.name === "alarms" ? "alarm-btn on" : "alarm-btn"}
+            aria-label={unread.alarms ? `Alarms, ${unread.alarms} unread` : "Alarms"}
+            aria-current={screen.name === "alarms" ? "page" : undefined}
+            onClick={() => setScreen({ name: "alarms" })}
+          >
+            <AlarmIcon />
+            {unread.alarms ? (
+              <span className="badge">{unread.alarms > 99 ? "99+" : unread.alarms}</span>
+            ) : null}
+          </button>
+        </div>
       </header>
       <main className="stage">
         {screen.name === "roster" ? (
@@ -185,12 +199,6 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
           />
         )}
         <NavButton
-          label="Alarms"
-          count={unread.alarms}
-          current={screen.name === "alarms"}
-          onClick={() => setScreen({ name: "alarms" })}
-        />
-        <NavButton
           label="Messages"
           count={unread.messages}
           current={screen.name === "messages"}
@@ -205,6 +213,28 @@ function Shell({ session, onLogout }: { session: Session; onLogout: () => void }
         ) : null}
       </nav>
     </div>
+  );
+}
+
+function AlarmIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M6.2 16.5h11.6c-.7-1.1-1.3-2.3-1.3-4.2V10a4.5 4.5 0 0 0-9 0v2.3c0 1.9-.6 3.1-1.3 4.2Z"
+      />
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        d="M10 16.8a2 2 0 0 0 4 0"
+      />
+    </svg>
   );
 }
 

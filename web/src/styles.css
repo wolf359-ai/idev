@@ -73,6 +73,36 @@ button { cursor: pointer; }
 .logo { height: 32px; width: auto; display: block; }
 
 .top-copy { flex: 1; min-width: 0; }
+
+.top-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.35rem;
+  flex: none;
+}
+
+.alarm-btn {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #172033;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+}
+
+.alarm-btn svg { width: 18px; height: 18px; display: block; }
+.alarm-btn.on {
+  color: var(--cyan);
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(34, 211, 238, 0.1);
+}
+.alarm-btn .badge { top: -5px; right: -6px; }
 .brand-title {
   font-weight: 650;
   white-space: nowrap;
