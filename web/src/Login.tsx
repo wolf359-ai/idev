@@ -32,7 +32,7 @@ export function LoginScreen({ onSuccess }: { onSuccess: (session: Session) => vo
   return (
     <main className="login">
       <form className="card login-card" onSubmit={submit} autoComplete="off">
-        <img className="logo" src="/static/logo.png" alt="Alpha logo" width="135" height="44" />
+        <img className="logo" src="/static/logo.png" alt="Alpha logo" width="300" height="98" />
         <p className="wordmark">Player development portal</p>
         <p className="meta">Sign in with the username and password your coach gave you.</p>
         {offline ? (

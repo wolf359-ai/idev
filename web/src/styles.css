@@ -328,8 +328,12 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
   padding: 1.25rem;
 }
 
-.login-card { width: min(420px, 100%); display: flex; flex-direction: column; gap: 0.35rem; }
-.login-card .logo { height: 48px; width: auto; }
+.login-card { width: min(420px, 100%); display: flex; flex-direction: column; align-items: stretch; gap: 0.35rem; }
+.login-card .logo {
+  align-self: flex-start;
+  width: min(220px, 100%);
+  height: auto;
+}
 .login-card .btn { margin-top: 0.4rem; }
 
 .skill h2 { margin-bottom: 0.2rem; }
