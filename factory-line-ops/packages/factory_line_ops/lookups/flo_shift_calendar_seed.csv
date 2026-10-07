@@ -1,0 +1,7 @@
+site_id,shift_code,start_local,end_local,crosses_midnight
+PLT-AUS-01,A,06:00,14:00,false
+PLT-AUS-01,B,14:00,22:00,false
+PLT-AUS-01,N,22:00,06:00,true
+PLT-OH-02,A,07:00,15:00,false
+PLT-OH-02,B,15:00,23:00,false
+PLT-OH-02,N,23:00,07:00,true

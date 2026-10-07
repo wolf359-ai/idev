@@ -1,0 +1,29 @@
+# Splunk runtime — never ship instance-local overrides
+**/local/
+**/metadata/local.meta
+
+# Packaging output
+dist/
+*.spl
+*.tar.gz
+*.tgz
+
+# Secrets and live extracts
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+hec_token*
+*credentials*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Python tooling (packaging / AppInspect venv)
+.venv/
+__pycache__/
+*.pyc

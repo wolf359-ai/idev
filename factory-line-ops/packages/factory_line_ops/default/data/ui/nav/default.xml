@@ -1,0 +1,14 @@
+<nav search_view="search" color="#0B3D2E">
+  <view name="flo_enterprise" default="true" />
+  <view name="flo_plant" />
+  <view name="flo_line_floor" />
+  <view name="flo_shift_report" />
+  <view name="flo_workforce" />
+  <collection label="Search">
+    <view name="search" />
+    <view name="datasets" />
+    <view name="reports" />
+    <view name="alerts" />
+    <view name="dashboards" />
+  </collection>
+</nav>

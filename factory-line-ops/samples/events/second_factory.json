@@ -1,0 +1,27 @@
+{
+  "time": 1759850520,
+  "host": "mes-line-1",
+  "source": "mes",
+  "sourcetype": "factory:line:production",
+  "index": "factory_ops",
+  "event": {
+    "event_family": "production",
+    "enterprise": "acme",
+    "site": "PLT-OH-02",
+    "site_name": "Ohio Stamping",
+    "area": "press",
+    "line_id": "line-1",
+    "shift_id": "PLT-OH-02:2026-10-07:A",
+    "good_count": 40,
+    "reject_count": 1,
+    "total_count": 41,
+    "cycle_time": 22.0,
+    "ideal_cycle_time": 20,
+    "production_order": "PO-8801",
+    "product_code": "SKU-220",
+    "vertical": "manufacturing",
+    "system": "Production",
+    "device_id": "mes-line-1",
+    "device_type": "mes"
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "title": "Line floor",
+  "description": "Real-time board for one line: run state, who is clocked in, production this shift. Refresh ~30s.",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "-15m",
+            "latest": "now",
+            "refresh": "30s"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_site": {
+      "type": "input.dropdown",
+      "title": "Factory",
+      "options": {
+        "token": "tok_site",
+        "selectFirstSearchResult": true
+      },
+      "dataSources": {
+        "primary": "ds_sites"
+      }
+    },
+    "input_line": {
+      "type": "input.text",
+      "title": "Line",
+      "options": {
+        "token": "tok_line",
+        "defaultValue": "line-3"
+      }
+    },
+    "input_shift": {
+      "type": "input.text",
+      "title": "Shift id",
+      "options": {
+        "token": "tok_shift",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_sites": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_kv_sites | table site_id, site_name | rename site_id as value, site_name as label"
+      }
+    },
+    "ds_banner": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_current_shift_snapshot where site=\"$tok_site$\" line_id=\"$tok_line$\"\n| search shift_id=\"$tok_shift$\"\n| table line_id, shift_id, state_value, fill_pct, headcount_actual, headcount_plan, good_count_shift, downtime_minutes_shift"
+      }
+    },
+    "ds_clocked": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_workforce_indexes` sourcetype=factory:shift:clock site=\"$tok_site$\" line_id=\"$tok_line$\" shift_id=\"$tok_shift$\"\n| stats latest(action) as action, latest(_time) as last_clock by worker_id, station_id, role\n| where action=\"clock_in\"\n| lookup flo_kv_roster worker_id OUTPUT first_name\n| table station_id, role, first_name, worker_id, last_clock\n| sort station_id"
+      }
+    },
+    "ds_prod": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_ops_indexes` sourcetype=factory:line:production site=\"$tok_site$\" line_id=\"$tok_line$\" shift_id=\"$tok_shift$\"\n| timechart span=1m sum(good_count) as good_count, sum(reject_count) as reject_count",
+        "queryParameters": {
+          "earliest": "-2h",
+          "latest": "now",
+          "refresh": "30s"
+        }
+      }
+    }
+  },
+  "visualizations": {
+    "viz_banner": {
+      "type": "splunk.table",
+      "title": "This line, this shift",
+      "dataSources": {
+        "primary": "ds_banner"
+      }
+    },
+    "viz_clocked": {
+      "type": "splunk.table",
+      "title": "Clocked in (station board)",
+      "dataSources": {
+        "primary": "ds_clocked"
+      }
+    },
+    "viz_prod": {
+      "type": "splunk.line",
+      "title": "Units last 2 hours",
+      "dataSources": {
+        "primary": "ds_prod"
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "globalInputs": ["input_site", "input_line", "input_shift"],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "structure": [
+          { "item": "viz_banner", "position": { "x": 0, "y": 0, "w": 12, "h": 3 } },
+          { "item": "viz_clocked", "position": { "x": 0, "y": 3, "w": 6, "h": 5 } },
+          { "item": "viz_prod", "position": { "x": 6, "y": 3, "w": 6, "h": 5 } }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Floor"
+        }
+      ]
+    },
+    "options": {
+      "submitButton": false,
+      "showTitleAndDescription": true
+    }
+  }
+}

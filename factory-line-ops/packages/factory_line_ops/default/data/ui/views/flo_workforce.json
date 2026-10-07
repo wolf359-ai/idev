@@ -1,0 +1,86 @@
+{
+  "title": "Workforce",
+  "description": "Restricted attendance view. Requires factory_workforce index access. May show first names from the roster KV Store.",
+  "inputs": {
+    "input_site": {
+      "type": "input.dropdown",
+      "title": "Factory",
+      "options": {
+        "token": "tok_site",
+        "selectFirstSearchResult": true
+      },
+      "dataSources": {
+        "primary": "ds_sites"
+      }
+    },
+    "input_shift": {
+      "type": "input.text",
+      "title": "Shift id",
+      "options": {
+        "token": "tok_shift",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_sites": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_kv_sites | table site_id, site_name | rename site_id as value, site_name as label"
+      }
+    },
+    "ds_exceptions": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_workforce_indexes` sourcetype=factory:personnel:exception site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| lookup flo_kv_roster worker_id OUTPUT first_name, station_id, role\n| table _time, site, line_id, station_id, worker_id, first_name, action, event_message\n| sort -_time"
+      }
+    },
+    "ds_clock": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_workforce_indexes` sourcetype=factory:shift:clock site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| stats latest(action) as action, min(eval(if(action=\"clock_in\",_time,null()))) as first_in, max(_time) as last_event by worker_id, line_id\n| lookup flo_kv_roster worker_id OUTPUT first_name, planned_start, planned_end, role\n| table worker_id, first_name, role, line_id, action, first_in, last_event, planned_start, planned_end"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_exceptions": {
+      "type": "splunk.table",
+      "title": "Staffing exceptions (24h)",
+      "dataSources": {
+        "primary": "ds_exceptions"
+      }
+    },
+    "viz_clock": {
+      "type": "splunk.table",
+      "title": "Clock status",
+      "dataSources": {
+        "primary": "ds_clock"
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "globalInputs": ["input_site", "input_shift"],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "structure": [
+          { "item": "viz_exceptions", "position": { "x": 0, "y": 0, "w": 12, "h": 5 } },
+          { "item": "viz_clock", "position": { "x": 0, "y": 5, "w": 12, "h": 5 } }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Workforce"
+        }
+      ]
+    },
+    "options": {
+      "submitButton": false,
+      "showTitleAndDescription": true
+    }
+  }
+}

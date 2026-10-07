@@ -1,0 +1,4 @@
+site_id,line_id,line_name,area,planned_headcount,down_alert_minutes,target_units_per_shift
+PLT-AUS-01,line-3,Body Line 3,body_shop,12,5,480
+PLT-AUS-01,line-4,Body Line 4,body_shop,10,5,400
+PLT-OH-02,line-1,Press Line 1,press,8,5,900

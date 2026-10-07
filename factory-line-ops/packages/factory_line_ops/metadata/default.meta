@@ -1,0 +1,26 @@
+[]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none
+
+[views]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none
+
+[nav]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none
+
+[savedsearches]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none
+
+[collections]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none
+
+[transforms]
+export = none
+
+[lookups]
+access = read : [ * ], write : [ admin, flo_admin ]
+export = none

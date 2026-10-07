@@ -1,0 +1,27 @@
+{
+  "time": 1759845600,
+  "host": "wfm-acme",
+  "source": "wfm",
+  "sourcetype": "factory:shift:assignment",
+  "index": "factory_workforce",
+  "event": {
+    "event_family": "shift_assignment",
+    "action": "assign",
+    "worker_id": "WKR-7f3a9c2e",
+    "shift_id": "PLT-AUS-01:2026-10-07:B",
+    "shift_code": "B",
+    "planned_start": "2026-10-07T14:00:00-05:00",
+    "planned_end": "2026-10-07T22:00:00-05:00",
+    "planned": true,
+    "enterprise": "acme",
+    "site": "PLT-AUS-01",
+    "area": "body_shop",
+    "line_id": "line-3",
+    "station_id": "st-12",
+    "role": "operator",
+    "vertical": "manufacturing",
+    "system": "Workforce",
+    "device_id": "wfm-acme",
+    "device_type": "kiosk"
+  }
+}
