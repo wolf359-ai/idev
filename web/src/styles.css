@@ -559,6 +559,53 @@ h2 { font-size: 1.05rem; margin-bottom: 0.35rem; }
   font-size: 0.78rem;
 }
 
-@media (min-width: 800px) {
-  .shell { border-left: 1px solid var(--line); border-right: 1px solid var(--line); min-height: 100vh; }
+@media (min-width: 900px) {
+  .shell {
+    max-width: none;
+    margin: 0;
+    border: 0;
+    min-height: 100vh;
+  }
+
+  .top {
+    padding: 0.85rem 2rem;
+  }
+
+  .stage {
+    padding: 1.5rem 2rem calc(6.75rem + env(safe-area-inset-bottom));
+  }
+
+  .nav {
+    width: min(56rem, calc(100% - 3rem));
+  }
+
+  .roster {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .skills-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .stat-grid,
+  .stat-edit {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1200px) {
+  .top,
+  .stage {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+
+  .roster {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .skills-list {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
