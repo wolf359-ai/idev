@@ -2,7 +2,7 @@
 
 Factory Line Operations is a **new product**. It must live in its own GitHub repository, not in [wolf359-ai/idev](https://github.com/wolf359-ai/idev).
 
-idev is a local Python softball development tracker. This project is a Splunk app + technology add-on with its own packaging, CI (AppInspect), indexes, and access model. Sharing a repo would couple unrelated release cycles, licenses, and reviewers.
+The current GitHub repository hosts an unrelated application. This project is a Splunk app + technology add-on with its own packaging, CI (AppInspect), indexes, and access model. Sharing a repo would couple unrelated release cycles, licenses, and reviewers.
 
 ## Proposed GitHub repo
 

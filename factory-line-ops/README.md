@@ -9,7 +9,7 @@ This directory is the **intended root of a new GitHub repository**. It is staged
 | Technology add-on | `packages/TA-factory_line` | Indexes, sourcetypes, parsing, CIM / OT Intelligence field mapping |
 | Splunk app | `packages/factory_line_ops` | Dashboards, navigation, KV Store, alerts, macros |
 
-**This is not part of the idev softball tracker.** Do not mix the two products in one runtime or one Splunk app.
+**Factory Line Operations is a standalone Splunk product.** Do not mix it with other applications in one runtime or one Splunk app. App icons under `packages/*/appserver/static/` are original industrial artwork for this product.
 
 ## Read first
 
