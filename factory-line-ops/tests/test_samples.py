@@ -46,6 +46,22 @@ class PackageLayoutTest(unittest.TestCase):
             app_conf = (ROOT / "packages" / app / "default" / "app.conf").read_text()
             self.assertIn(f"id = {app}", app_conf)
 
+    def test_ta_default_has_no_secrets(self) -> None:
+        ta_default = ROOT / "packages" / "TA-factory_line" / "default"
+        self.assertTrue(ta_default.is_dir())
+        self.assertFalse((ta_default / "inputs.conf").exists())
+        blob = ""
+        for path in ta_default.rglob("*"):
+            if path.is_file():
+                blob += path.read_text(errors="ignore").lower()
+        self.assertNotIn("-----begin", blob)
+        self.assertNotIn("akia", blob)
+        for line in blob.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("token") and "=" in stripped:
+                rhs = stripped.split("=", 1)[1].strip()
+                self.assertIn(rhs, {"", "<value>"})
+
     def test_line_floor_has_no_name_lookup(self) -> None:
         view = (
             ROOT

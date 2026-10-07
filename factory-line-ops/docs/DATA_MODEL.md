@@ -1,6 +1,6 @@
 # Data model
 
-Every event is JSON. Every event includes the Splunk OT Intelligence required base fields so this app can sit beside OT Intelligence later without a second ingest path.
+Every event is JSON. Every event includes the Splunk OT Intelligence required base fields so this app can sit beside OT Intelligence later without a second ingest path. HEC routing, device lookup, and PII ingest rules: [TA_INGEST.md](TA_INGEST.md).
 
 ## Required on all events
 

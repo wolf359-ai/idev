@@ -16,8 +16,9 @@ This directory is the **intended root of a new GitHub repository**. It is staged
 1. [Project plan](docs/PROJECT_PLAN.md) — vision, architecture, phases, open decisions
 2. [New repository](docs/NEW_REPOSITORY.md) — how to publish this as its own GitHub repo
 3. [Data model](docs/DATA_MODEL.md) — events, indexes, hierarchy
-4. [Dashboards and alerts](docs/DASHBOARDS.md) — personas and drill-down
-5. [Security](docs/SECURITY.md) — PII, roles, secrets
+4. [TA ingest](docs/TA_INGEST.md) — HEC, routing, OT mapping, PII backstop
+5. [Dashboards and alerts](docs/DASHBOARDS.md) — personas and drill-down
+6. [Security](docs/SECURITY.md) — PII, roles, secrets
 
 ## What it monitors
 

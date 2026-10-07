@@ -11,11 +11,12 @@ Never store in source, lookups, or sample events:
 - Private keys or certificate key files
 - Real badge numbers or HR file extracts
 
-HEC tokens are created in Splunk (or ACS) and injected at the collector:
+HEC tokens are created in Splunk (or ACS) and injected at the collector. Employee numbers and badge PANs are HMAC-SHA-256’d on the collector with `FLO_PII_PEPPER` before send. Neither value belongs in git.
 
 ```bash
 export SPLUNK_HEC_URL="https://http-inputs.example.splunkcloud.com/services/collector/event"
 export SPLUNK_HEC_TOKEN="from-secret-store"
+export FLO_PII_PEPPER="from-secret-store"
 ```
 
 `.env` is gitignored. Use `.env.example` for variable *names* only.
@@ -32,7 +33,7 @@ Workspace rule **codeguard-1-digital-certificates**: do not embed PEM certificat
 
 ## Crypto
 
-- Badge or worker correlation hashes: **SHA-256** (or SHA-256 HMAC with a collector-side pepper). Never MD5 or SHA-1.
+- Badge or worker correlation hashes: **HMAC-SHA-256** with `FLO_PII_PEPPER` on the collector. Never MD5 or SHA-1. The TA does not embed a pepper and does not `sha256()` employee numbers (rainbow tables). It only **nulls** name/badge fields if a source sends them anyway. See [TA_INGEST.md](TA_INGEST.md).
 - No AES-CBC/ECB in custom commands. If the app ever encrypts fields, use AES-256-GCM via a supported library, with keys in KMS/HSM — not in conf files.
 
 Workspace rule **codeguard-1-crypto-algorithms** applies: banned algorithms are not used in TA transforms or scripts.

@@ -16,3 +16,12 @@ export = system
 
 [macros]
 export = system
+
+[transforms]
+export = system
+
+[fields]
+export = system
+
+[lookups]
+export = system

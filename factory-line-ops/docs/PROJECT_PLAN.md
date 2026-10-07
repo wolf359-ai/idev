@@ -108,11 +108,11 @@ Cloud: create these indexes in Splunk Web / Admin Config Service. The TA ships `
 
 Shipped in the TA (exported `system` so the UI app can use them):
 
-- Sourcetypes listed in [DATA_MODEL.md](DATA_MODEL.md)
+- Sourcetypes listed in [DATA_MODEL.md](DATA_MODEL.md); ingest contract in [TA_INGEST.md](TA_INGEST.md)
 - Event types: `factory_shift_clock`, `factory_line_down`, …
-- Tags for CIM where they fit (`Authentication` is **not** a good fit for badge-at-turnstile; use OT Security fields instead)
-- Macros: `factory_ops_indexes`, `factory_workforce_indexes`, `current_shift(site)`
-- Automatic lookups: `site` / `line_id` → display names, planned headcount, shift calendar
+- Tags for this app (`factory`, `workforce`, `production`, `oee`). Do not dump clocks into CIM Authentication / ES identity.
+- Macros: `factory_ops_indexes`, `factory_workforce_indexes`, `ot_factory_indexes`
+- Device inventory lookup; index-time drop of name/badge fields on workforce sourcetypes
 
 Shipped in the UI app:
 
