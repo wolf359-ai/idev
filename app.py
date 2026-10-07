@@ -38,8 +38,11 @@ NOTE_CATEGORIES = ("focus", "top")
 DEFAULT_NOTE_CATEGORY = "focus"
 MAX_ACTIVITY_LEN = 200
 MAX_ACTIVITY = 50
-# Coach-to-player alarms (reminders/alerts) and coach messages. Both are
-# broadcast from a coach; recipients (players) track per-item read state.
+# Coach-to-player alarms (practice reminders) and coach messages. Recipients
+# track per-item read state. A player can separately acknowledge an alarm
+# sent to them; that response is shown to the assigning coach on the same list.
+# The head-coach account has no staff id, so alarms it sends use this author id.
+COACH_AUTHOR_ID = "coach"
 MAX_ALARM_LEN = 500
 MAX_MESSAGE_LEN = 2000
 MAX_BROADCASTS = 500
@@ -132,6 +135,47 @@ def session_is_content(session: dict | None) -> bool:
 def session_can_view_all(session: dict | None) -> bool:
     return bool(session) and session.get("role") in ("coach", "staff")
 
+
+def session_sees_alarm_acknowledgments(session: dict | None, alarm: dict) -> bool:
+    """Who sees acknowledgment responses on the Notifications page.
+
+    The head coach and Full-access staff (``session_is_admin``) see every
+    acknowledgment on the team. A Manager sees acknowledgments only for alarms
+    they sent. Assistant and Read-only staff see the alarms but not responses.
+    Players never receive other players' acknowledgments; their own flag is
+    attached in ``alarms_for_player``.
+    """
+    if session_is_admin(session):
+        return True
+    if not session or session.get("role") != "staff" or not session_is_content(session):
+        return False
+    author_id = alarm.get("author_id") or COACH_AUTHOR_ID
+    return author_id == session.get("staff_id")
+
+
+def alarm_author(session: dict | None) -> dict:
+    """Identity stored on an alarm so an acknowledgment can be routed back."""
+    if session and session.get("role") == "staff":
+        staff_id = session.get("staff_id") or ""
+        if isinstance(staff_id, str) and staff_id.strip():
+            name = session.get("staff_name") or ""
+            if not isinstance(name, str) or not name.strip():
+                name = "Staff"
+            return {
+                "author_id": staff_id.strip(),
+                "author_name": name.strip(),
+                "author_role": "staff",
+            }
+    return {
+        "author_id": COACH_AUTHOR_ID,
+        "author_name": "Coach",
+        "author_role": "coach",
+    }
+
+
+class NotAllowed(Exception):
+    """The signed-in user may not perform this action on the resource."""
+
 POSITIONS = (
     "Pitcher",
     "Catcher",
@@ -196,6 +240,54 @@ DEFAULT_SKILLS = (
     "Pitching",
     "Catching",
 )
+
+# Pitching and Catching are position-specific. Every other name, including
+# coach-created skills, is shared so a custom skill is never hidden.
+def positions_for_skill_name(name: str) -> tuple[str, ...]:
+    folded = " ".join(name.split()).casefold()
+    if folded == "pitching":
+        return ("Pitcher",)
+    if folded == "catching":
+        return ("Catcher",)
+    return POSITIONS
+
+
+def default_position_skills(skills: list[dict]) -> dict[str, list[str]]:
+    """Assign existing skills to positions from their names."""
+    mapping: dict[str, list[str]] = {position: [] for position in POSITIONS}
+    for skill in skills:
+        skill_id = skill.get("id")
+        skill_name = skill.get("name")
+        if not isinstance(skill_id, str) or not isinstance(skill_name, str):
+            continue
+        for position in positions_for_skill_name(skill_name):
+            mapping[position].append(skill_id)
+    return mapping
+
+
+def sanitize_position_skills(raw: dict) -> dict[str, list[str]]:
+    """Keep coach assignments and fill any position that has no key yet."""
+    mapping: dict[str, list[str]] = {}
+    for position in POSITIONS:
+        values = raw.get(position, [])
+        ids: list[str] = []
+        seen: set[str] = set()
+        if isinstance(values, list):
+            for item in values:
+                if isinstance(item, str) and item not in seen:
+                    seen.add(item)
+                    ids.append(item)
+        mapping[position] = ids
+    return mapping
+
+
+def player_positions(player: dict) -> list[str]:
+    found: list[str] = []
+    for key in ("position", "secondary_position"):
+        value = player.get(key)
+        if isinstance(value, str) and value in POSITIONS and value not in found:
+            found.append(value)
+    return found
 
 SAFE_ID = re.compile(r"^[a-zA-Z0-9_-]{8,64}$")
 
@@ -447,6 +539,23 @@ def parse_distance(value: object) -> object:
     if feet < 0 or feet > 1000:
         raise ValueError("Distance must be between 0 and 1000 feet")
     return round(feet, 2)
+
+
+EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def parse_optional_email(value: object) -> str:
+    """Optional player email; blank means none. Used only for a mailto link."""
+    if value is None:
+        return ""
+    text = " ".join(str(value).split())
+    if not text:
+        return ""
+    if len(text) > 120:
+        raise ValueError("Email must be 120 characters or fewer")
+    if not EMAIL_RE.fullmatch(text):
+        raise ValueError("Enter a valid email address")
+    return text
 
 
 def parse_optional_contact(value: object) -> str:
@@ -835,6 +944,7 @@ def build_stats_view(raw: object) -> dict:
 PUBLIC_PLAYER_FIELDS = (
     "id",
     "name",
+    "email",
     "username",
     "position",
     "secondary_position",
@@ -1066,8 +1176,12 @@ def required_permission(method: str, path: str):
             # A player may log activity (e.g. opening a drill link) on their own
             # profile; a coach or content staff may log it for anyone.
             return (PERM_PLAYER_OWN, act_match.group(1))
-        # Any signed-in player may mark their own alarms/messages read.
+        # Any signed-in player may mark their own alarms/messages read, or
+        # acknowledge an alarm that was sent to them. Coaches are rejected
+        # inside the handler: this route is not a way to ack for a player.
         if path in ("/api/alarms/read", "/api/messages/read"):
+            return PERM_AUTHED
+        if re.fullmatch(rf"/api/alarms/({ID_RE})/acknowledge", path):
             return PERM_AUTHED
         if re.fullmatch(rf"/api/(?:alarms|messages)/({ID_RE})/read", path):
             return PERM_AUTHED
@@ -1076,11 +1190,15 @@ def required_permission(method: str, path: str):
             return PERM_CONTENT
         if re.fullmatch(rf"/api/players/({ID_RE})/(?:ratings|notes|drills)", path):
             return PERM_CONTENT
+        if re.fullmatch(r"/api/positions/[^/]+/skills", path):
+            return PERM_CONTENT
         # Everything else (add/import players, staff, access codes) is admin.
         return PERM_ADMIN
     if method == "DELETE":
         # Removing notes, drills, alarms, and messages is a content action.
         if re.fullmatch(r"/api/notes/" + ID_RE, path):
+            return PERM_CONTENT
+        if re.fullmatch(rf"/api/positions/[^/]+/skills/{ID_RE}", path):
             return PERM_CONTENT
         if re.fullmatch(rf"/api/players/{ID_RE}/drills/{ID_RE}", path):
             return PERM_CONTENT
@@ -1112,6 +1230,7 @@ class Store:
             "messages": [],
             "team": {},
             "auth": {},
+            "position_skills": {},
         }
 
     def _normalize(self, raw: object) -> dict | None:
@@ -1138,6 +1257,13 @@ class Store:
         team = raw.get("team")
         if isinstance(team, dict):
             data["team"] = team
+        raw_map = raw.get("position_skills")
+        # An empty or missing map is derived once from skill names. A saved map
+        # is kept as the coach left it, with any new position filled in empty.
+        if isinstance(raw_map, dict) and raw_map:
+            data["position_skills"] = sanitize_position_skills(raw_map)
+        else:
+            data["position_skills"] = default_position_skills(data["skills"])
         return data
 
     def _read_file(self, path: Path) -> dict | None:
@@ -1333,15 +1459,45 @@ class Store:
                     "created_at": now,
                 },
             ]
+            self.data["position_skills"] = default_position_skills(skills)
             self._save()
 
     def list_skills(self) -> list[dict]:
         with self.lock:
             return list(self.data["skills"])
 
+    def _ensure_position_skills(self) -> None:
+        """Derive a missing map. Leave a saved map in place."""
+        raw = self.data.get("position_skills")
+        if not isinstance(raw, dict) or not raw:
+            self.data["position_skills"] = default_position_skills(
+                self.data.get("skills") or []
+            )
+            return
+        sanitized = sanitize_position_skills(raw)
+        if sanitized != raw:
+            self.data["position_skills"] = sanitized
+
+    def _skills_for_position(self, position: str) -> list[dict]:
+        wanted = {
+            skill_id
+            for skill_id in self.data["position_skills"].get(position, [])
+            if isinstance(skill_id, str)
+        }
+        return [skill for skill in self.data["skills"] if skill.get("id") in wanted]
+
+    def _skill_ids_for_player(self, player: dict) -> set[str]:
+        allowed: set[str] = set()
+        for position in player_positions(player):
+            for skill_id in self.data["position_skills"].get(position, []):
+                if isinstance(skill_id, str):
+                    allowed.add(skill_id)
+        return allowed
+
     def add_skill(self, name: object) -> dict:
         skill_name = clean_text(name, "Skill name", MAX_SKILL_LEN)
         with self.lock:
+            self._ensure_position_skills()
             existing = {
                 skill["name"].casefold()
                 for skill in self.data["skills"]
@@ -1351,8 +1507,59 @@ class Store:
                 raise ValueError("That skill already exists")
             skill = {"id": new_id("skill"), "name": skill_name}
             self.data["skills"].append(skill)
+            # The roster-wide add keeps current callers working: the new skill
+            # shows up for every position.
+            for position in POSITIONS:
+                bucket = self.data["position_skills"].setdefault(position, [])
+                if skill["id"] not in bucket:
+                    bucket.append(skill["id"])
             self._save()
             return dict(skill)
+
+    def attach_position_skill(self, position: object, name: object) -> tuple[dict, bool]:
+        """Find or create a skill and attach it to one position.
+
+        Returns the skill and whether a new skill record was created.
+        Attaching a skill that is already on the position is a no-op.
+        """
+        parsed = parse_position(position)
+        skill_name = clean_text(name, "Skill name", MAX_SKILL_LEN)
+        with self.lock:
+            self._ensure_position_skills()
+            skill = None
+            for item in self.data["skills"]:
+                item_name = item.get("name")
+                if isinstance(item_name, str) and item_name.casefold() == skill_name.casefold():
+                    skill = item
+                    break
+            created = skill is None
+            if skill is None:
+                skill = {"id": new_id("skill"), "name": skill_name}
+                self.data["skills"].append(skill)
+            bucket = self.data["position_skills"].setdefault(parsed, [])
+            changed = created
+            if skill["id"] not in bucket:
+                bucket.append(skill["id"])
+                changed = True
+            if changed:
+                self._save()
+            return dict(skill), created
+
+    def detach_position_skill(self, position: object, skill_id: object) -> None:
+        """Drop a skill from one position. The skill and its ratings stay."""
+        parsed = parse_position(position)
+        if not isinstance(skill_id, str) or not SAFE_ID.match(skill_id):
+            raise ValueError("Choose a skill")
+        with self.lock:
+            self._ensure_position_skills()
+            if not any(skill.get("id") == skill_id for skill in self.data["skills"]):
+                raise KeyError("Skill not found")
+            bucket = self.data["position_skills"].get(parsed, [])
+            if skill_id in bucket:
+                self.data["position_skills"][parsed] = [
+                    item for item in bucket if item != skill_id
+                ]
+                self._save()
 
     def list_players(self) -> list[dict]:
         with self.lock:
@@ -1368,6 +1575,7 @@ class Store:
 
     def get_player(self, player_id: str) -> dict:
         with self.lock:
+            self._ensure_position_skills()
             record = self._player_unlocked(player_id)
             raw_stats = record.get("stats")
             player = public_player(record)
@@ -1398,7 +1606,26 @@ class Store:
                 for item in record.get("records", [])
                 if isinstance(item, dict) and item.get("delta") is not None
             ]
-            skills = list(self.data["skills"])
+            positions = player_positions(record)
+            skill_groups = []
+            seen: set[str] = set()
+            for position in positions:
+                group_skills = self._skills_for_position(position)
+                skill_groups.append(
+                    {
+                        "position": position,
+                        "skills": [
+                            {"id": skill.get("id"), "name": skill.get("name")}
+                            for skill in group_skills
+                        ],
+                    }
+                )
+                for skill in group_skills:
+                    skill_id = skill.get("id")
+                    if isinstance(skill_id, str):
+                        seen.add(skill_id)
+            # Progress and the radar use the union of primary and secondary.
+            skills = [skill for skill in self.data["skills"] if skill.get("id") in seen]
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
@@ -1408,6 +1635,7 @@ class Store:
         player["drills"] = drills
         player["records"] = records[:MAX_RECORDS]
         player["progress"] = build_progress(skills, ratings)
+        player["skill_groups"] = skill_groups
         player["stats"] = build_stats_view(raw_stats)
         return player
 
@@ -1415,6 +1643,7 @@ class Store:
         player = {
             "id": new_id("player"),
             "name": clean_text(payload.get("name"), "Player name", MAX_NAME_LEN),
+            "email": parse_optional_email(payload.get("email")),
             "position": parse_position(payload.get("position")),
             "secondary_position": parse_optional_position(payload.get("secondary_position")),
             "team_year": parse_team_year(payload.get("team_year")),
@@ -1508,6 +1737,8 @@ class Store:
             player = self._player_unlocked(player_id)
             if "name" in payload:
                 player["name"] = clean_text(payload.get("name"), "Player name", MAX_NAME_LEN)
+            if "email" in payload:
+                player["email"] = parse_optional_email(payload.get("email"))
             if "position" in payload:
                 player["position"] = parse_position(payload.get("position"))
             if "secondary_position" in payload:
@@ -1603,6 +1834,12 @@ class Store:
             for alarm in self.data["alarms"]:
                 if isinstance(alarm.get("reads"), list):
                     alarm["reads"] = [r for r in alarm["reads"] if r != player_id]
+                if isinstance(alarm.get("acknowledgments"), list):
+                    alarm["acknowledgments"] = [
+                        ack
+                        for ack in alarm["acknowledgments"]
+                        if not (isinstance(ack, dict) and ack.get("player_id") == player_id)
+                    ]
             self.data["messages"] = [
                 m
                 for m in self.data["messages"]
@@ -1619,9 +1856,12 @@ class Store:
         if not isinstance(skill_id, str) or not SAFE_ID.match(skill_id):
             raise ValueError("Choose a skill")
         with self.lock:
-            self._player_unlocked(player_id)
+            player = self._player_unlocked(player_id)
             if not any(skill.get("id") == skill_id for skill in self.data["skills"]):
                 raise ValueError("Choose a skill")
+            self._ensure_position_skills()
+            if skill_id not in self._skill_ids_for_player(player):
+                raise ValueError("That skill is not used for this position")
             rating = {
                 "id": new_id("rating"),
                 "player_id": player_id,
@@ -1872,9 +2112,24 @@ class Store:
                 reverse=True,
             )
 
-    def add_alarm(self, payload: dict) -> dict:
+    def add_alarm(self, payload: dict, author: dict | None = None) -> dict:
         text = clean_text(payload.get("text"), "Alarm", MAX_ALARM_LEN)
         target = payload.get("target")
+        author_fields = alarm_author(None)
+        if isinstance(author, dict) and isinstance(author.get("author_id"), str):
+            author_id = author["author_id"].strip()
+            if author_id:
+                author_name = author.get("author_name")
+                author_role = author.get("author_role")
+                author_fields = {
+                    "author_id": author_id,
+                    "author_name": author_name.strip()
+                    if isinstance(author_name, str) and author_name.strip()
+                    else ("Coach" if author_role == "coach" else "Staff"),
+                    "author_role": author_role
+                    if isinstance(author_role, str) and author_role.strip()
+                    else "staff",
+                }
         with self.lock:
             if target in (None, "", "all"):
                 target = "all"
@@ -1893,6 +2148,10 @@ class Store:
                 "target_name": target_name,
                 "created_at": utc_now(),
                 "reads": [],
+                "acknowledgments": [],
+                "author_id": author_fields["author_id"],
+                "author_name": author_fields["author_name"],
+                "author_role": author_fields["author_role"],
             }
             self.data["alarms"].append(alarm)
             if len(self.data["alarms"]) > MAX_BROADCASTS:
@@ -1914,7 +2173,11 @@ class Store:
         return alarm.get("target") == "all" or alarm.get("target") == player_id
 
     def alarms_for_player(self, player_id: str) -> list[dict]:
-        """Alarms visible to a player, each annotated with a read flag."""
+        """Alarms visible to a player, with their own read and ack flags.
+
+        Other players' acknowledgments are omitted. A player only learns
+        whether they themselves have acknowledged each alarm.
+        """
         with self.lock:
             result = []
             for alarm in self.data["alarms"]:
@@ -1922,10 +2185,125 @@ class Store:
                     continue
                 item = dict(alarm)
                 item["read"] = player_id in (alarm.get("reads") or [])
+                mine = self._acknowledgment_for(alarm, player_id)
+                item["acknowledged"] = mine is not None
+                item["acknowledged_at"] = mine.get("acknowledged_at") if mine else None
                 item.pop("reads", None)
+                item.pop("acknowledgments", None)
                 result.append(item)
             result.sort(key=lambda a: a.get("created_at", ""), reverse=True)
             return result
+
+    @staticmethod
+    def _acknowledgment_for(alarm: dict, player_id: str) -> dict | None:
+        for ack in alarm.get("acknowledgments") or []:
+            if isinstance(ack, dict) and ack.get("player_id") == player_id:
+                return ack
+        return None
+
+    @staticmethod
+    def _public_acknowledgments(alarm: dict) -> list[dict]:
+        public = []
+        for ack in alarm.get("acknowledgments") or []:
+            if not isinstance(ack, dict):
+                continue
+            public.append(
+                {
+                    "player_id": ack.get("player_id", ""),
+                    "player_name": ack.get("player_name", ""),
+                    "acknowledged_at": ack.get("acknowledged_at", ""),
+                }
+            )
+        return public
+
+    def alarms_for_staff(self, session: dict | None) -> list[dict]:
+        """Alarms for a coach or staff member, newest first.
+
+        Acknowledgment responses are included only when this viewer is allowed
+        to see them (the author, or an admin / head coach).
+        """
+        result = []
+        for alarm in self.list_alarms():
+            item = dict(alarm)
+            if not item.get("author_id"):
+                item["author_id"] = COACH_AUTHOR_ID
+                item["author_name"] = item.get("author_name") or "Coach"
+                item["author_role"] = item.get("author_role") or "coach"
+            if session_sees_alarm_acknowledgments(session, item):
+                item["acknowledgments"] = self._public_acknowledgments(alarm)
+            else:
+                item["acknowledgments"] = []
+            result.append(item)
+        return result
+
+    def alarms_for_session(self, session: dict | None) -> list[dict]:
+        if session and session.get("role") == "player":
+            return self.alarms_for_player(session.get("player_id") or "")
+        return self.alarms_for_staff(session)
+
+    def acknowledge_alarm(self, alarm_id: str, player_id: str) -> dict:
+        """Record that this player acknowledged this alarm. Idempotent.
+
+        Only a player the alarm was sent to may acknowledge it. A second
+        acknowledgment by the same player does not add another response.
+        Alarms created before an author was stored are attributed to the
+        head coach so the response still has someone to go back to.
+        """
+        if not isinstance(player_id, str) or not player_id:
+            raise NotAllowed("Not allowed")
+        with self.lock:
+            alarm = next(
+                (a for a in self.data["alarms"] if a.get("id") == alarm_id), None
+            )
+            if not alarm:
+                raise KeyError("Alarm not found")
+            if not self._alarm_targets_player(alarm, player_id):
+                raise NotAllowed("Not allowed")
+            if not alarm.get("author_id"):
+                alarm["author_id"] = COACH_AUTHOR_ID
+                alarm["author_name"] = alarm.get("author_name") or "Coach"
+                alarm["author_role"] = alarm.get("author_role") or "coach"
+            player = next(
+                (p for p in self.data["players"] if p.get("id") == player_id), None
+            )
+            player_name = player.get("name", "") if player else ""
+            if not isinstance(player_name, str) or not player_name.strip():
+                player_name = "Player"
+            else:
+                player_name = player_name.strip()
+            acks = alarm.get("acknowledgments")
+            if not isinstance(acks, list):
+                acks = []
+                alarm["acknowledgments"] = acks
+            existing = self._acknowledgment_for(alarm, player_id)
+            if existing:
+                return {
+                    "ok": True,
+                    "acknowledged": True,
+                    "created": False,
+                    "alarm_id": alarm_id,
+                    "player_id": player_id,
+                    "player_name": existing.get("player_name") or player_name,
+                    "acknowledged_at": existing.get("acknowledged_at", ""),
+                }
+            stamp = utc_now()
+            acks.append(
+                {
+                    "player_id": player_id,
+                    "player_name": player_name,
+                    "acknowledged_at": stamp,
+                }
+            )
+            self._save()
+            return {
+                "ok": True,
+                "acknowledged": True,
+                "created": True,
+                "alarm_id": alarm_id,
+                "player_id": player_id,
+                "player_name": player_name,
+                "acknowledged_at": stamp,
+            }
 
     def mark_alarm_read(self, alarm_id: str, player_id: str) -> None:
         with self.lock:
@@ -2556,11 +2934,7 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 200, {"team": self.store.get_team()})
                 return
             if path == "/api/alarms":
-                if session and session.get("role") == "player":
-                    pid = session.get("player_id", "")
-                    send_json(self, 200, {"alarms": self.store.alarms_for_player(pid)})
-                else:
-                    send_json(self, 200, {"alarms": self.store.list_alarms()})
+                send_json(self, 200, {"alarms": self.store.alarms_for_session(session)})
                 return
             if path == "/api/messages":
                 if session and session.get("role") == "player":
@@ -2613,6 +2987,13 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))
                 return
+            position_skill = re.fullmatch(r"/api/positions/([^/]+)/skills", path)
+            if position_skill:
+                skill, created = self.store.attach_position_skill(
+                    unquote(position_skill.group(1)), payload.get("name")
+                )
+                send_json(self, 201 if created else 200, skill)
+                return
             rating_match = re.fullmatch(
                 r"/api/players/([a-zA-Z0-9_-]{8,64})/ratings", path
             )
@@ -2638,7 +3019,7 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 201, self.store.add_drill(drill_match.group(1), payload))
                 return
             if path == "/api/alarms":
-                send_json(self, 201, self.store.add_alarm(payload))
+                send_json(self, 201, self.store.add_alarm(payload, alarm_author(session)))
                 return
             if path == "/api/messages":
                 send_json(self, 201, self.store.add_message(payload))
@@ -2673,7 +3054,30 @@ class IdevHandler(BaseHTTPRequestHandler):
                     self.store.mark_message_read(message_read.group(1), pid)
                 send_json(self, 200, {"ok": True})
                 return
+            alarm_ack = re.fullmatch(
+                r"/api/alarms/([a-zA-Z0-9_-]{8,64})/acknowledge", path
+            )
+            if alarm_ack:
+                # Only the player it was sent to may acknowledge. A coach or
+                # staff member cannot acknowledge on a player's behalf.
+                if (
+                    not session
+                    or session.get("role") != "player"
+                    or not session.get("player_id")
+                ):
+                    send_json(self, 403, {"error": "Not allowed"})
+                    return
+                send_json(
+                    self,
+                    200,
+                    self.store.acknowledge_alarm(
+                        alarm_ack.group(1), session["player_id"]
+                    ),
+                )
+                return
             send_json(self, 404, {"error": "Not found"})
+        except NotAllowed as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:
@@ -2782,6 +3186,15 @@ class IdevHandler(BaseHTTPRequestHandler):
             message_match = re.fullmatch(r"/api/messages/([a-zA-Z0-9_-]{8,64})", path)
             if message_match:
                 self.store.delete_message(message_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            position_skill = re.fullmatch(
+                r"/api/positions/([^/]+)/skills/([a-zA-Z0-9_-]{8,64})", path
+            )
+            if position_skill:
+                self.store.detach_position_skill(
+                    unquote(position_skill.group(1)), position_skill.group(2)
+                )
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
