@@ -1,0 +1,8 @@
+device_id,device_type,site,system,device_name,building,floor,zone,asset_id,criticality,vendor
+tc-aus-gate-1,timeclock,PLT-AUS-01,Workforce,Austin gate 1 timeclock,Bldg-2,Floor-1,Zone-A,ASSET-CLK-AUS-1,medium,generic
+wfm-acme,kiosk,PLT-AUS-01,Workforce,WFM assignment service,Bldg-2,Floor-1,Zone-A,ASSET-WFM,low,generic
+plc-line-3,plc,PLT-AUS-01,Production,Body Line 3 PLC,Bldg-2,Floor-1,body_shop,ASSET-LINE3,high,generic
+mes-line-3,mes,PLT-AUS-01,Production,Body Line 3 MES,Bldg-2,Floor-1,body_shop,ASSET-LINE3,high,generic
+door-body-north,access_reader,PLT-AUS-01,Security,Body shop north door,Bldg-2,Floor-1,body_shop,ASSET-DOOR-BN,medium,generic
+flo-rules,kiosk,PLT-AUS-01,Workforce,FLO rules engine,Bldg-2,Floor-1,Zone-A,ASSET-FLO,low,generic
+mes-line-1,mes,PLT-OH-02,Production,Press Line 1 MES,Hall-1,Floor-1,press,ASSET-LINE1,high,generic

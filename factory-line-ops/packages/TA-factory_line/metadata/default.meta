@@ -1,0 +1,27 @@
+[]
+access = read : [ * ], write : [ admin ]
+export = system
+
+[indexes]
+export = system
+
+[props]
+export = system
+
+[eventtypes]
+export = system
+
+[tags]
+export = system
+
+[macros]
+export = system
+
+[transforms]
+export = system
+
+[fields]
+export = system
+
+[lookups]
+export = system

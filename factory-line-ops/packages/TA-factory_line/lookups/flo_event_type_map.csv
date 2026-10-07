@@ -1,0 +1,8 @@
+event_family,sourcetype,index,ot_system,ot_dataset
+shift_clock,factory:shift:clock,factory_workforce,Workforce,Security
+shift_assignment,factory:shift:assignment,factory_workforce,Workforce,Production
+presence,factory:personnel:presence,factory_workforce,Security,Location
+exception,factory:personnel:exception,factory_workforce,Workforce,Events
+line_state,factory:line:state,factory_ops,Production,States
+production,factory:line:production,factory_ops,Production,Production
+downtime,factory:line:downtime,factory_ops,Production,OEE

@@ -1,0 +1,111 @@
+{
+  "title": "Plant operations",
+  "description": "All lines at one factory for the selected shift. Uses the current-shift snapshot lookup.",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "-12h",
+            "latest": "now"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_site": {
+      "type": "input.dropdown",
+      "title": "Factory",
+      "options": {
+        "token": "tok_site",
+        "selectFirstSearchResult": true
+      },
+      "dataSources": {
+        "primary": "ds_sites"
+      }
+    },
+    "input_shift": {
+      "type": "input.text",
+      "title": "Shift id",
+      "options": {
+        "token": "tok_shift",
+        "defaultValue": "*"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_sites": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_kv_sites | table site_id, site_name | rename site_id as value, site_name as label"
+      }
+    },
+    "ds_lines": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_current_shift_snapshot where site=\"$tok_site$\"\n| search shift_id=\"$tok_shift$\"\n| table line_id, state_value, headcount_actual, headcount_plan, fill_pct, good_count_shift, downtime_minutes_shift, updated\n| sort line_id"
+      }
+    },
+    "ds_staffing": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_current_shift_snapshot where site=\"$tok_site$\"\n| search shift_id=\"$tok_shift$\"\n| table line_id, headcount_actual, headcount_plan"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_lines": {
+      "type": "splunk.table",
+      "title": "Lines this shift — click a line to open the floor board",
+      "dataSources": {
+        "primary": "ds_lines"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "tok_line",
+                "key": "row.line_id.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_staffing": {
+      "type": "splunk.bar",
+      "title": "Staffing actual vs plan",
+      "dataSources": {
+        "primary": "ds_staffing"
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "globalInputs": ["input_site", "input_shift"],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "structure": [
+          { "item": "viz_lines", "position": { "x": 0, "y": 0, "w": 12, "h": 5 } },
+          { "item": "viz_staffing", "position": { "x": 0, "y": 5, "w": 12, "h": 4 } }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Plant"
+        }
+      ]
+    },
+    "options": {
+      "submitButton": false,
+      "showTitleAndDescription": true
+    }
+  }
+}

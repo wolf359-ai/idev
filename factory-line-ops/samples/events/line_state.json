@@ -1,0 +1,25 @@
+{
+  "time": 1759850460,
+  "host": "plc-line-3",
+  "source": "mes",
+  "sourcetype": "factory:line:state",
+  "index": "factory_ops",
+  "event": {
+    "event_family": "line_state",
+    "enterprise": "acme",
+    "site": "PLT-AUS-01",
+    "site_name": "Austin Assembly",
+    "area": "body_shop",
+    "line_id": "line-3",
+    "shift_id": "PLT-AUS-01:2026-10-07:B",
+    "shift_code": "B",
+    "state_name": "run_status",
+    "state_value": "running",
+    "previous_state": "changeover",
+    "state_reason": "automatic",
+    "vertical": "manufacturing",
+    "system": "Production",
+    "device_id": "plc-line-3",
+    "device_type": "plc"
+  }
+}
