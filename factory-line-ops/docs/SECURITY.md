@@ -39,19 +39,26 @@ Workspace rule **codeguard-1-crypto-algorithms** applies: banned algorithms are 
 
 ## PII and access
 
-| Data | Index | Visible to |
+| Data | Where | Visible to |
 | --- | --- | --- |
-| `worker_id`, station, role, counts | ops + workforce | operations roles |
-| `display_name`, badge hash | `factory_workforce` only | `flo_workforce`, `flo_admin` |
-| SSN, DOB, full badge PAN | **do not ingest** | — |
+| `worker_id`, station, role, counts | `factory_ops`, snapshot, `flo_roster`, `flo_roster_presence` | operations roles |
+| `first_name` | KV `flo_worker_display` only (`replicate = false`) | `flo_workforce`, `flo_admin` |
+| `display_name` on events | do not send; use the KV collection | — |
+| SSN, DOB, full badge PAN, phone | **do not ingest** | — |
 
-Use Splunk **field filters** (Enterprise 9.x+ / Cloud) so `flo_plant_ops` searching `factory_workforce` still cannot see `display_name`. Dashboard hiding is not sufficient.
+Use Splunk **field filters** (Enterprise 9.x+ / Cloud) so `flo_plant_ops` searching `factory_workforce` still cannot see name fields. Dashboard hiding is not sufficient. Line floor and plant dashboards must not `| lookup flo_worker_display`.
 
-Roles ship as documentation in phase 1; `authorize.conf` in the app is easy to get wrong on Cloud. Prefer the customer’s SAML groups mapped to roles created by the admin, with this app documenting the required capabilities (`search`, index access, KV Store).
+Roles ship as documentation in phase 1; `authorize.conf` in the app is easy to get wrong on Cloud. Prefer the customer’s SAML groups mapped to roles created by the admin (`flo_line_supervisor`, `flo_plant_ops`, `flo_business`, `flo_workforce`, `flo_wall`, `flo_admin`), with `srchFilter` on site/line for supervisors and plant ops.
+
+Ops no-show alerts are **counts by line**. Named no-show lists run only as a workforce search against `factory_workforce` + `flo_worker_display`.
 
 ## KV Store
 
-Roster collections may contain first name + `worker_id`. Restrict write to `flo_admin`. Export = none for roster collections so other apps cannot `inputlookup` names.
+- `flo_roster` — planned assignment; `worker_id` only (no names).
+- `flo_roster_presence` — current clock-in; upserted every minute; no names.
+- `flo_worker_display` — `worker_id` + first name; read ACL workforce/admin; `export = none`; `replicate = false`.
+
+Write on all collections: `flo_admin` (and a MES/HRIS service account on the instance). Export = none so other apps cannot `inputlookup` names.
 
 ## AppInspect and Cloud
 

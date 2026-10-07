@@ -1,0 +1,58 @@
+{
+  "title": "Home",
+  "description": "Factory Line Operations. Open the board that matches your role. Line and plant views show worker_id only; names are on Workforce.",
+  "dataSources": {
+    "ds_context": {
+      "type": "ds.search",
+      "options": {
+        "query": "| rest /services/authentication/current-context splunk_server=local\n| fields username, roles\n| eval landing=case(\n    match(roles,\"flo_workforce\"), \"Workforce\",\n    match(roles,\"flo_business\"), \"Enterprise operations\",\n    match(roles,\"flo_plant_ops\"), \"Plant operations\",\n    match(roles,\"flo_line_supervisor\"), \"Line floor\",\n    match(roles,\"flo_admin\"), \"Enterprise operations\",\n    1=1, \"Enterprise operations\")\n| table username, roles, landing"
+      }
+    },
+    "ds_snapshot": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_current_shift_snapshot\n| stats dc(site) as factories, sum(eval(state_value=\"down\")) as lines_down, avg(fill_pct) as fill_pct"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_who": {
+      "type": "splunk.table",
+      "title": "Signed in",
+      "dataSources": {
+        "primary": "ds_context"
+      }
+    },
+    "viz_snap": {
+      "type": "splunk.table",
+      "title": "Current shift snapshot (all sites you can search)",
+      "dataSources": {
+        "primary": "ds_snapshot"
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "structure": [
+          { "item": "viz_who", "position": { "x": 0, "y": 0, "w": 12, "h": 3 } },
+          { "item": "viz_snap", "position": { "x": 0, "y": 3, "w": 12, "h": 3 } }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "Home"
+        }
+      ]
+    },
+    "options": {
+      "submitButton": false,
+      "showTitleAndDescription": true
+    }
+  }
+}

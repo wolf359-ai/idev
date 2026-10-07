@@ -22,7 +22,7 @@ Every event is JSON. Every event includes the Splunk OT Intelligence required ba
 | `factory:shift:clock` | `factory_workforce` | Events / Security | Clock in, clock out, break |
 | `factory:shift:assignment` | `factory_workforce` | States | Planned assignment of a worker to line/station/shift |
 | `factory:personnel:presence` | `factory_workforce` | Security + Location | Badge tap / zone presence |
-| `factory:personnel:exception` | `factory_workforce` | Events | No-show, late, overtime, relief |
+| `factory:personnel:exception` | `factory_workforce` | Events | No-show, late, overtime, relief, handoff_incomplete |
 | `factory:line:state` | `factory_ops` | States | running / down / starved / blocked / changeover |
 | `factory:line:production` | `factory_ops` | Production | counts, cycle time, order |
 | `factory:line:downtime` | `factory_ops` | OEE | downtime open/close with reason |
@@ -51,7 +51,7 @@ Fictional examples only. See `samples/events/`.
 }
 ```
 
-`display_name` is optional and **only** on this index. Line boards should prefer first name from KV Store roster, not from every event.
+Do not send `display_name` or `first_name` on events. Line boards show `worker_id`. First names belong in KV `flo_worker_display`, visible only to workforce roles.
 
 ### Assignment (planned)
 
@@ -159,7 +159,7 @@ A 1-minute saved search writes lookup `flo_current_shift_snapshot`:
 | `downtime_minutes_shift` | Sum |
 | `updated` | Search time |
 
-Line and plant dashboards read this lookup first (`inputlookup`) and only fall back to raw searches for drill-down. That is what keeps "real time" from scanning every factory's hot buckets on every panel.
+Line and plant dashboards read this lookup first (`inputlookup`) and only fall back to raw searches for drill-down. The **station board** joins `flo_roster` to `flo_roster_presence` (1-minute upsert from clock events) instead of searching 12 hours of raw clock data on every refresh.
 
 ## Summary index (enterprise)
 

@@ -24,3 +24,11 @@ export = none
 [lookups]
 access = read : [ * ], write : [ admin, flo_admin ]
 export = none
+
+[collections/flo_worker_display]
+access = read : [ flo_workforce, flo_admin, admin ], write : [ flo_admin, admin ]
+export = none
+
+[transforms/flo_kv_worker_display]
+access = read : [ flo_workforce, flo_admin, admin ], write : [ flo_admin, admin ]
+export = none

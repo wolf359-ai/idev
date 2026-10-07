@@ -1,6 +1,6 @@
 {
   "title": "Line floor",
-  "description": "Real-time board for one line: run state, who is clocked in, production this shift. Refresh ~30s.",
+  "description": "Real-time board for one line: run state, station presence by worker_id, production this shift. Refresh ~30s. No names.",
   "defaults": {
     "dataSources": {
       "ds.search": {
@@ -59,7 +59,7 @@
     "ds_clocked": {
       "type": "ds.search",
       "options": {
-        "query": "`factory_workforce_indexes` sourcetype=factory:shift:clock site=\"$tok_site$\" line_id=\"$tok_line$\" shift_id=\"$tok_shift$\"\n| stats latest(action) as action, latest(_time) as last_clock by worker_id, station_id, role\n| where action=\"clock_in\"\n| lookup flo_kv_roster worker_id OUTPUT first_name\n| table station_id, role, first_name, worker_id, last_clock\n| sort station_id"
+        "query": "| inputlookup flo_kv_roster where site=\"$tok_site$\" line_id=\"$tok_line$\"\n| search shift_id=\"$tok_shift$\"\n| lookup flo_kv_roster_presence worker_id, shift_id OUTPUT clock_in, station_id as actual_station\n| eval presence=if(isnotnull(clock_in),\"clocked\",\"absent\")\n| table station_id, role, worker_id, presence, clock_in\n| sort station_id"
       }
     },
     "ds_prod": {
@@ -84,7 +84,7 @@
     },
     "viz_clocked": {
       "type": "splunk.table",
-      "title": "Clocked in (station board)",
+      "title": "Station board (worker_id only)",
       "dataSources": {
         "primary": "ds_clocked"
       }

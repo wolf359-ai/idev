@@ -92,14 +92,14 @@ Timeclock / MES / Access
              (current shift)    (enterprise)       + alerts
 ```
 
-Line dashboards search the hot indexes with a short window (`earliest=-15m`). Enterprise dashboards read a **summary index** populated every 5 minutes so multi-factory searches stay cheap.
+Line boards read **KV roster + presence** (and a 1-minute snapshot lookup), not a 12-hour raw clock search. Sparklines may use `factory_ops` with `earliest=-15m`. Enterprise dashboards read a **summary index** populated every 5 minutes so multi-factory searches stay cheap.
 
 ## 7. Indexes
 
 | Index | Contents | Retention (start) | Who may search |
 | --- | --- | --- | --- |
-| `factory_ops` | Line state, production, downtime, OEE | 13 months | all FLO roles |
-| `factory_workforce` | Clock, assignment, presence, exceptions | 13 months | `flo_workforce`, `flo_admin`, `flo_plant_ops` (names field-filtered) |
+| `factory_ops` | Line state, production, downtime, OEE | 13 months | ops roles (`flo_business` uses summary only) |
+| `factory_workforce` | Clock, assignment, presence, exceptions | 13 months | `flo_workforce`, `flo_admin` (optional field-filtered plant) |
 | `factory_summary` | 5-minute rollups by site/line/shift | 25 months | all FLO roles |
 
 Cloud: create these indexes in Splunk Web / Admin Config Service. The TA ships `indexes.conf` for single-instance Enterprise labs only; do not assume it is applied in Cloud.
@@ -116,19 +116,20 @@ Shipped in the TA (exported `system` so the UI app can use them):
 
 Shipped in the UI app:
 
-- KV Store collections: `flo_sites`, `flo_lines`, `flo_shift_calendar`, `flo_roster`, `flo_stations`
-- Dashboard Studio views
-- Scheduled searches that write the current-shift snapshot lookup and the summary index
+- KV Store: `flo_sites`, `flo_lines`, `flo_stations`, `flo_shift_calendar`, `flo_roster` (ids only), `flo_roster_presence`, `flo_worker_display` (names, restricted)
+- Dashboard Studio views, including a role home router
+- Scheduled searches: current-shift snapshot, presence upsert, summary index
 - Alerts (see [DASHBOARDS.md](DASHBOARDS.md))
 
 ## 9. Personas and authorization
 
 | Role | Splunk role | Sees |
 | --- | --- | --- |
-| Line supervisor | `flo_line_supervisor` | One site + assigned lines; `worker_id` and first name only |
-| Plant operations | `flo_plant_ops` | One or more sites; staffing counts; names redacted via field filter unless also in workforce |
-| Business / COO | `flo_business` | All sites; KPIs and counts, no personnel names |
-| Workforce / HR | `flo_workforce` | Names, attendance, overtime; `factory_workforce` index |
+| Line supervisor | `flo_line_supervisor` | One site + assigned lines; `worker_id` only (`srchFilter`) |
+| Plant operations | `flo_plant_ops` | One or more sites; staffing counts; no names |
+| Business / COO | `flo_business` | All sites via `factory_summary`; KPIs and counts; no names |
+| Shop-floor TV | `flo_wall` | One site; line cards; no search bar; no names |
+| Workforce / HR | `flo_workforce` | First names via `flo_worker_display`; attendance; overtime |
 | Admin | `flo_admin` | All indexes, KV Store writes, HEC config |
 
 Deny by default. Index permissions are the hard boundary; dashboard tokens are not.
@@ -137,17 +138,18 @@ Personnel identifiers:
 
 - Index `worker_id` (UUID). Never index SSN, full badge PAN, or password.
 - If a badge value must be stored, ingest **SHA-256** of `badge_id + site pepper`. The pepper lives in the collector secret store, not in the app.
-- `display_name` only in `factory_workforce`, and only roles with that index can search it.
+- First names live only in KV `flo_worker_display`, not on line/plant dashboards and not on ops alert payloads.
 
 ## 10. Dashboard map (v1)
 
 Drill-down is always **enterprise → site → line → worker/event**.
 
+0. **Home** — role router to the right board.
 1. **Enterprise operations** — factories as tiles: current-shift OEE (or output vs plan), staffing fill %, lines down, open exceptions. Click a factory.
 2. **Plant operations** — all lines in that site: run state, headcount vs plan, current shift output, downtime minutes.
-3. **Line floor (real time)** — station board, who is clocked in, open gaps, last production count, time in current state.
-4. **Shift report** — one shift_id: attendance, overtime, output, downtime Pareto, handoff checklist.
-5. **Workforce** (restricted) — no-shows, late clock-in, consecutive days, overtime approaching policy.
+3. **Line floor (real time)** — station board with `worker_id`, open gaps, last production count, time in current state.
+4. **Shift report** — one shift_id: attendance counts, overtime minutes, output, downtime Pareto, handoff.
+5. **Workforce** (restricted) — named no-shows, late clock-in, overtime approaching policy.
 
 Details and SPL sketches: [DASHBOARDS.md](DASHBOARDS.md).
 
@@ -156,7 +158,7 @@ Details and SPL sketches: [DASHBOARDS.md](DASHBOARDS.md).
 | Alert | Trigger (sketch) | Notify |
 | --- | --- | --- |
 | Line understaffed | Current unique `worker_id` on line &lt; planned headcount for 10 minutes after shift start | Supervisor + plant |
-| No-show | Assigned `worker_id` with no clock-in 15 minutes after shift start | Supervisor + workforce |
+| No-show | Assigned `worker_id` with no presence 15 minutes after start (ops: counts; workforce: names) | Supervisor (counts) + workforce |
 | Line down | `state_value=down` longer than threshold for that line | Supervisor + plant |
 | Overtime approaching | Clocked duration approaching site policy | Workforce |
 | Handoff incomplete | Previous shift still has open downtime with no reason code | Supervisor |
@@ -182,9 +184,9 @@ Work is scoped by technical surface, not calendar.
 
 ### Phase 2 — Current shift
 
-- KV Store sites/lines/calendar/roster
-- Scheduled search: current-shift snapshot lookup
-- Line floor + shift report dashboards
+- KV Store sites/lines/calendar/roster + presence upsert
+- Current-shift snapshot lookup
+- Home router, line floor (`worker_id` only), shift report
 - Understaffed and line-down alerts
 
 ### Phase 3 — Plant and business
@@ -195,8 +197,8 @@ Work is scoped by technical surface, not calendar.
 
 ### Phase 4 — Workforce and hardening
 
-- Workforce dashboard and no-show / overtime alerts
-- Field filters for `display_name`
+- Workforce dashboard, named no-show / overtime, `flo_worker_display` ACL
+- Field filters so ops roles cannot see name fields on `factory_workforce`
 - AppInspect (`cloud` + `private_app`) in CI
 - Optional OT Intelligence mapping for production/OEE/location
 
@@ -217,13 +219,13 @@ The build can start without these, but each one changes ingest or RBAC:
 3. **How many factories** at go-live, and is `site` already a stable code in other systems?
 4. **Is Splunk OT Intelligence licensed?** If yes, phase 4 maps into its data model instead of only the app-local model.
 5. **Shift rules:** rotating crews, midnight-crossing shifts, DST at each site.
-6. **Name policy:** first name + station on the line board, or worker_id only until HR signs off?
+6. **Name policy (default):** line/plant boards show `worker_id` only. First names are workforce-only unless HR later signs off on a shop-floor first-name exception.
 
 ## 15. Success checks
 
 - A line dashboard shows clock-ins within 30 seconds of HEC receipt
 - Plant view matches the sum of its lines for the same `shift_id`
 - Enterprise view matches the sum of its sites from the summary index
-- A `flo_business` user cannot search `display_name`
+- A `flo_business` user cannot search `flo_worker_display` or name fields
 - `make package && splunk-appinspect inspect dist/*.spl --included-tags cloud` reports 0 failures / 0 errors
 - No secret, token, or real employee record exists in git

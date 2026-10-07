@@ -32,6 +32,7 @@ class SampleEventsTest(unittest.TestCase):
                     self.assertTrue(event.get(field), f"{path.name} missing {field}")
                 self.assertEqual(event["vertical"], "manufacturing")
                 self.assertNotIn("display_name", event)
+                self.assertNotIn("first_name", event)
                 self.assertNotIn("badge_id", event)
                 self.assertNotIn("ssn", event)
                 blob = json.dumps(payload).lower()
@@ -44,6 +45,21 @@ class PackageLayoutTest(unittest.TestCase):
         for app in ("TA-factory_line", "factory_line_ops"):
             app_conf = (ROOT / "packages" / app / "default" / "app.conf").read_text()
             self.assertIn(f"id = {app}", app_conf)
+
+    def test_line_floor_has_no_name_lookup(self) -> None:
+        view = (
+            ROOT
+            / "packages"
+            / "factory_line_ops"
+            / "default"
+            / "data"
+            / "ui"
+            / "views"
+            / "flo_line_floor.json"
+        ).read_text()
+        self.assertNotIn("first_name", view)
+        self.assertNotIn("flo_kv_worker_display", view)
+        self.assertIn("flo_kv_roster_presence", view)
 
 
 if __name__ == "__main__":

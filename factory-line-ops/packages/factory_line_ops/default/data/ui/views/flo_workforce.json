@@ -32,13 +32,13 @@
     "ds_exceptions": {
       "type": "ds.search",
       "options": {
-        "query": "`factory_workforce_indexes` sourcetype=factory:personnel:exception site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| lookup flo_kv_roster worker_id OUTPUT first_name, station_id, role\n| table _time, site, line_id, station_id, worker_id, first_name, action, event_message\n| sort -_time"
+        "query": "`factory_workforce_indexes` sourcetype=factory:personnel:exception site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| lookup flo_kv_roster worker_id OUTPUT station_id, role\n| lookup flo_kv_worker_display worker_id OUTPUT first_name\n| table _time, site, line_id, station_id, worker_id, first_name, action, event_message\n| sort -_time"
       }
     },
     "ds_clock": {
       "type": "ds.search",
       "options": {
-        "query": "`factory_workforce_indexes` sourcetype=factory:shift:clock site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| stats latest(action) as action, min(eval(if(action=\"clock_in\",_time,null()))) as first_in, max(_time) as last_event by worker_id, line_id\n| lookup flo_kv_roster worker_id OUTPUT first_name, planned_start, planned_end, role\n| table worker_id, first_name, role, line_id, action, first_in, last_event, planned_start, planned_end"
+        "query": "`factory_workforce_indexes` sourcetype=factory:shift:clock site=\"$tok_site$\" shift_id=\"$tok_shift$\" earliest=-24h\n| stats latest(action) as action, min(eval(if(action=\"clock_in\",_time,null()))) as first_in, max(_time) as last_event by worker_id, line_id\n| lookup flo_kv_roster worker_id OUTPUT role, planned_start, planned_end\n| lookup flo_kv_worker_display worker_id OUTPUT first_name\n| table worker_id, first_name, role, line_id, action, first_in, last_event, planned_start, planned_end"
       }
     }
   },
