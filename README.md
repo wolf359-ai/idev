@@ -89,16 +89,26 @@ reach it.
 4. To turn off access, open the player and click **Remove login** (or **Reset
    login** to set new credentials; the old ones stop working).
 
+### The Admin button
+
+Coaches and Full-access staff see an **Admin** button next to **Sign out**. It
+opens a window with four tabs:
+
+- **Players** — add a player or import a roster
+- **Stats** — import GameChanger stats
+- **Staff** — add staff and manage their access
+- **Team** — edit the team name, season, and other team information
+
 ### Adding a staff member
 
-When you add a staff member (coach or team helper), the **Add staff** form has an
+In **Admin → Staff**, click **Add staff**. When you add a staff member (coach or team helper), the **Add staff** form has an
 optional login section: give them a **username** and **password** and they sign
 in with those. Their access level (Full, Manager, Assistant, or Read-only)
 controls what they can see and change. Leave the login blank to add someone to
 the staff list without sign-in access. Staff added before usernames existed can
 still sign in with their name until you set a username for them.
 
-A Full-access user can edit an existing staff member from **Manage staff
+A Full-access user can edit an existing staff member from **Admin → Staff → Manage
 access**: change their access level, update their **email/phone** and
 **username**, set or clear a password, or remove them — all without deleting and
 re-adding the person. Clearing the username reverts them to name-based login.
@@ -126,7 +136,8 @@ CSV that contains the same player list:
 
 1. In GameChanger, open your team and go to **Stats**.
 2. Choose **Export Stats** and save the CSV.
-3. In idev, choose **Import roster**, select the CSV, and preview it.
+3. In idev, click **Admin**, open the **Players** tab, select the CSV under
+   **Import roster**, and preview it.
 4. Confirm the import.
 
 idev reads GameChanger's `Number`, `First`, and `Last` columns (or `#` and
@@ -141,7 +152,7 @@ Use the same GameChanger **Export Stats** CSV to fill in each player's season
 totals instead of typing them in:
 
 1. In GameChanger, open your team, go to **Stats**, and choose **Export Stats**.
-2. In idev, open **Admin → Import stats**, select the CSV (or paste it), and
+2. In idev, click **Admin**, open the **Stats** tab, select the CSV (or paste it), and
    click **Preview stats**.
 3. Check the matched players, then click **Update N players**.
 

@@ -16,21 +16,22 @@
   const openAddPlayerBtn = document.getElementById("open-add-player");
   const cancelAdd = document.getElementById("cancel-add-player");
   const importForm = document.getElementById("import-roster-form");
-  const importPanel = document.getElementById("import-roster");
+  const adminBtn = document.getElementById("admin-btn");
+  const adminModal = document.getElementById("admin-modal");
+  const closeAdminBtn = document.getElementById("close-admin");
+  const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
   const rosterPreview = document.getElementById("roster-preview");
   const previewRosterButton = document.getElementById("preview-roster");
   const statsImportForm = document.getElementById("import-stats-form");
-  const statsImportPanel = document.getElementById("import-stats");
   const cancelStatsImport = document.getElementById("cancel-import-stats");
   const statsFile = document.getElementById("stats-file");
   const statsText = document.getElementById("stats-text");
   const statsPreview = document.getElementById("stats-preview");
   const previewStatsButton = document.getElementById("preview-stats");
   const staffForm = document.getElementById("add-staff-form");
-  const staffPanel = document.getElementById("staff-tools");
   const staffList = document.getElementById("staff-list");
   const staffModal = document.getElementById("staff-modal");
   const openStaffBtn = document.getElementById("open-add-staff");
@@ -39,7 +40,6 @@
   const staffManageList = document.getElementById("staff-manage-list");
   const openManageStaffBtn = document.getElementById("open-manage-staff");
   const closeManageStaffBtn = document.getElementById("close-manage-staff");
-  const teamPanel = document.getElementById("team-tools");
   const teamSummary = document.getElementById("team-summary");
   const teamModal = document.getElementById("team-modal");
   const teamForm = document.getElementById("team-form");
@@ -2702,6 +2702,7 @@
     renderBrandTeam();
     showCommIcons();
     renderCommBadges();
+    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     appView.classList.add("hidden");
     appView.classList.remove("role-player");
     appView.classList.remove("no-admin");
@@ -2806,42 +2807,53 @@
     showLogin();
   });
 
-  // Open one admin panel at a time and focus its first field.
-  importPanel.addEventListener("toggle", () => {
-    if (importPanel.open) {
-      staffPanel.open = false;
-      statsImportPanel.open = false;
-      if (teamPanel) teamPanel.open = false;
-      rosterText.focus();
-    }
-  });
-
-  statsImportPanel.addEventListener("toggle", () => {
-    if (statsImportPanel.open) {
-      importPanel.open = false;
-      staffPanel.open = false;
-      if (teamPanel) teamPanel.open = false;
-      statsText.focus();
-    }
-  });
-
-  staffPanel.addEventListener("toggle", () => {
-    if (staffPanel.open) {
-      importPanel.open = false;
-      statsImportPanel.open = false;
-      if (teamPanel) teamPanel.open = false;
-    }
-  });
-
-  if (teamPanel) {
-    teamPanel.addEventListener("toggle", () => {
-      if (teamPanel.open) {
-        importPanel.open = false;
-        statsImportPanel.open = false;
-        staffPanel.open = false;
-      }
+  // Admin modal: one tab per area (players, stats, staff, team).
+  function selectAdminTab(name) {
+    adminTabs.forEach((tab) => {
+      const selected = tab.dataset.tab === name;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
+      document.getElementById(tab.getAttribute("aria-controls")).classList.toggle("hidden", !selected);
     });
   }
+
+  function openAdminModal(tabName) {
+    if (tabName) selectAdminTab(tabName);
+    if (typeof adminModal.showModal === "function") {
+      if (!adminModal.open) adminModal.showModal();
+    } else {
+      adminModal.setAttribute("open", "");
+    }
+  }
+
+  function closeAdminModal() {
+    if (adminModal.open && typeof adminModal.close === "function") {
+      adminModal.close();
+    } else {
+      adminModal.removeAttribute("open");
+    }
+  }
+
+  adminBtn.addEventListener("click", () => openAdminModal());
+  closeAdminBtn.addEventListener("click", closeAdminModal);
+
+  adminModal.addEventListener("click", (event) => {
+    if (event.target === adminModal) {
+      closeAdminModal();
+    }
+  });
+
+  adminTabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => selectAdminTab(tab.dataset.tab));
+    tab.addEventListener("keydown", (event) => {
+      if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+      event.preventDefault();
+      const step = event.key === "ArrowRight" ? 1 : -1;
+      const next = adminTabs[(index + step + adminTabs.length) % adminTabs.length];
+      selectAdminTab(next.dataset.tab);
+      next.focus();
+    });
+  });
 
   // Add-player modal open/close.
   function openAddPlayerModal() {
@@ -3163,7 +3175,6 @@
 
   cancelImport.addEventListener("click", () => {
     importForm.reset();
-    importPanel.open = false;
     resetImportPreview();
   });
 
@@ -3211,8 +3222,8 @@
       });
       const imported = result.imported || [];
       importForm.reset();
-      importPanel.open = false;
       resetImportPreview();
+      closeAdminModal();
       await loadPlayers(imported.length ? imported[0].id : undefined);
     } catch (error) {
       resetImportPreview();
@@ -3222,7 +3233,6 @@
 
   cancelStatsImport.addEventListener("click", () => {
     statsImportForm.reset();
-    statsImportPanel.open = false;
     resetStatsImportPreview();
   });
 
@@ -3270,8 +3280,8 @@
       });
       const updated = result.updated || [];
       statsImportForm.reset();
-      statsImportPanel.open = false;
       resetStatsImportPreview();
+      closeAdminModal();
       await loadPlayers(updated.includes(state.selectedId) ? state.selectedId : updated[0]);
     } catch (error) {
       resetStatsImportPreview();
@@ -3304,6 +3314,7 @@
       });
       addForm.reset();
       closeAddPlayerModal();
+      closeAdminModal();
       await loadPlayers(created.id);
     } catch (error) {
       showError(error.message);
