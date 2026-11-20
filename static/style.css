@@ -780,10 +780,10 @@ h1, h2, h3, p {
   outline-offset: -2px;
 }
 
-/* Selected row: the cyan tint and left bar from the approved roster rail. */
+/* Selected row: cyan tint with the team-orange left bar. */
 .player-btn.active {
   background: rgba(34, 211, 238, 0.1);
-  box-shadow: inset 3px 0 0 var(--cyan);
+  box-shadow: inset 3px 0 0 var(--orange);
 }
 
 .player-num {
@@ -886,7 +886,7 @@ h1, h2, h3, p {
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 0.4rem;
   background:
     radial-gradient(500px 260px at 120% -30%, rgba(34, 211, 238, 0.12), transparent 60%),
