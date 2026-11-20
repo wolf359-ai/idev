@@ -171,9 +171,11 @@ h1, h2, h3, p {
   background: rgba(251, 146, 60, 0.12);
 }
 
+/* Fixed size so switching tabs never resizes the window; panels scroll inside. */
 .modal.modal-admin {
   width: min(720px, 94vw);
-  max-height: min(88vh, 900px);
+  height: min(88vh, 760px);
+  max-height: none;
   padding: 0;
   display: none;
   flex-direction: column;
@@ -238,6 +240,8 @@ h1, h2, h3, p {
 }
 
 .admin-panel {
+  flex: 1;
+  min-height: 0;
   padding: 1.1rem 1.25rem 1.25rem;
   overflow-y: auto;
   display: grid;
