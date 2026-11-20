@@ -1013,6 +1013,29 @@ h1, h2, h3, p {
   align-content: stretch;
 }
 
+.hero-kpis {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.game-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.game-kpis .tile {
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .game-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .tile {
   position: relative;
   overflow: hidden;
