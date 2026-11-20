@@ -506,6 +506,20 @@ h1, h2, h3, p {
   color: var(--muted-2);
 }
 
+.name-team {
+  display: none;
+}
+
+.team-cell {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.team-cell .sport-tag {
+  margin-left: 0.4rem;
+}
+
 .num-badge {
   display: inline-flex;
   align-items: center;
@@ -746,6 +760,17 @@ h1, h2, h3, p {
 
   .manage-table .pos-abbr + .pos-name {
     display: none;
+  }
+
+  .manage-table .col-team {
+    display: none;
+  }
+
+  .manage-table .name-team {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
+    color: var(--muted);
   }
 
   .manage-hint {
