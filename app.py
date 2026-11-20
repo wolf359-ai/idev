@@ -18,6 +18,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import threading
 import time
 import uuid
@@ -66,7 +67,37 @@ PR_METRICS = {
 MAX_BACKUPS = int(os.environ.get("IDEV_MAX_BACKUPS", "40"))
 HOST = os.environ.get("IDEV_HOST", "0.0.0.0")
 PORT = int(os.environ.get("IDEV_PORT", "8765"))
-DATA_PATH = Path(os.environ.get("IDEV_DATA", str(ROOT / "data.json")))
+DATA_DIR_NAME = "idev data"
+# Where data lived before it moved out of the program folder; moved on first run.
+LEGACY_DATA_PATH = ROOT / "data.json"
+
+
+def default_data_path(home: Path | None = None) -> Path:
+    """The coach's data lives outside the program folder so updates or a fresh
+    download never touch it. Windows often redirects Documents into OneDrive."""
+    home = home or Path.home()
+    for documents in (home / "Documents", home / "OneDrive" / "Documents"):
+        if documents.is_dir():
+            return documents / DATA_DIR_NAME / "data.json"
+    return home / DATA_DIR_NAME / "data.json"
+
+
+def migrate_legacy_data(target: Path, legacy: Path = LEGACY_DATA_PATH) -> bool:
+    """Copy data.json and data_backups/ from the program folder to `target`'s
+    folder, the first time only. The old file is renamed, not deleted."""
+    if target.exists() or not legacy.is_file():
+        return False
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(legacy, target)
+    old_backups = legacy.parent / "data_backups"
+    if old_backups.is_dir():
+        shutil.copytree(old_backups, target.parent / "data_backups", dirs_exist_ok=True)
+    legacy.rename(legacy.with_name("data.json.moved"))
+    return True
+
+
+DATA_FROM_ENV = bool(os.environ.get("IDEV_DATA"))
+DATA_PATH = Path(os.environ["IDEV_DATA"]) if DATA_FROM_ENV else default_data_path()
 
 # --- Authentication / session configuration --------------------------------
 # The session cookie is not marked Secure by default because idev is served
@@ -3121,11 +3152,19 @@ def make_server(
 
 
 def main() -> None:
+    if not DATA_FROM_ENV and migrate_legacy_data(DATA_PATH):
+        print(f"Moved your data to {DATA_PATH.parent}", flush=True)
+    elif not DATA_FROM_ENV and LEGACY_DATA_PATH.is_file():
+        print(
+            f"Note: ignoring {LEGACY_DATA_PATH} because your data is already in {DATA_PATH.parent}",
+            flush=True,
+        )
     store = Store(DATA_PATH)
     store.seed_demo_if_empty()
     generated_password = store.ensure_admin_password(ADMIN_PASSWORD_ENV)
     server = make_server(store, HOST, PORT)
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
+    print(f"Your data is saved in {DATA_PATH}", flush=True)
     if generated_password:
         print("", flush=True)
         print("First-time setup. Sign in with:", flush=True)
