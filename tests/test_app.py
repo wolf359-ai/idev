@@ -405,8 +405,9 @@ class StoreTests(unittest.TestCase):
             self.store.add_staff({"name": "Pat", "role": "Coach", "access_level": "Emperor"})
 
     def test_team_information_set_and_get(self) -> None:
-        # Defaults to empty before anything is stored.
-        self.assertEqual(self.store.get_team(), {})
+        # There is always a first team, named "My team" until the coach sets it.
+        self.assertEqual(self.store.get_team()["name"], "My team")
+        self.assertEqual(self.store.get_team()["sport"], "Softball")
 
         saved = self.store.set_team(
             {
@@ -424,16 +425,17 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(saved["play_year"], "First year")
         self.assertEqual(self.store.get_team(), saved)
 
-        # All fields are optional and may be cleared.
+        # Other fields may be cleared; a team always keeps a name.
         cleared = self.store.set_team({})
         self.assertEqual(
             cleared,
             {
-                "name": "",
+                "name": "Boston Caps",
                 "year": "",
                 "season": "",
                 "age_bracket": "",
                 "play_year": "",
+                "sport": "Softball",
             },
         )
 
@@ -1418,7 +1420,12 @@ class HttpTests(unittest.TestCase):
         status, html = self.call("GET", "/")
         self.assertEqual(status, 200)
         self.assertIn("idev", html)
-        self.assertIn("Softball player development", html)
+        self.assertIn("Player development", html)
+        self.assertIn('id="side-nav"', html)
+        self.assertIn('id="home-view"', html)
+        self.assertIn('id="schedule-view"', html)
+        self.assertIn('id="event-modal"', html)
+        self.assertIn('id="team-sport"', html)
         self.assertIn("Import roster", html)
         self.assertIn("Export Stats", html)
         self.assertIn('id="admin-btn"', html)
