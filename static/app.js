@@ -2507,7 +2507,7 @@
       drillsTile(player),
     );
 
-    return el("div", { className: "hero" }, idPanel, el("div", { className: "hero-kpis" }, tiles, gameStatTiles(m)));
+    return el("div", { className: "hero" }, idPanel, tiles, gameStatTiles(m));
   }
 
   function gameStatTiles(m) {
