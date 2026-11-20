@@ -297,6 +297,8 @@
   function renderStatsImportPreview(result) {
     const matches = result.matches || [];
     const unmatched = result.unmatched || [];
+    const notOnRoster = unmatched.filter((row) => row.reason === "Not on the roster");
+    const mismatched = unmatched.filter((row) => row.reason !== "Not on the roster");
     const skipped = result.skipped || [];
     const columns = result.columns || [];
     statsPreview.replaceChildren(...[
@@ -311,9 +313,6 @@
                 "li",
                 {},
                 el("span", {}, [jersey(match), match.player_name].filter(Boolean).join(" ")),
-                match.matched_by === "number"
-                  ? el("span", { className: "meta" }, ` (CSV: ${match.csv_name}, matched by #)`)
-                  : null,
                 match.rows > 1
                   ? el("span", { className: "meta" }, ` (${match.rows} rows combined)`)
                   : null,
@@ -322,14 +321,33 @@
             ),
           )
         : el("p", { className: "empty" }, "No rows match players on the roster."),
-      unmatched.length
+      notOnRoster.length
         ? el(
             "p",
             { className: "meta" },
-            `Not on roster (import them with Import roster first): ${unmatched
+            `Not on roster (import them with Import roster first): ${notOnRoster
               .slice(0, 5)
               .map((row) => row.name)
-              .join(", ")}${unmatched.length > 5 ? "…" : ""}`,
+              .join(", ")}${notOnRoster.length > 5 ? "…" : ""}`,
+          )
+        : null,
+      mismatched.length
+        ? el(
+            "div",
+            { className: "import-warning" },
+            el("strong", {}, `${plural(mismatched.length, "row")} not matched — check the jersey number`),
+            el(
+              "ul",
+              { className: "import-list" },
+              mismatched.map((row) =>
+                el(
+                  "li",
+                  {},
+                  [jersey(row), row.name].filter(Boolean).join(" "),
+                  el("div", { className: "meta" }, row.reason),
+                ),
+              ),
+            ),
           )
         : null,
       skipped.length

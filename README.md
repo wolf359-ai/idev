@@ -159,9 +159,12 @@ totals instead of typing them in:
 3. Check the matched players, then click **Update N players**.
 
 Rows are matched to players already on the roster by name (`First`/`Last`,
-`Name`, or `Last, First`), then by jersey number when the name doesn't match
-anyone. Players who aren't on the roster are listed so you can add them with
-**Import roster** first. Batting stats come only from GameChanger's Batting
+`Name`, or `Last, First`) **and** jersey number, since teammates can share a
+number. A roster player with no jersey number is matched by name alone. If the
+name matches but the number doesn't, the preview lists that row with both
+numbers so you can fix the roster (or the file) and import again. Players who
+aren't on the roster are listed so you can add them with **Import roster**
+first. Batting stats come only from GameChanger's Batting
 columns and PO/A/E/DP from its Fielding columns, so pitching totals never
 overwrite a hitter's line. Innings played comes from the Fielding group's
 `Total` column (GameChanger's `INN` there is innings caught). If GameChanger

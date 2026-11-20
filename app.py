@@ -1724,40 +1724,62 @@ class Store:
         with self.lock:
             roster = [p for p in self.data["players"] if isinstance(p.get("name"), str)]
             by_name: dict[str, list[dict]] = {}
-            by_number: dict[int, list[dict]] = {}
             for player in roster:
                 by_name.setdefault(name_key(player["name"]), []).append(player)
-                if isinstance(player.get("number"), int):
-                    by_number.setdefault(player["number"], []).append(player)
 
             matches = []
             unmatched = []
             claimed: dict[str, dict] = {}
             for row in rows:
+                # Teammates can share a jersey number, so a row must match on
+                # name, and on number too whenever both sides have one.
                 named = by_name.get(name_key(row["name"]), [])
-                numbered = by_number.get(row["number"], []) if row["number"] is not None else []
-                if len(named) > 1:
-                    named = [p for p in named if p.get("number") == row["number"]]
-                if len(named) == 1:
-                    player, matched_by = named[0], "name"
-                elif not named and len(numbered) == 1:
-                    player, matched_by = numbered[0], "number"
-                else:
-                    if all(name_key(u["name"]) != name_key(row["name"]) for u in unmatched):
+                candidates = [
+                    p
+                    for p in named
+                    if row["number"] is None
+                    or not isinstance(p.get("number"), int)
+                    or p["number"] == row["number"]
+                ]
+                if len(candidates) > 1:
+                    exact = [p for p in candidates if p.get("number") == row["number"]]
+                    candidates = exact if len(exact) == 1 else candidates
+                if len(candidates) != 1:
+                    if not named:
+                        reason = "Not on the roster"
+                    elif not candidates:
+                        roster_numbers = ", ".join(f"#{p['number']}" for p in named)
+                        reason = f"Jersey #{row['number']} in the file, {roster_numbers} on the roster"
+                    else:
+                        reason = "More than one roster player has this name; give them jersey numbers"
+                    if all(
+                        (name_key(u["name"]), u["number"]) != (name_key(row["name"]), row["number"])
+                        for u in unmatched
+                    ):
                         unmatched.append(
-                            {"line": row["line"], "name": row["name"], "number": row["number"]}
+                            {
+                                "line": row["line"],
+                                "name": row["name"],
+                                "number": row["number"],
+                                "reason": reason,
+                            }
                         )
                     continue
+                player = candidates[0]
                 earlier = claimed.get(player["id"])
                 if earlier is not None:
                     # GameChanger lists a player twice when they have two team
                     # profiles; its Totals row counts both, so add them up.
-                    if name_key(earlier["csv_name"]) == name_key(row["name"]):
+                    if earlier["csv_number"] == row["number"]:
                         earlier["stats"] = combine_stat_rows(earlier["stats"], row["stats"])
                         earlier["rows"] += 1
                     else:
                         skipped.append(
-                            {"line": row["line"], "reason": f"{player['name']} appears more than once"}
+                            {
+                                "line": row["line"],
+                                "reason": f"{row['name']} appears with two jersey numbers; give "
+                                "the roster player a number to pick one",
+                            }
                         )
                     continue
                 match = {
@@ -1766,7 +1788,7 @@ class Store:
                     "player_name": player["name"],
                     "number": player.get("number"),
                     "csv_name": row["name"],
-                    "matched_by": matched_by,
+                    "csv_number": row["number"],
                     "rows": 1,
                     "stats": row["stats"],
                     "_player": player,
