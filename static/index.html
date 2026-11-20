@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>idev — softball player development</title>
+  <title>idev — player development</title>
   <link rel="stylesheet" href="/static/style.css">
   <link rel="icon" href="/static/logo.png">
 </head>
@@ -31,11 +31,37 @@
   </section>
 
   <div id="app-view" class="app hidden">
+    <aside class="side" id="side" aria-label="Main menu">
+      <div class="side-head">
+        <img class="side-logo" src="/static/logo.png" alt="Alpha" width="123" height="40">
+        <button type="button" class="team-switch" id="team-switch" aria-haspopup="menu">
+          <span class="team-switch-name" id="team-switch-name">All teams</span>
+          <span class="team-switch-sub" id="team-switch-sub"></span>
+        </button>
+        <button type="button" class="collapse-btn" id="collapse-btn" aria-label="Minimize menu" title="Minimize menu"></button>
+      </div>
+      <nav class="side-nav" id="side-nav" aria-label="Pages"></nav>
+      <div class="side-foot">
+        <div class="next-card hidden" id="next-card"></div>
+        <div class="me" id="me">
+          <span class="me-avatar" id="me-avatar" aria-hidden="true"></span>
+          <span class="me-text">
+            <span class="me-hi">Welcome back</span>
+            <span class="me-name" id="me-name"></span>
+          </span>
+        </div>
+      </div>
+    </aside>
+    <button type="button" class="side-scrim" id="side-scrim" aria-label="Close menu" tabindex="-1"></button>
+
+    <div class="app-body">
     <header class="top">
       <div class="brand">
-        <img class="logo" src="/static/logo.png" alt="Alpha logo" width="123" height="40">
+        <button type="button" class="hamburger" id="hamburger" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
         <div>
-          <p>Softball player development</p>
+          <p id="page-heading">Player development</p>
           <p class="brand-team hidden" id="brand-team"></p>
           <p class="brand-meta hidden" id="brand-meta"></p>
         </div>
@@ -61,6 +87,11 @@
       </div>
     </header>
 
+    <section id="home-view" class="view" aria-label="Home"></section>
+    <section id="schedule-view" class="view hidden" aria-label="Schedule"></section>
+    <section id="page-view" class="view hidden"></section>
+
+    <div id="dev-view" class="dev-view hidden">
     <aside class="roster" aria-labelledby="roster-title">
       <h2 class="roster-head" id="roster-title">Roster<span id="roster-count"></span></h2>
       <ul id="player-list" class="player-list"></ul>
@@ -69,6 +100,71 @@
     <main class="main" id="main">
       <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, GameChanger stats, notes, and progress.</p>
     </main>
+    </div>
+    </div>
+
+    <div class="pop hidden" id="event-pop" role="dialog" aria-labelledby="event-pop-title"></div>
+
+    <dialog id="event-modal" class="modal" aria-labelledby="event-modal-title">
+      <form id="event-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="event-modal-title">Add event</h3>
+        <label>
+          Team
+          <select id="event-team" name="team_id" required></select>
+        </label>
+        <label>
+          Type
+          <select id="event-type" name="type" required>
+            <option value="practice">Practice</option>
+            <option value="game">Game</option>
+            <option value="tournament">Tournament</option>
+            <option value="training">Training</option>
+            <option value="scrimmage">Scrimmage</option>
+          </select>
+        </label>
+        <label>
+          Title
+          <input id="event-title" name="title" maxlength="100" placeholder="vs. Firecrackers 12U" required>
+        </label>
+        <div class="form-grid-2">
+          <label>
+            Date
+            <input id="event-date" name="date" type="date" required>
+          </label>
+          <label>
+            End date <span class="meta">(multi-day)</span>
+            <input id="event-end-date" name="end_date" type="date">
+          </label>
+        </div>
+        <label class="check-row">
+          <input id="event-all-day" name="all_day" type="checkbox">
+          All day
+        </label>
+        <div class="form-grid-2" id="event-times">
+          <label>
+            Start time
+            <input id="event-start" name="start_time" type="time">
+          </label>
+          <label>
+            End time
+            <input id="event-end" name="end_time" type="time">
+          </label>
+        </div>
+        <label>
+          Location
+          <input id="event-location" name="location" maxlength="120" placeholder="Alpha Field 2">
+        </label>
+        <label>
+          Notes
+          <textarea id="event-notes" name="notes" maxlength="1000" rows="3" placeholder="Arrive 30 minutes early. Bring both uniforms."></textarea>
+        </label>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary">Save event</button>
+          <button type="button" id="cancel-event" class="btn">Cancel</button>
+          <button type="button" id="delete-event" class="btn btn-danger hidden">Delete event</button>
+        </div>
+      </form>
+    </dialog>
 
     <dialog id="stats-modal" class="modal modal-stats" aria-labelledby="stats-modal-title">
       <div class="admin-modal-head">
@@ -123,6 +219,10 @@
           the importer reads the Number, First, and Last columns. You can also paste
           one player per line.
         </p>
+        <label>
+          Add to team
+          <select id="import-team" name="team_id" class="team-select"></select>
+        </label>
         <label>
           GameChanger CSV
           <input id="roster-file" type="file" accept=".csv,text/csv">
@@ -209,12 +309,12 @@
         <div class="admin-section">
           <div class="admin-section-head">
             <div>
-              <h4>Team information</h4>
-              <p class="meta">Shown in the header for everyone who signs in.</p>
+              <h4>Teams</h4>
+              <p class="meta">Each team has its own players, staff and schedule. Softball and baseball teams can live side by side.</p>
             </div>
-            <button type="button" id="open-team-info" class="btn btn-primary">Edit team information</button>
+            <button type="button" id="open-team-info" class="btn btn-primary">Add team</button>
           </div>
-          <dl id="team-summary" class="team-summary"></dl>
+          <div id="team-summary" class="team-list"></div>
         </div>
       </section>
     </dialog>
@@ -245,6 +345,11 @@
             <option>Read-only</option>
           </select>
         </label>
+        <fieldset class="team-checks">
+          <legend>Teams</legend>
+          <p class="meta">Leave all unchecked to give access to every team.</p>
+          <div id="staff-teams" class="team-check-list"></div>
+        </fieldset>
         <p class="meta form-section">Login (optional) — they sign in with this username and password.</p>
         <label>
           Username
@@ -273,10 +378,17 @@
     <dialog id="team-modal" class="modal" aria-labelledby="team-modal-title">
       <form id="team-form" class="form" autocomplete="off">
         <h3 class="modal-title" id="team-modal-title">Team information</h3>
-        <p class="meta">Set the team name, year, season, and years of play.</p>
+        <p class="meta">Set the team name, sport, year, season, and years of play.</p>
         <label>
           Team name
-          <input id="team-name" name="name" maxlength="80" placeholder="Boston Caps">
+          <input id="team-name" name="name" maxlength="80" placeholder="Boston Caps" required>
+        </label>
+        <label>
+          Sport
+          <select id="team-sport" name="sport">
+            <option>Softball</option>
+            <option>Baseball</option>
+          </select>
         </label>
         <label>
           Year
@@ -346,6 +458,10 @@
         <label>
           Name
           <input id="player-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Team
+          <select id="player-team" name="team_id" class="team-select"></select>
         </label>
         <label>
           Primary position
@@ -426,6 +542,10 @@
         <label>
           Name
           <input id="edit-player-name" name="name" maxlength="80" required>
+        </label>
+        <label>
+          Team
+          <select id="edit-player-team" name="team_id" class="team-select"></select>
         </label>
         <label>
           Primary position
