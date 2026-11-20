@@ -2638,39 +2638,228 @@
     editTargetId = null;
   }
 
+  const MANAGE_COLUMNS = [
+    { key: "number", label: "#", value: (p) => (p.number === null || p.number === undefined ? -1 : Number(p.number)) },
+    { key: "name", label: "Name", value: (p) => (p.name || "").toLowerCase() },
+    { key: "position", label: "Position", value: (p) => (p.position || "").toLowerCase() },
+    { key: "secondary_position", label: "2nd position", value: (p) => (p.secondary_position || "").toLowerCase() },
+    { key: "grad_year", label: "Class", value: (p) => String(p.grad_year || "") },
+    { key: "login", label: "Login", value: (p) => (p.has_login ? 0 : 1) },
+  ];
+  const manageSort = { key: "name", dir: 1 };
+
+  function sortedManagePlayers() {
+    const column = MANAGE_COLUMNS.find((c) => c.key === manageSort.key) || MANAGE_COLUMNS[1];
+    return [...state.players].sort((a, b) => {
+      const av = column.value(a);
+      const bv = column.value(b);
+      if (av < bv) return -manageSort.dir;
+      if (av > bv) return manageSort.dir;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+  }
+
   function renderManagePlayers() {
     if (!managePlayerList) {
       return;
     }
+    closePlayerMenu();
     if (!state.players.length) {
-      managePlayerList.replaceChildren(el("li", { className: "meta" }, "No players yet."));
+      managePlayerList.replaceChildren(el("p", { className: "meta" }, "No players yet."));
       return;
     }
-    managePlayerList.replaceChildren(
-      ...state.players.map((player) =>
-        el(
-          "li",
-          { className: "login-item manage-item" },
+    const head = el(
+      "tr",
+      {},
+      MANAGE_COLUMNS.map((column) => {
+        const active = manageSort.key === column.key;
+        return el(
+          "th",
+          {
+            scope: "col",
+            className: `col-${column.key}`,
+            "aria-sort": active ? (manageSort.dir > 0 ? "ascending" : "descending") : "none",
+          },
           el(
-            "div",
-            { className: "login-info" },
-            el("strong", {}, [jersey(player), player.name].filter(Boolean).join(" ")),
-            el("span", { className: "meta" }, positionLabel(player) || "Athlete"),
+            "button",
+            {
+              type: "button",
+              className: "th-sort",
+              onClick: () => {
+                manageSort.dir = active ? -manageSort.dir : 1;
+                manageSort.key = column.key;
+                renderManagePlayers();
+              },
+            },
+            column.label,
+            el("span", { className: "sort-mark", "aria-hidden": "true" }, active ? (manageSort.dir > 0 ? "▲" : "▼") : ""),
           ),
+        );
+      }),
+      el("th", { scope: "col", className: "col-menu" }, el("span", { className: "sr-only" }, "Actions")),
+    );
+    const rows = sortedManagePlayers().map((player) => {
+      const row = el(
+        "tr",
+        {
+          tabindex: "0",
+          "aria-haspopup": "menu",
+          onContextmenu: (event) => {
+            event.preventDefault();
+            openPlayerMenu(player, row, event.clientX, event.clientY);
+          },
+          onDblclick: () => editPlayer(player),
+          onKeydown: (event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              const box = row.getBoundingClientRect();
+              openPlayerMenu(player, row, box.left + 24, box.bottom);
+            }
+          },
+        },
+        el("td", { className: "col-number" }, jersey(player) || "—"),
+        el("td", { className: "col-name" }, el("strong", {}, player.name)),
+        el("td", { className: "col-position" }, player.position || "—"),
+        el("td", { className: "col-secondary_position" }, player.secondary_position || "—"),
+        el("td", { className: "col-grad_year" }, player.grad_year || "—"),
+        el(
+          "td",
+          { className: "col-login" },
+          el("span", { className: player.has_login ? "tag on" : "tag" }, player.has_login ? "Set" : "None"),
+        ),
+        el(
+          "td",
+          { className: "col-menu" },
           el(
-            "div",
-            { className: "login-actions" },
-            el("button", { type: "button", className: "btn", onClick: () => editPlayer(player) }, "Edit"),
-            el(
-              "button",
-              { type: "button", className: "btn btn-danger", onClick: () => removePlayer(player) },
-              "Delete",
-            ),
+            "button",
+            {
+              type: "button",
+              className: "row-menu-btn",
+              "aria-label": `Manage ${player.name}`,
+              "aria-haspopup": "menu",
+              tabindex: "-1",
+              onClick: (event) => {
+                event.stopPropagation();
+                const box = event.currentTarget.getBoundingClientRect();
+                openPlayerMenu(player, row, box.right, box.bottom);
+              },
+            },
+            "⋯",
           ),
         ),
-      ),
+      );
+      return row;
+    });
+    managePlayerList.replaceChildren(
+      el("table", { className: "data-table manage-table" }, el("thead", {}, head), el("tbody", {}, rows)),
     );
   }
+
+  let playerMenu = null;
+
+  function closePlayerMenu() {
+    if (!playerMenu) {
+      return;
+    }
+    const { node, row } = playerMenu;
+    playerMenu = null;
+    node.remove();
+    if (row && row.isConnected) {
+      row.classList.remove("menu-open");
+    }
+  }
+
+  function openPlayerMenu(player, row, x, y) {
+    closePlayerMenu();
+    const run = (action) => () => {
+      closePlayerMenu();
+      action();
+    };
+    const items = [
+      ["Edit player", run(() => editPlayer(player))],
+      ["View on main page", run(() => {
+        closeAdminModal();
+        selectPlayer(player.id);
+      })],
+      [player.has_login ? "Reset login" : "Set login", run(() => managePlayerLogin(player))],
+    ];
+    if (player.has_login) {
+      items.push(["Remove login", run(() => clearPlayerLogin(player))]);
+    }
+    items.push(null, ["Delete player", run(() => removePlayer(player)), "danger"]);
+
+    const node = el(
+      "div",
+      { className: "context-menu", role: "menu", "aria-label": player.name },
+      el("div", { className: "context-menu-title" }, [jersey(player), player.name].filter(Boolean).join(" ")),
+      items.map((item) =>
+        item
+          ? el(
+              "button",
+              { type: "button", role: "menuitem", className: item[2] ? `menu-item ${item[2]}` : "menu-item", onClick: item[1] },
+              item[0],
+            )
+          : el("div", { className: "menu-sep", role: "separator" }),
+      ),
+    );
+    // Inside the dialog so it renders in the same top layer as the Admin window.
+    (adminModal || document.body).append(node);
+    const box = node.getBoundingClientRect();
+    node.style.left = `${Math.max(8, Math.min(x, window.innerWidth - box.width - 8))}px`;
+    node.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
+    row.classList.add("menu-open");
+    playerMenu = { node, row };
+    node.querySelector(".menu-item").focus();
+  }
+
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (playerMenu && !playerMenu.node.contains(event.target)) {
+        closePlayerMenu();
+      }
+    },
+    true,
+  );
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (!playerMenu) {
+        return;
+      }
+      if (event.key === "Escape") {
+        // Close only the menu, not the Admin window behind it.
+        event.preventDefault();
+        event.stopPropagation();
+        const { row } = playerMenu;
+        closePlayerMenu();
+        if (row && row.isConnected) row.focus();
+      } else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+        event.preventDefault();
+        const buttons = [...playerMenu.node.querySelectorAll(".menu-item")];
+        const index = buttons.indexOf(document.activeElement);
+        const step = event.key === "ArrowDown" ? 1 : -1;
+        buttons[(index + step + buttons.length) % buttons.length].focus();
+      } else if (event.key === "Tab") {
+        closePlayerMenu();
+      }
+    },
+    true,
+  );
+  window.addEventListener("resize", closePlayerMenu);
+  // Not "scroll": opening the menu on a half-visible row scrolls it into view,
+  // and that scroll event would shut the menu straight away.
+  ["wheel", "touchmove"].forEach((type) =>
+    document.addEventListener(
+      type,
+      (event) => {
+        if (playerMenu && !playerMenu.node.contains(event.target)) {
+          closePlayerMenu();
+        }
+      },
+      { capture: true, passive: true },
+    ),
+  );
 
   function renderPlayerLogins() {
     if (!playerLoginList) {

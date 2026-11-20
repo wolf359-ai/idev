@@ -348,7 +348,179 @@ h1, h2, h3, p {
   font-size: 0.85rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.data-table thead th {
+  background: var(--panel-2);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.th-sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.th-sort:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.sort-mark {
+  font-size: 0.6rem;
+  color: var(--cyan);
+}
+
+.manage-table tbody tr {
+  cursor: context-menu;
+}
+
+.manage-table tbody tr:hover,
+.manage-table tbody tr.menu-open {
+  background: rgba(34, 211, 238, 0.06);
+}
+
+.manage-table tbody tr:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+.manage-table .col-number {
+  width: 3.5rem;
+  color: var(--orange);
+  font-weight: 700;
+}
+
+.manage-table .col-menu {
+  width: 2.5rem;
+  text-align: right;
+  padding-right: 0.4rem;
+}
+
+.row-menu-btn {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.15rem 0.45rem;
+  cursor: pointer;
+}
+
+.row-menu-btn:hover {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 12rem;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+  display: grid;
+}
+
+.context-menu-title {
+  padding: 0.35rem 0.6rem 0.45rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 0.25rem;
+}
+
+.menu-item {
+  all: unset;
+  cursor: pointer;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: var(--ink);
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.menu-item.danger {
+  color: var(--red);
+}
+
+.menu-item.danger:hover,
+.menu-item.danger:focus-visible {
+  background: rgba(245, 86, 108, 0.12);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 0.25rem 0.2rem;
+  background: var(--line-soft);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 560px) {
+  .manage-table .col-secondary_position,
+  .manage-table .col-grad_year,
+  .manage-table .col-login {
+    display: none;
+  }
+
+  .manage-table th,
+  .manage-table td {
+    padding: 0.5rem 0.4rem;
+  }
+
+  .manage-table .col-number {
+    width: 2.75rem;
+  }
+
+  .manage-table .col-name {
+    white-space: normal;
+  }
+
   .login-item {
     grid-template-columns: minmax(0, 1fr) auto;
   }
