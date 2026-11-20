@@ -387,15 +387,27 @@ button {
   font-size: 1.2rem;
 }
 
-/* Collapsed rail: icons only, same order as the expanded menu. */
+/* Minimized rail (Figma's collapsed variant): logo mark, icon tiles with the
+   same order and separators, badge dots, and the avatar at the bottom. Only
+   used when the coach minimizes the menu; the default is expanded. */
 .shell.collapsed .side {
-  padding-left: 0.6rem;
-  padding-right: 0.6rem;
+  padding-left: 0.7rem;
+  padding-right: 0.7rem;
+  align-items: center;
+}
+
+.shell.collapsed .side-head {
+  justify-items: center;
+  padding-left: 0;
+  padding-right: 0;
+  width: 100%;
 }
 
 .shell.collapsed .side-logo {
-  width: 52px;
-  justify-self: center;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  object-position: left center;
 }
 
 .shell.collapsed .team-switch,
@@ -407,27 +419,83 @@ button {
 }
 
 .shell.collapsed .collapse-btn {
-  right: -1.35rem;
+  right: -1.45rem;
+  top: 0.55rem;
+}
+
+.shell.collapsed .side-nav {
+  width: 100%;
+  overflow: visible;
+}
+
+.shell.collapsed .nav-list {
+  justify-items: center;
+  gap: 4px;
+}
+
+.shell.collapsed .nav-sep {
+  width: 28px;
+  justify-self: center;
 }
 
 .shell.collapsed .nav-item {
+  width: 42px;
+  height: 42px;
   justify-content: center;
-  padding: 0.65rem 0;
+  padding: 0;
+  border-radius: 10px;
+}
+
+.shell.collapsed .nav-item.active {
+  background: rgba(34, 211, 238, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(34, 211, 238, 0.35), inset 3px 0 0 var(--orange);
 }
 
 .shell.collapsed .nav-badge {
   position: absolute;
-  top: 2px;
-  right: 6px;
-  min-width: 1rem;
-  height: 1rem;
-  font-size: 0.6rem;
+  top: 4px;
+  right: 4px;
+  min-width: 0;
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  font-size: 0;
+  border: 2px solid var(--panel);
+  box-sizing: content-box;
 }
 
 .shell.collapsed .me {
   justify-content: center;
   padding-left: 0;
   padding-right: 0;
+  width: 100%;
+  position: relative;
+}
+
+/* Hover/focus labels so icons are never a guessing game. */
+.shell.collapsed [data-tip]:hover::after,
+.shell.collapsed [data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 70;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--panel-3);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px -10px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+
+.shell.collapsed .me[data-tip]:hover::after,
+.shell.collapsed .me[data-tip]:focus-visible::after {
+  left: calc(50% + 30px);
 }
 
 .side-scrim,
@@ -1255,6 +1323,41 @@ button {
   .shell.collapsed .side {
     padding-left: 0.85rem;
     padding-right: 0.85rem;
+    align-items: stretch;
+  }
+
+  .shell.collapsed .side-logo {
+    width: 112px;
+    height: auto;
+  }
+
+  .shell.collapsed .side-head {
+    justify-items: stretch;
+  }
+
+  .shell.collapsed .nav-list {
+    justify-items: stretch;
+  }
+
+  .shell.collapsed .nav-item {
+    width: 100%;
+    height: auto;
+    justify-content: flex-start;
+    padding: 0.55rem 0.7rem;
+  }
+
+  .shell.collapsed .nav-badge {
+    position: static;
+    width: auto;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 0.35rem;
+    font-size: 0.68rem;
+    border: 0;
+  }
+
+  .shell.collapsed [data-tip]:hover::after {
+    content: none;
   }
 
   .shell.collapsed .team-switch,
