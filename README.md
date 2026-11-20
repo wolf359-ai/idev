@@ -129,10 +129,33 @@ CSV that contains the same player list:
 3. In idev, choose **Import roster**, select the CSV, and preview it.
 4. Confirm the import.
 
-idev reads GameChanger's `#` and `Roster` columns. If position is not included,
+idev reads GameChanger's `Number`, `First`, and `Last` columns (or `#` and
+`Roster`). If position is not included,
 the player is added as Utility and can be edited later. You can also paste one
 player per line, or use CSV rows such as `7,Alex Rivera,SS`. Existing players
 with the same name are skipped.
+
+## Import GameChanger stats
+
+Use the same GameChanger **Export Stats** CSV to fill in each player's season
+totals instead of typing them in:
+
+1. In GameChanger, open your team, go to **Stats**, and choose **Export Stats**.
+2. In idev, open **Admin → Import stats**, select the CSV (or paste it), and
+   click **Preview stats**.
+3. Check the matched players, then click **Update N players**.
+
+Rows are matched to players already on the roster by name (`First`/`Last`,
+`Name`, or `Last, First`), then by jersey number when the name doesn't match
+anyone. Players who aren't on the roster are listed so you can add them with
+**Import roster** first. Batting stats come only from GameChanger's Batting
+columns and PO/A/E/DP from its Fielding columns, so pitching totals never
+overwrite a hitter's line. Innings played comes from the Fielding group's
+`Total` column (GameChanger's `INN` there is innings caught). If GameChanger
+lists a player twice (two team profiles), both rows are added together, just as
+its Totals row does. Stats the file doesn't include keep their current values.
+Each import replaces the imported totals, so import the full-season export
+rather than a single game.
 
 ## Tests
 

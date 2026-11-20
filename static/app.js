@@ -22,6 +22,13 @@
   const rosterText = document.getElementById("roster-text");
   const rosterPreview = document.getElementById("roster-preview");
   const previewRosterButton = document.getElementById("preview-roster");
+  const statsImportForm = document.getElementById("import-stats-form");
+  const statsImportPanel = document.getElementById("import-stats");
+  const cancelStatsImport = document.getElementById("cancel-import-stats");
+  const statsFile = document.getElementById("stats-file");
+  const statsText = document.getElementById("stats-text");
+  const statsPreview = document.getElementById("stats-preview");
+  const previewStatsButton = document.getElementById("preview-stats");
   const staffForm = document.getElementById("add-staff-form");
   const staffPanel = document.getElementById("staff-tools");
   const staffList = document.getElementById("staff-list");
@@ -89,6 +96,7 @@
     selectedId: null,
     detail: null,
     importReady: false,
+    statsImportReady: false,
     role: null,
     player: null,
     csrf: null,
@@ -225,7 +233,7 @@
   function renderImportPreview(result) {
     const players = result.players || [];
     const skipped = result.skipped || [];
-    rosterPreview.replaceChildren(
+    rosterPreview.replaceChildren(...[
       el("strong", {}, `${players.length} player${players.length === 1 ? "" : "s"} ready`),
       players.length
         ? el(
@@ -252,12 +260,92 @@
               .join("; ")}${skipped.length > 3 ? "…" : ""}`,
           )
         : null,
-    );
+    ].filter(Boolean));
     rosterPreview.classList.remove("hidden");
     state.importReady = players.length > 0;
     previewRosterButton.textContent = state.importReady
       ? `Import ${players.length} player${players.length === 1 ? "" : "s"}`
       : "Preview roster";
+  }
+
+  function plural(count, word) {
+    return `${count} ${word}${count === 1 ? "" : "s"}`;
+  }
+
+  function resetStatsImportPreview() {
+    state.statsImportReady = false;
+    statsPreview.classList.add("hidden");
+    statsPreview.replaceChildren();
+    previewStatsButton.textContent = "Preview stats";
+  }
+
+  function statsSummary(stats) {
+    const parts = [];
+    if ("gp" in stats) parts.push(`${stats.gp} GP`);
+    if ("ab" in stats && "h" in stats) {
+      const avg = stats.ab ? (stats.h / stats.ab).toFixed(3).replace(/^0/, "") : "—";
+      parts.push(`${stats.h}-for-${stats.ab} (${avg})`);
+    }
+    if ("hr" in stats) parts.push(`${stats.hr} HR`);
+    if ("rbi" in stats) parts.push(`${stats.rbi} RBI`);
+    if ("e" in stats) parts.push(`${stats.e} E`);
+    return parts.join(" · ");
+  }
+
+  function renderStatsImportPreview(result) {
+    const matches = result.matches || [];
+    const unmatched = result.unmatched || [];
+    const skipped = result.skipped || [];
+    const columns = result.columns || [];
+    statsPreview.replaceChildren(...[
+      el("strong", {}, `${plural(matches.length, "player")} matched`),
+      columns.length ? el("p", { className: "meta" }, `Columns: ${columns.join(", ")}`) : null,
+      matches.length
+        ? el(
+            "ul",
+            { className: "import-list" },
+            matches.map((match) =>
+              el(
+                "li",
+                {},
+                el("span", {}, [jersey(match), match.player_name].filter(Boolean).join(" ")),
+                match.matched_by === "number"
+                  ? el("span", { className: "meta" }, ` (CSV: ${match.csv_name}, matched by #)`)
+                  : null,
+                match.rows > 1
+                  ? el("span", { className: "meta" }, ` (${match.rows} rows combined)`)
+                  : null,
+                el("div", { className: "meta" }, statsSummary(match.stats)),
+              ),
+            ),
+          )
+        : el("p", { className: "empty" }, "No rows match players on the roster."),
+      unmatched.length
+        ? el(
+            "p",
+            { className: "meta" },
+            `Not on roster (import them with Import roster first): ${unmatched
+              .slice(0, 5)
+              .map((row) => row.name)
+              .join(", ")}${unmatched.length > 5 ? "…" : ""}`,
+          )
+        : null,
+      skipped.length
+        ? el(
+            "p",
+            { className: "meta" },
+            `${plural(skipped.length, "row")} skipped: ${skipped
+              .slice(0, 3)
+              .map((item) => item.reason)
+              .join("; ")}${skipped.length > 3 ? "…" : ""}`,
+          )
+        : null,
+    ].filter(Boolean));
+    statsPreview.classList.remove("hidden");
+    state.statsImportReady = matches.length > 0;
+    previewStatsButton.textContent = state.statsImportReady
+      ? `Update ${plural(matches.length, "player")}`
+      : "Preview stats";
   }
 
   // Rating colors shared with the skill dots: red (weak) to green (strong).
@@ -2722,14 +2810,25 @@
   importPanel.addEventListener("toggle", () => {
     if (importPanel.open) {
       staffPanel.open = false;
+      statsImportPanel.open = false;
       if (teamPanel) teamPanel.open = false;
       rosterText.focus();
+    }
+  });
+
+  statsImportPanel.addEventListener("toggle", () => {
+    if (statsImportPanel.open) {
+      importPanel.open = false;
+      staffPanel.open = false;
+      if (teamPanel) teamPanel.open = false;
+      statsText.focus();
     }
   });
 
   staffPanel.addEventListener("toggle", () => {
     if (staffPanel.open) {
       importPanel.open = false;
+      statsImportPanel.open = false;
       if (teamPanel) teamPanel.open = false;
     }
   });
@@ -2738,6 +2837,7 @@
     teamPanel.addEventListener("toggle", () => {
       if (teamPanel.open) {
         importPanel.open = false;
+        statsImportPanel.open = false;
         staffPanel.open = false;
       }
     });
@@ -3116,6 +3216,65 @@
       await loadPlayers(imported.length ? imported[0].id : undefined);
     } catch (error) {
       resetImportPreview();
+      showError(error.message);
+    }
+  });
+
+  cancelStatsImport.addEventListener("click", () => {
+    statsImportForm.reset();
+    statsImportPanel.open = false;
+    resetStatsImportPreview();
+  });
+
+  statsText.addEventListener("input", resetStatsImportPreview);
+
+  statsFile.addEventListener("change", async () => {
+    resetStatsImportPreview();
+    const file = statsFile.files && statsFile.files[0];
+    if (!file) {
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith(".csv")) {
+      statsFile.value = "";
+      showError("Choose a .csv file");
+      return;
+    }
+    if (file.size > 200 * 1024) {
+      statsFile.value = "";
+      showError("Stats file must be 200 KB or smaller");
+      return;
+    }
+    try {
+      statsText.value = await file.text();
+    } catch (_error) {
+      statsFile.value = "";
+      showError("Could not read that file");
+    }
+  });
+
+  statsImportForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const text = statsText.value;
+    try {
+      if (!state.statsImportReady) {
+        const result = await request("/api/stats/import", {
+          method: "POST",
+          body: JSON.stringify({ text, preview: true }),
+        });
+        renderStatsImportPreview(result);
+        return;
+      }
+      const result = await request("/api/stats/import", {
+        method: "POST",
+        body: JSON.stringify({ text, preview: false }),
+      });
+      const updated = result.updated || [];
+      statsImportForm.reset();
+      statsImportPanel.open = false;
+      resetStatsImportPreview();
+      await loadPlayers(updated.includes(state.selectedId) ? state.selectedId : updated[0]);
+    } catch (error) {
+      resetStatsImportPreview();
       showError(error.message);
     }
   });
