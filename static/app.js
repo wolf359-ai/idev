@@ -407,11 +407,11 @@
   // Week-over-week change in a player's average rating, as shown in the roster.
   function weekChangeView(change) {
     if (change === null || change === undefined) {
-      return { cls: "flat", text: "\u2014", label: "No rating from a week ago" };
+      return { cls: "flat", text: "", label: "No rating from a week ago" };
     }
     const value = Number(change) || 0;
     if (Math.abs(value) < 0.05) {
-      return { cls: "flat", text: "\u2014", label: "No change since last week" };
+      return { cls: "flat", text: "", label: "No change since last week" };
     }
     const amount = Math.abs(value).toFixed(1);
     return value > 0
