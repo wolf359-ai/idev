@@ -9,6 +9,7 @@
   const sessionLabel = document.getElementById("session-label");
 
   const playerList = document.getElementById("player-list");
+  const rosterCount = document.getElementById("roster-count");
   const main = document.getElementById("main");
   const emptyState = document.getElementById("empty-state");
   const addForm = document.getElementById("add-player-form");
@@ -163,6 +164,9 @@
       const value = safeAttrs[key];
       if (key === "className") {
         node.className = value;
+      } else if (key === "style") {
+        // CSP blocks style attributes; CSSOM assignment is allowed.
+        node.style.cssText = value;
       } else if (key === "dataset") {
         Object.keys(value || {}).forEach((dataKey) => {
           node.dataset[dataKey] = value[dataKey];
@@ -189,7 +193,9 @@
     const safeAttrs = attrs && typeof attrs === "object" ? attrs : {};
     Object.keys(safeAttrs).forEach((key) => {
       const value = safeAttrs[key];
-      if (value !== undefined && value !== null && value !== false) {
+      if (key === "style") {
+        node.style.cssText = value;
+      } else if (value !== undefined && value !== null && value !== false) {
         node.setAttribute(key, String(value));
       }
     });
@@ -394,31 +400,58 @@
     return primary || secondary;
   }
 
+  // Week-over-week change in a player's average rating, as shown in the roster.
+  function weekChangeView(change) {
+    if (change === null || change === undefined) {
+      return { cls: "flat", text: "\u2014", label: "No rating from a week ago" };
+    }
+    const value = Number(change) || 0;
+    if (Math.abs(value) < 0.05) {
+      return { cls: "flat", text: "\u2014", label: "No change since last week" };
+    }
+    const amount = Math.abs(value).toFixed(1);
+    return value > 0
+      ? { cls: "up", text: `\u25B2 ${amount}`, label: `Up ${amount} since last week` }
+      : { cls: "down", text: `\u25BC ${amount}`, label: `Down ${amount} since last week` };
+  }
+
   function renderRoster() {
+    rosterCount.textContent = state.players.length ? ` \u00b7 ${state.players.length}` : "";
     playerList.replaceChildren();
     if (!state.players.length) {
       return;
     }
+    let activeButton = null;
     state.players.forEach((player) => {
-      const badge = player.number === null || player.number === undefined ? "—" : `#${player.number}`;
+      const badge = player.number === null || player.number === undefined ? "\u2014" : `#${player.number}`;
+      const change = weekChangeView(player.week_change);
+      const active = player.id === state.selectedId;
       const button = el(
         "button",
         {
           type: "button",
-          className: "player-btn" + (player.id === state.selectedId ? " active" : ""),
+          className: "player-btn" + (active ? " active" : ""),
+          "aria-current": active ? "true" : undefined,
+          title: `${player.name}${player.position ? ` \u00b7 ${player.position}` : ""} \u2014 ${change.label}`,
           onClick: () => selectPlayer(player.id),
         },
-        el("span", { className: "player-dot" }),
+        el("span", { className: "player-num" }, badge),
+        el("span", { className: "player-name" }, player.name),
         el(
           "span",
-          { className: "player-id" },
-          el("strong", {}, player.name),
-          el("span", { className: "meta" }, player.position || "—"),
+          { className: `player-delta ${change.cls}` },
+          el("span", { "aria-hidden": "true" }, change.text),
+          el("span", { className: "sr-only" }, change.label),
         ),
-        el("span", { className: "player-score" }, badge),
       );
+      if (active) {
+        activeButton = button;
+      }
       playerList.append(el("li", {}, button));
     });
+    if (activeButton && playerList.scrollWidth > playerList.clientWidth) {
+      activeButton.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
   }
 
   async function loadStaff() {
@@ -1359,7 +1392,7 @@
 
     const metrics = computeMetrics(player);
     const hero = renderHero(player, metrics);
-    const statTiles = renderStatTiles(metrics);
+    const statTiles = renderGameStats(metrics);
 
     const skills = el(
       "section",
@@ -1535,7 +1568,7 @@
       }
       return null;
     };
-    const avgTrend = computeAvgTrend(weeklyAvgSeries(player));
+    const avgTrend = computeAvgTrend(weeklyAvgSeries(player), player);
     return { rated: rated.length, total: items.length, avg, overall, top, low, spark, avgTrend, findStat };
   }
 
@@ -1574,10 +1607,19 @@
     return series.slice(-10);
   }
 
-  // Compare the two most recent weekly averages to derive a direction + percent.
-  function computeAvgTrend(series) {
+  // Direction + percent for the Avg Rating tile. Uses the server's 7-day
+  // comparison (the same number as the roster) when available, else the two
+  // most recent weekly averages.
+  function computeAvgTrend(series, player) {
     if (!series || series.length < 2) {
       return { series: series || [], direction: "flat", pct: 0 };
+    }
+    if (player && player.week_change !== null && player.week_change !== undefined) {
+      const change = Number(player.week_change) || 0;
+      const prior = Number(player.week_prior_avg) || 0;
+      const direction = change >= 0.05 ? "up" : change <= -0.05 ? "down" : "flat";
+      const pct = direction === "flat" || prior <= 0 ? 0 : Math.round((change / prior) * 100);
+      return { series, direction, pct };
     }
     const last = series[series.length - 1];
     const prev = series[series.length - 2];
@@ -1816,15 +1858,15 @@
               "\u00d7",
             )
           : null;
-        // Each note collapses to a single clickable line; the full text opens
-        // in a read-only modal. The line highlights on hover.
+        // Each note shows its date and up to two lines of text; hovering shows
+        // the whole note and clicking opens it in a read-only modal.
         const preview = (note.text || "").replace(/\s+/g, " ").trim() || "Untitled note";
         const openBtn = el(
           "button",
           {
             type: "button",
             className: "note-open",
-            title: "View note",
+            title: preview,
             onClick: () => openNoteView(note),
           },
           el("span", { className: "note-when meta" }, formatWhen(note.created_at)),
@@ -2235,7 +2277,64 @@
     if (!tiles.length) {
       return null;
     }
-    return el("div", { className: "tiles" }, tiles);
+    return el("div", { className: "tiles game-stats-tiles", id: "game-stats-tiles" }, tiles);
+  }
+
+  const GAME_STATS_KEY = "idev.gameStatsOpen";
+
+  function gameStatsOpen() {
+    try {
+      return window.localStorage.getItem(GAME_STATS_KEY) === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // The GameChanger tiles are rarely needed, so they sit closed behind a
+  // one-line toggle that remembers its state on this computer.
+  function renderGameStats(m) {
+    const tiles = renderStatTiles(m);
+    if (!tiles) {
+      return null;
+    }
+    const chevron = svgEl(
+      "svg",
+      { class: "game-stats-chevron", viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" },
+      svgEl("path", {
+        d: "M6 9 L12 15 L18 9",
+        fill: "none",
+        stroke: "currentColor",
+        "stroke-width": "2.2",
+        "stroke-linecap": "round",
+        "stroke-linejoin": "round",
+      }),
+    );
+    const stateText = el("span", { className: "game-stats-state" });
+    const toggle = el(
+      "button",
+      { type: "button", className: "game-stats-toggle", "aria-controls": tiles.id },
+      el("span", { className: "game-stats-title" }, "Game stats (GameChanger)"),
+      stateText,
+      chevron,
+    );
+    const section = el("section", { className: "game-stats", "aria-label": "Game stats" }, toggle, tiles);
+    const apply = (open) => {
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      stateText.textContent = open ? "Hide" : "Show";
+      tiles.hidden = !open;
+      section.classList.toggle("open", open);
+    };
+    toggle.addEventListener("click", () => {
+      const open = toggle.getAttribute("aria-expanded") !== "true";
+      apply(open);
+      try {
+        window.localStorage.setItem(GAME_STATS_KEY, open ? "1" : "0");
+      } catch (error) {
+        // Private browsing can block storage; the toggle still works this visit.
+      }
+    });
+    apply(gameStatsOpen());
+    return section;
   }
 
   function statsGroup(title, items) {
@@ -2317,6 +2416,10 @@
   async function loadDetail(playerId) {
     state.detail = await request(`/api/players/${encodeURIComponent(playerId)}`);
     state.selectedId = playerId;
+    const listed = state.players.find((player) => player.id === playerId);
+    if (listed) {
+      listed.week_change = state.detail.week_change;
+    }
     // Players have no roster list; coaches and staff keep the active row in sync.
     if (state.role !== "player") {
       renderRoster();

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>idev — softball player development</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="/static/logo.png">
 </head>
 <body>
   <section id="login-view" class="login-view">
@@ -60,10 +61,8 @@
       </div>
     </header>
 
-    <aside class="roster" aria-label="Players">
-      <div class="roster-head">
-        <h2>Players</h2>
-      </div>
+    <aside class="roster" aria-labelledby="roster-title">
+      <h2 class="roster-head" id="roster-title">Roster<span id="roster-count"></span></h2>
       <ul id="player-list" class="player-list"></ul>
     </aside>
 
