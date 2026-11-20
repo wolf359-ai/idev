@@ -1205,18 +1205,6 @@
     return row;
   }
 
-  function deltaLabel(delta) {
-    if (delta === null || delta === undefined || delta === 0) {
-      return el("span", { className: "meta" }, "No change yet");
-    }
-    const up = delta > 0;
-    return el(
-      "span",
-      { className: "delta " + (up ? "up" : "down") },
-      `${up ? "+" : ""}${delta} from first rating`,
-    );
-  }
-
   // Radar (spider) chart of all skills vs the player's current ratings.
   function renderRadar(progress) {
     const items = (progress || []).map((item) => ({
@@ -1414,7 +1402,7 @@
         (player.progress || []).map((item) =>
           el(
             "article",
-            { className: "skill" },
+            { className: "skill", "data-skill-id": item.skill_id },
             el(
               "div",
               { className: "skill-main" },
@@ -1440,50 +1428,7 @@
       el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
     );
 
-    const activity = player.activity || [];
-    const activityBlock = activity.length
-      ? el(
-          "div",
-          { className: "activity" },
-          el("h3", { className: "activity-title" }, "Drill activity"),
-          el(
-            "ul",
-            { className: "activity-list" },
-            activity.map((entry) =>
-              el(
-                "li",
-                { className: "activity-item" },
-                el("span", { className: "activity-text" }, entry.text || ""),
-                el("span", { className: "activity-when meta" }, formatWhen(entry.created_at)),
-              ),
-            ),
-          ),
-        )
-      : null;
-
-    const progress = el(
-      "section",
-      { className: "card progress-card" },
-      el("h2", {}, "Progress"),
-      rated.length
-        ? rated.map((item) =>
-            el(
-              "div",
-              { className: "progress-item" },
-              el("strong", {}, item.skill_name || "Skill"),
-              deltaLabel(item.delta),
-              el(
-                "div",
-                { className: "history" },
-                (item.history || [])
-                  .map((entry) => `${entry.score} (${formatWhen(entry.created_at)})`)
-                  .join(" → ") || "No history",
-              ),
-            ),
-          )
-        : el("p", { className: "empty" }, "Rate a skill to start a progress history."),
-      activityBlock,
-    );
+    const progress = renderProgressCard(player, rated, readOnly);
 
     // Coach notes now live in the Focus Area tile (with modal entry), so the
     // standalone Notes card is gone to avoid duplicating the same record.
@@ -1496,6 +1441,414 @@
     );
 
     main.replaceChildren(hero, dash);
+  }
+
+  const PROGRESS_STATUS = {
+    up: { label: "Improved", rank: 0 },
+    down: { label: "Dropped", rank: 1 },
+    steady: { label: "Steady", rank: 2 },
+    new: { label: "New", rank: 3 },
+  };
+
+  const PROGRESS_COLUMNS = [
+    { key: "skill", label: "Skill", value: (r) => r.name.toLowerCase() },
+    { key: "last", label: "Last rated", value: (r) => r.lastAt },
+    { key: "current", label: "Current", numeric: true, value: (r) => r.current },
+    { key: "previous", label: "Previous", numeric: true, value: (r) => (r.previous === null ? -1 : r.previous) },
+    { key: "change", label: "Change", numeric: true, value: (r) => (r.change === null ? -99 : r.change) },
+    { key: "since", label: "Since first", numeric: true, value: (r) => (r.since === null ? -99 : r.since) },
+    { key: "count", label: "Ratings", numeric: true, value: (r) => r.count },
+    { key: "status", label: "Status", value: (r) => PROGRESS_STATUS[r.status].rank },
+  ];
+
+  // Sort, search, filter and expanded rows survive re-renders and player
+  // switches so a coach can scan the whole roster the same way.
+  const progressView = { key: "status", dir: 1, query: "", filter: null, open: new Set() };
+
+  function roundHalf(value) {
+    return Math.round(value * 10) / 10;
+  }
+
+  function formatStamp(value) {
+    const date = new Date(value);
+    if (!value || Number.isNaN(date.getTime())) {
+      return "—";
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function progressRows(rated) {
+    return rated.map((item) => {
+      const history = (item.history || []).filter((entry) => typeof entry.score === "number");
+      const last = history[history.length - 1];
+      const prev = history[history.length - 2];
+      const change = prev ? roundHalf(last.score - prev.score) : null;
+      const since = history.length > 1 ? roundHalf(last.score - history[0].score) : null;
+      let status = "new";
+      if (change !== null) {
+        status = change > 0 ? "up" : change < 0 ? "down" : "steady";
+      }
+      return {
+        id: item.skill_id,
+        name: item.skill_name || "Skill",
+        current: Number(item.current) || 0,
+        previous: prev ? prev.score : null,
+        change,
+        since,
+        count: history.length,
+        lastAt: last ? last.created_at || "" : "",
+        status,
+        history,
+      };
+    });
+  }
+
+  function changeCell(value) {
+    if (value === null) {
+      return el("span", { className: "empty-cell" }, "—");
+    }
+    if (value === 0) {
+      return el("span", { className: "chg flat" }, "0");
+    }
+    return el("span", { className: value > 0 ? "chg up" : "chg down" }, `${value > 0 ? "+" : ""}${value}`);
+  }
+
+  function progressPill(status) {
+    return el("span", { className: `prog-pill ${status}` }, PROGRESS_STATUS[status].label);
+  }
+
+  function renderProgressCard(player, rated, readOnly) {
+    const rows = progressRows(rated);
+    const tableHost = el("div", { className: "prog-body" });
+    const filterHost = el("div", { className: "prog-filter" });
+    const search = el("input", {
+      type: "search",
+      className: "prog-search",
+      placeholder: "Search",
+      "aria-label": "Search progress",
+      value: progressView.query,
+      onInput: (event) => {
+        progressView.query = event.target.value;
+        draw();
+      },
+    });
+    const improved = rows.filter((r) => r.status === "up").length;
+    const dropped = rows.filter((r) => r.status === "down").length;
+
+    function rateSkill(row) {
+      const target = main.querySelector(`.skill[data-skill-id="${CSS.escape(row.id)}"]`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("flash");
+      setTimeout(() => target.classList.remove("flash"), 1400);
+      const dot = target.querySelector("button.dot");
+      if (dot) dot.focus({ preventScroll: true });
+    }
+
+    function openMenu(row, tr, x, y) {
+      const isOpen = progressView.open.has(row.id);
+      const groups = [
+        {
+          label: "Drill down",
+          items: [
+            {
+              label: isOpen ? "Hide rating history" : `Show rating history (${row.count})`,
+              icon: "history",
+              action: () => {
+                if (isOpen) progressView.open.delete(row.id);
+                else progressView.open.add(row.id);
+                draw();
+              },
+            },
+            {
+              label: `Show only “${PROGRESS_STATUS[row.status].label}”`,
+              icon: "filter",
+              action: () => {
+                progressView.filter = row.status;
+                draw();
+              },
+            },
+          ],
+        },
+      ];
+      if (progressView.filter || progressView.query) {
+        groups[0].items.push({
+          label: "Clear filter and search",
+          icon: "clear",
+          action: () => {
+            progressView.filter = null;
+            progressView.query = "";
+            search.value = "";
+            draw();
+          },
+        });
+      }
+      if (!readOnly) {
+        groups.push({
+          label: "Rate",
+          items: [{ label: "Rate this skill", icon: "rate", action: () => rateSkill(row) }],
+        });
+      }
+      const sub = [`Current ${row.current} / 5`, row.since !== null ? `${row.since > 0 ? "+" : ""}${row.since} since first` : ""]
+        .filter(Boolean)
+        .join(" · ");
+      showContextMenu({ title: row.name, sub, groups, row: tr, x, y });
+    }
+
+    function draw() {
+      closePlayerMenu();
+      const query = progressView.query.trim().toLowerCase();
+      const column = PROGRESS_COLUMNS.find((c) => c.key === progressView.key) || PROGRESS_COLUMNS[0];
+      const visible = rows
+        .filter((r) => !progressView.filter || r.status === progressView.filter)
+        .filter(
+          (r) =>
+            !query ||
+            r.name.toLowerCase().includes(query) ||
+            PROGRESS_STATUS[r.status].label.toLowerCase().includes(query),
+        )
+        .sort((a, b) => {
+          const av = column.value(a);
+          const bv = column.value(b);
+          if (av < bv) return -progressView.dir;
+          if (av > bv) return progressView.dir;
+          return a.name.localeCompare(b.name);
+        });
+
+      filterHost.replaceChildren(
+        ...(progressView.filter
+          ? [el(
+              "button",
+              {
+                type: "button",
+                className: "prog-chip",
+                onClick: () => {
+                  progressView.filter = null;
+                  draw();
+                },
+              },
+              `Showing: ${PROGRESS_STATUS[progressView.filter].label}`,
+              el("span", { "aria-hidden": "true" }, " ✕"),
+              el("span", { className: "sr-only" }, " (clear)"),
+            )]
+          : []),
+      );
+
+      const head = el(
+        "tr",
+        {},
+        PROGRESS_COLUMNS.map((c) => {
+          const active = progressView.key === c.key;
+          return el(
+            "th",
+            {
+              scope: "col",
+              className: `pc-${c.key}${c.numeric ? " num" : ""}`,
+              "aria-sort": active ? (progressView.dir > 0 ? "ascending" : "descending") : "none",
+            },
+            el(
+              "button",
+              {
+                type: "button",
+                className: "th-sort",
+                onClick: () => {
+                  progressView.dir = active ? -progressView.dir : c.numeric ? -1 : 1;
+                  progressView.key = c.key;
+                  draw();
+                },
+              },
+              c.label,
+              el("span", { className: "sort-mark", "aria-hidden": "true" }, active ? (progressView.dir > 0 ? "▲" : "▼") : ""),
+            ),
+          );
+        }),
+        el("th", { scope: "col", className: "pc-menu" }, el("span", { className: "sr-only" }, "Actions")),
+      );
+
+      const body = visible.flatMap((r) => {
+        const isOpen = progressView.open.has(r.id);
+        const tr = el(
+          "tr",
+          {
+            tabindex: "0",
+            className: isOpen ? "expanded" : "",
+            "aria-haspopup": "menu",
+            "aria-expanded": isOpen ? "true" : "false",
+            "data-skill-id": r.id,
+            onContextmenu: (event) => {
+              event.preventDefault();
+              openMenu(r, tr, event.clientX, event.clientY);
+            },
+            // Touch screens have no right-click, so a tap opens the menu.
+            onClick: (event) => {
+              if (window.matchMedia("(hover: none)").matches) {
+                openMenu(r, tr, event.clientX, event.clientY);
+              }
+            },
+            onDblclick: () => {
+              if (isOpen) progressView.open.delete(r.id);
+              else progressView.open.add(r.id);
+              draw();
+            },
+            onKeydown: (event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                const box = tr.getBoundingClientRect();
+                openMenu(r, tr, box.left + 24, box.bottom);
+              }
+            },
+          },
+          el(
+            "td",
+            { className: "pc-skill" },
+            el("span", { className: "twisty", "aria-hidden": "true" }, isOpen ? "▾" : "▸"),
+            el("strong", {}, r.name),
+          ),
+          el("td", { className: "pc-last mono" }, formatStamp(r.lastAt)),
+          el("td", { className: "pc-current num mono" }, el("span", { className: "score-chip", "data-score": String(Math.round(r.current)) }, String(r.current))),
+          el("td", { className: "pc-previous num mono" }, r.previous === null ? el("span", { className: "empty-cell" }, "—") : String(r.previous)),
+          el("td", { className: "pc-change num mono" }, changeCell(r.change)),
+          el("td", { className: "pc-since num mono" }, changeCell(r.since)),
+          el("td", { className: "pc-count num mono" }, String(r.count)),
+          el("td", { className: "pc-status" }, progressPill(r.status)),
+          el(
+            "td",
+            { className: "pc-menu" },
+            el(
+              "button",
+              {
+                type: "button",
+                className: "row-menu-btn",
+                "aria-label": `Drill down into ${r.name}`,
+                "aria-haspopup": "menu",
+                tabindex: "-1",
+                onClick: (event) => {
+                  event.stopPropagation();
+                  const box = event.currentTarget.getBoundingClientRect();
+                  openMenu(r, tr, box.right, box.bottom);
+                },
+              },
+              "⋯",
+            ),
+          ),
+        );
+        if (!isOpen) {
+          return [tr];
+        }
+        const subs = r.history
+          .map((entry, index) => {
+            const before = index ? r.history[index - 1].score : null;
+            return { entry, index, change: before === null ? null : roundHalf(entry.score - before) };
+          })
+          .reverse()
+          .map(({ entry, index, change }) =>
+            el(
+              "tr",
+              { className: "sub-row" },
+              el("td", { className: "pc-skill" }, el("span", { className: "sub-label" }, `Rating ${index + 1} of ${r.count}`)),
+              el("td", { className: "pc-last mono" }, formatStamp(entry.created_at)),
+              el("td", { className: "pc-current num mono" }, String(entry.score)),
+              el(
+                "td",
+                { className: "pc-previous num mono" },
+                index ? String(r.history[index - 1].score) : el("span", { className: "empty-cell" }, "—"),
+              ),
+              el("td", { className: "pc-change num mono" }, changeCell(change)),
+              el("td", { className: "pc-since num mono" }, changeCell(index ? roundHalf(entry.score - r.history[0].score) : null)),
+              el("td", { className: "pc-count num mono" }, ""),
+              el("td", { className: "pc-status" }, ""),
+              el("td", { className: "pc-menu" }, ""),
+            ),
+          );
+        return [tr, ...subs];
+      });
+
+      const activity = (player.activity || []).filter(
+        (entry) => !query || (entry.text || "").toLowerCase().includes(query),
+      );
+
+      tableHost.replaceChildren(
+        rows.length
+          ? el(
+              "p",
+              { className: "prog-hint" },
+              el("span", { className: "hint-mouse" }, "Right-click a skill (or use ⋯) to drill into its rating history."),
+              el("span", { className: "hint-touch" }, "Tap a skill to drill into its rating history."),
+              " Click a column to sort.",
+            )
+          : "",
+        rows.length
+          ? el(
+              "div",
+              { className: "table-wrap prog-wrap" },
+              el(
+                "table",
+                { className: "data-table prog-table" },
+                el("thead", {}, head),
+                el(
+                  "tbody",
+                  {},
+                  body.length
+                    ? body
+                    : el("tr", {}, el("td", { className: "prog-none", colspan: String(PROGRESS_COLUMNS.length + 1) }, "No skills match.")),
+                ),
+              ),
+            )
+          : el("p", { className: "empty" }, "Rate a skill to start a progress history."),
+        (player.activity || []).length
+          ? el(
+              "div",
+              { className: "activity" },
+              el("h3", { className: "activity-title" }, "Drill activity"),
+              el(
+                "div",
+                { className: "table-wrap prog-wrap log-wrap" },
+                el(
+                  "table",
+                  { className: "data-table prog-table log-table" },
+                  el(
+                    "thead",
+                    {},
+                    el("tr", {}, el("th", { scope: "col", className: "pc-last" }, "Timestamp"), el("th", { scope: "col" }, "Activity")),
+                  ),
+                  el(
+                    "tbody",
+                    {},
+                    activity.length
+                      ? activity.map((entry) =>
+                          el(
+                            "tr",
+                            {},
+                            el("td", { className: "pc-last mono" }, formatStamp(entry.created_at)),
+                            el("td", { className: "activity-text" }, entry.text || ""),
+                          ),
+                        )
+                      : el("tr", {}, el("td", { className: "prog-none", colspan: "2" }, "No activity matches.")),
+                  ),
+                ),
+              ),
+            )
+          : "",
+      );
+    }
+
+    draw();
+
+    const summary = rows.length
+      ? `${rows.length} rated · ${improved} improved · ${dropped} dropped since previous rating`
+      : "";
+    return el(
+      "section",
+      { className: "card progress-card" },
+      el(
+        "div",
+        { className: "prog-head" },
+        el("div", { className: "prog-titles" }, el("h2", {}, "Progress"), summary ? el("p", { className: "meta" }, summary) : null),
+        el("div", { className: "prog-tools" }, filterHost, rows.length ? search : null),
+      ),
+      tableHost,
+    );
   }
 
   // GameChanger stats live in a modal opened from the player card. Admins get
@@ -2749,6 +3102,10 @@
     view: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
     key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
     resetLogin: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+    filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
+    clear: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    rate: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     delete: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
   };
 
@@ -2917,11 +3274,6 @@
   }
 
   function openPlayerMenu(player, row, x, y) {
-    closePlayerMenu();
-    const run = (action) => () => {
-      closePlayerMenu();
-      action();
-    };
     const loginItems = player.has_login
       ? [
           { label: "Reset login", icon: "resetLogin", action: () => managePlayerLogin(player) },
@@ -2952,21 +3304,40 @@
     const details = [player.position, player.grad_year ? `Class of ${player.grad_year}` : ""]
       .filter(Boolean)
       .join(" · ");
-
-    const node = el(
-      "div",
-      { className: "context-menu", role: "menu", "aria-label": player.name },
-      el(
-        "div",
-        { className: "context-menu-head" },
+    showContextMenu({
+      title: player.name,
+      sub: details,
+      badge:
         player.number !== null && player.number !== undefined && player.number !== ""
           ? el("span", { className: "num-badge small" }, String(player.number))
           : null,
+      groups,
+      row,
+      x,
+      y,
+      // Inside the dialog so it renders in the same top layer as the Admin window.
+      host: adminModal,
+    });
+  }
+
+  function showContextMenu({ title, sub, badge, groups, row, x, y, host }) {
+    closePlayerMenu();
+    const run = (action) => () => {
+      closePlayerMenu();
+      action();
+    };
+    const node = el(
+      "div",
+      { className: "context-menu", role: "menu", "aria-label": title },
+      el(
+        "div",
+        { className: "context-menu-head" },
+        badge || null,
         el(
           "div",
           { className: "context-menu-who" },
-          el("div", { className: "context-menu-name" }, player.name),
-          details ? el("div", { className: "context-menu-sub" }, details) : null,
+          el("div", { className: "context-menu-name" }, title),
+          sub ? el("div", { className: "context-menu-sub" }, sub) : null,
         ),
       ),
       groups.flatMap((group, index) => [
@@ -2987,8 +3358,7 @@
         ),
       ]),
     );
-    // Inside the dialog so it renders in the same top layer as the Admin window.
-    (adminModal || document.body).append(node);
+    (host || document.body).append(node);
     const box = node.getBoundingClientRect();
     node.style.left = `${Math.max(8, Math.min(x, window.innerWidth - box.width - 8))}px`;
     node.style.top = `${Math.max(8, Math.min(y, window.innerHeight - box.height - 8))}px`;
