@@ -420,13 +420,14 @@
   }
 
   function renderRoster() {
-    rosterCount.textContent = state.players.length ? ` \u00b7 ${state.players.length}` : "";
+    const roster = teamPlayers();
+    rosterCount.textContent = roster.length ? ` \u00b7 ${roster.length}` : "";
     playerList.replaceChildren();
-    if (!state.players.length) {
+    if (!roster.length) {
       return;
     }
     let activeButton = null;
-    state.players.forEach((player) => {
+    roster.forEach((player) => {
       const badge = player.number === null || player.number === undefined ? "\u2014" : `#${player.number}`;
       const change = weekChangeView(player.week_change);
       const active = player.id === state.selectedId;
@@ -486,7 +487,7 @@
         : member.has_password
           ? "Login: their name"
           : "No login";
-      const meta = [details, loginBit].filter(Boolean).join(" · ");
+      const meta = [details, loginBit, staffTeamsText(member)].filter(Boolean).join(" · ");
       const info = el(
         "div",
         { className: "staff-info" },
@@ -733,7 +734,7 @@
 
       const controlRow = el("div", { className: "staff-manage-controls" }, ...controls);
       staffManageList.append(
-        el("li", { className: "staff-manage-item" }, info, identityRow, controlRow),
+        el("li", { className: "staff-manage-item" }, info, identityRow, staffTeamsRow(member), controlRow),
       );
     });
   }
@@ -779,6 +780,9 @@
     } else {
       setBadge(alarmBadge, 0);
       setBadge(messageBadge, 0);
+    }
+    if (state.role) {
+      renderSide();
     }
   }
 
@@ -1074,9 +1078,17 @@
     if (!brandTeam) {
       return;
     }
-    const team = state.team || {};
+    const picked = shell.teams.filter((t) => shell.teamSel.has(t.id));
+    let team = state.team || {};
+    if (picked.length === 1) {
+      team = picked[0];
+    } else if (shell.teams.length > 1) {
+      team = { name: picked.length ? `${picked.length} teams` : `All teams (${shell.teams.length})` };
+    } else if (shell.teams.length === 1) {
+      team = shell.teams[0];
+    }
     const when = [team.season, team.year].filter(Boolean).join(" ");
-    const label = [team.name, when].filter(Boolean).join(" \u00b7 ");
+    const label = [team.name, team.sport, when].filter(Boolean).join(" \u00b7 ");
     if (label) {
       brandTeam.textContent = label;
       brandTeam.classList.remove("hidden");
@@ -1097,6 +1109,10 @@
       .filter(
         (m) => typeof m.role === "string" && m.role.trim().toLowerCase() === "head coach",
       )
+      .filter((m) => {
+        const ids = Array.isArray(m.team_ids) ? m.team_ids : [];
+        return !ids.length || !shell.teamSel.size || ids.some((id) => shell.teamSel.has(id));
+      })
       .sort((a, b) => {
         const la = lastName(a.name);
         const lb = lastName(b.name);
@@ -1121,7 +1137,7 @@
     }
     const coaches = headCoachNames();
     const coachText = coaches.length ? coaches.join(", ") : "Not set";
-    brandMeta.textContent = `Team Roster: ${state.players.length} \u00b7 Head Coach: ${coachText}`;
+    brandMeta.textContent = `Team Roster: ${teamPlayers().length} \u00b7 Head Coach: ${coachText}`;
     brandMeta.classList.remove("hidden");
   }
 
@@ -1129,35 +1145,51 @@
     if (!teamSummary) {
       return;
     }
-    teamSummary.replaceChildren();
-    const team = state.team || {};
-    const rows = [
-      ["Team", team.name],
-      ["Year", team.year],
-      ["Season", team.season],
-      ["Age bracket", team.age_bracket],
-      ["Years of play", team.play_year],
-    ];
-    const hasAny = rows.some(([, value]) => value);
-    if (!hasAny) {
-      teamSummary.append(
-        el("div", { className: "team-empty meta" }, "No team information yet."),
-      );
+    if (!shell.teams.length) {
+      fill(teamSummary, el("div", { className: "team-empty meta" }, "No teams yet."));
       return;
     }
-    rows.forEach(([label, value]) => {
-      teamSummary.append(el("dt", {}, label));
-      teamSummary.append(el("dd", { className: value ? "" : "meta" }, value || "Not set"));
-    });
+    fill(
+      teamSummary,
+      shell.teams.map((team) => {
+        const details = [
+          [team.season, team.year].filter(Boolean).join(" "),
+          team.age_bracket,
+          team.play_year ? `Years of play: ${team.play_year}` : "",
+          plural(team.player_count || 0, "player"),
+        ].filter(Boolean);
+        return el(
+          "div",
+          { className: "team-row" },
+          el(
+            "div",
+            {},
+            el("div", {}, el("span", { className: "team-row-name" }, team.name), el("span", { className: "sport-tag" }, team.sport)),
+            el("div", { className: "meta" }, details.join(" \u00b7 ")),
+          ),
+          el(
+            "div",
+            { className: "team-row-actions" },
+            el("button", { type: "button", className: "btn btn-sm", onClick: () => openTeamModal(team) }, "Edit"),
+            shell.teams.length > 1
+              ? el("button", { type: "button", className: "btn btn-sm btn-danger", onClick: () => removeTeam(team) }, "Delete")
+              : null,
+          ),
+        );
+      }),
+    );
   }
 
-  function openTeamModal() {
-    const team = state.team || {};
-    document.getElementById("team-name").value = team.name || "";
-    document.getElementById("team-year-input").value = team.year || "";
-    document.getElementById("team-season").value = team.season || "";
-    document.getElementById("team-age-bracket").value = team.age_bracket || "";
-    document.getElementById("team-play-year").value = team.play_year || "";
+  function openTeamModal(team) {
+    const current = team || {};
+    shell.editingTeamId = team ? team.id : null;
+    document.getElementById("team-modal-title").textContent = team ? `Edit ${team.name}` : "Add team";
+    document.getElementById("team-name").value = current.name || "";
+    document.getElementById("team-sport").value = current.sport || "Softball";
+    document.getElementById("team-year-input").value = current.year || "";
+    document.getElementById("team-season").value = current.season || "";
+    document.getElementById("team-age-bracket").value = current.age_bracket || "";
+    document.getElementById("team-play-year").value = current.play_year || "";
     if (typeof teamModal.showModal === "function") {
       teamModal.showModal();
     } else {
@@ -2718,12 +2750,14 @@
     const data = await request("/api/players");
     state.players = data.players || [];
     const nextId = preferredId || state.selectedId;
+    const pool = teamPlayers().length ? teamPlayers() : state.players;
     const exists = state.players.some((player) => player.id === nextId);
-    state.selectedId = exists ? nextId : (state.players[0] && state.players[0].id) || null;
+    state.selectedId = exists ? nextId : (pool[0] && pool[0].id) || null;
     renderRoster();
     renderBrandMeta();
     renderPlayerLogins();
     renderManagePlayers();
+    renderShell();
     if (state.selectedId) {
       await loadDetail(state.selectedId);
     } else {
@@ -2744,6 +2778,9 @@
       renderRoster();
     }
     renderDetail();
+    if (shell.view === "home") {
+      renderShell();
+    }
   }
 
   async function selectPlayer(playerId) {
@@ -3056,6 +3093,7 @@
     editPlayerForm.elements.number.value =
       p.number === null || p.number === undefined ? "" : p.number;
     editPlayerForm.elements.grad_year.value = p.grad_year || "";
+    editPlayerForm.elements.team_id.value = p.team_id || (shell.teams[0] && shell.teams[0].id) || "";
     if (typeof editPlayerModal.showModal === "function") {
       editPlayerModal.showModal();
     } else {
@@ -3529,13 +3567,14 @@
     state.team = {};
     state.alarms = [];
     state.messages = [];
+    state.staffName = "";
+    stopShell();
     renderBrandTeam();
     showCommIcons();
     renderCommBadges();
     document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
     appView.classList.add("hidden");
-    appView.classList.remove("role-player");
-    appView.classList.remove("no-admin");
+    appView.classList.remove("role-player", "no-admin", "collapsed", "menu-open");
     loginView.classList.remove("hidden");
   }
 
@@ -3553,6 +3592,7 @@
     state.player = session.player || null;
     state.accessLevel = session.access_level || "";
     state.can = session.can || { admin: false, content: false, view_all: false };
+    state.staffName = session.staff_name || "";
     loginError.textContent = "";
     loginView.classList.add("hidden");
     appView.classList.remove("hidden");
@@ -3582,6 +3622,7 @@
     showCommIcons();
     loadAlarms().catch(() => {});
     loadMessages().catch(() => {});
+    startShell();
   }
 
   async function doLogin(body) {
@@ -3702,6 +3743,8 @@
   // Add-player modal open/close.
   function openAddPlayerModal() {
     addForm.reset();
+    const picked = shell.teams.filter((t) => shell.teamSel.has(t.id));
+    if (picked.length === 1) addForm.elements.team_id.value = picked[0].id;
     if (typeof addPlayerModal.showModal === "function") {
       addPlayerModal.showModal();
     } else {
@@ -3733,6 +3776,7 @@
 
   function openStaffModal() {
     staffForm.reset();
+    renderStaffTeamChecks(staffTeamsBox, []);
     if (typeof staffModal.showModal === "function") {
       staffModal.showModal();
     } else {
@@ -3787,7 +3831,7 @@
   }
 
   if (openTeamBtn) {
-    openTeamBtn.addEventListener("click", openTeamModal);
+    openTeamBtn.addEventListener("click", () => openTeamModal(null));
   }
   if (cancelTeam) {
     cancelTeam.addEventListener("click", closeTeamModal);
@@ -3803,18 +3847,25 @@
     teamForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const form = new FormData(teamForm);
+      const body = {
+        name: form.get("name"),
+        sport: form.get("sport"),
+        year: form.get("year"),
+        season: form.get("season"),
+        age_bracket: form.get("age_bracket"),
+        play_year: form.get("play_year"),
+      };
       try {
-        await request("/api/team", {
-          method: "PUT",
-          body: JSON.stringify({
-            name: form.get("name"),
-            year: form.get("year"),
-            season: form.get("season"),
-            age_bracket: form.get("age_bracket"),
-            play_year: form.get("play_year"),
-          }),
-        });
+        if (shell.editingTeamId) {
+          await request(`/api/teams/${encodeURIComponent(shell.editingTeamId)}`, {
+            method: "PUT",
+            body: JSON.stringify(body),
+          });
+        } else {
+          await request("/api/teams", { method: "POST", body: JSON.stringify(body) });
+        }
         closeTeamModal();
+        await loadTeams();
         await loadTeam();
       } catch (error) {
         showError(error.message);
@@ -3882,9 +3933,11 @@
             secondary_position: form.get("secondary_position"),
             grad_year: form.get("grad_year"),
             number: form.get("number"),
+            team_id: form.get("team_id") || undefined,
           }),
         });
         closeEditPlayer();
+        loadTeams().catch(() => {});
         await loadPlayers();
       } catch (error) {
         showError(error.message);
@@ -3998,6 +4051,7 @@
       role: form.get("role"),
       contact: form.get("contact"),
       access_level: form.get("access_level"),
+      team_ids: form.getAll("team_ids"),
     };
     const username = (form.get("username") || "").trim();
     const password = (form.get("password") || "").trim();
@@ -4055,20 +4109,21 @@
       if (!state.importReady) {
         const result = await request("/api/players/import", {
           method: "POST",
-          body: JSON.stringify({ text, preview: true }),
+          body: JSON.stringify({ text, preview: true, team_id: importForm.elements.team_id.value || undefined }),
         });
         renderImportPreview(result);
         return;
       }
       const result = await request("/api/players/import", {
         method: "POST",
-        body: JSON.stringify({ text, preview: false }),
+        body: JSON.stringify({ text, preview: false, team_id: importForm.elements.team_id.value || undefined }),
       });
       const imported = result.imported || [];
       importForm.reset();
       resetImportPreview();
       closeAdminModal();
       await loadPlayers(imported.length ? imported[0].id : undefined);
+      loadTeams().catch(() => {});
     } catch (error) {
       resetImportPreview();
       showError(error.message);
@@ -4144,6 +4199,7 @@
       grad_year: form.get("grad_year"),
       team_type: form.get("team_type"),
       number: form.get("number"),
+      team_id: form.get("team_id") || undefined,
     };
     const username = (form.get("username") || "").trim();
     const password = (form.get("password") || "").trim();
@@ -4160,10 +4216,1445 @@
       closeAddPlayerModal();
       closeAdminModal();
       await loadPlayers(created.id);
+      loadTeams().catch(() => {});
     } catch (error) {
       showError(error.message);
     }
   });
+
+  // ---------- Team shell: sidebar, Home, Schedule ----------
+  const sideNav = document.getElementById("side-nav");
+  const teamSwitchBtn = document.getElementById("team-switch");
+  const teamSwitchName = document.getElementById("team-switch-name");
+  const teamSwitchSub = document.getElementById("team-switch-sub");
+  const collapseBtn = document.getElementById("collapse-btn");
+  const nextCard = document.getElementById("next-card");
+  const meBox = document.getElementById("me");
+  const meAvatar = document.getElementById("me-avatar");
+  const meName = document.getElementById("me-name");
+  const sideScrim = document.getElementById("side-scrim");
+  const hamburgerBtn = document.getElementById("hamburger");
+  const pageHeading = document.getElementById("page-heading");
+  const homeView = document.getElementById("home-view");
+  const scheduleView = document.getElementById("schedule-view");
+  const pageView = document.getElementById("page-view");
+  const devView = document.getElementById("dev-view");
+  const eventPop = document.getElementById("event-pop");
+  const eventModal = document.getElementById("event-modal");
+  const eventForm = document.getElementById("event-form");
+  const eventTeamSelect = document.getElementById("event-team");
+  const eventAllDay = document.getElementById("event-all-day");
+  const eventTimes = document.getElementById("event-times");
+  const deleteEventBtn = document.getElementById("delete-event");
+  const staffTeamsBox = document.getElementById("staff-teams");
+
+  const EVENT_TYPES = [
+    { id: "practice", label: "Practice" },
+    { id: "game", label: "Game" },
+    { id: "tournament", label: "Tournament" },
+    { id: "training", label: "Training" },
+    { id: "scrimmage", label: "Scrimmage" },
+  ];
+
+  const SHELL_ICONS = {
+    home: '<path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+    calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+    trend: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
+    chart: '<path d="M18 20V10M12 20V4M6 20v-6"/>',
+    clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+    mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/>',
+    bell: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+    help: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    star: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/>',
+    chevL: '<path d="m15 18-6-6 6-6"/>',
+    chevR: '<path d="m9 18 6-6-6-6"/>',
+    pin: '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    grid: '<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>',
+    x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  };
+
+  function shellIcon(name, cls) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", cls || "ico");
+    svg.innerHTML = SHELL_ICONS[name];
+    return svg;
+  }
+
+  // replaceChildren would print null/false as text, so drop them first.
+  function fill(node, ...kids) {
+    node.replaceChildren(...kids.flat(Infinity).filter((k) => k !== null && k !== undefined && k !== false));
+  }
+
+  function readStored(key, fallback) {
+    try {
+      const value = window.localStorage.getItem(key);
+      return value === null ? fallback : value;
+    } catch (_error) {
+      return fallback;
+    }
+  }
+
+  function writeStored(key, value) {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch (_error) {
+      // Private browsing can block storage; the setting still applies for this visit.
+    }
+  }
+
+  const VIEWS = ["home", "schedule", "dev", "reports", "drills", "help"];
+
+  const shell = {
+    view: "home",
+    teams: [],
+    // Selected team ids; empty means every team the viewer can see.
+    teamSel: new Set(),
+    events: [],
+    types: new Set(EVENT_TYPES.map((t) => t.id)),
+    month: null,
+    calMode: readStored("idev.calMode", "month") === "list" ? "list" : "month",
+    collapsed: readStored("idev.sideCollapsed", "0") === "1",
+    editingEventId: null,
+    editingTeamId: null,
+    eventsLoaded: false,
+  };
+
+  // ----- dates (events use local YYYY-MM-DD strings) -----
+  function ymd(date) {
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const d = String(date.getDate()).padStart(2, "0");
+    return `${date.getFullYear()}-${m}-${d}`;
+  }
+
+  function parseYmd(text) {
+    const [y, m, d] = String(text).split("-").map(Number);
+    return new Date(y, (m || 1) - 1, d || 1);
+  }
+
+  function addDays(date, n) {
+    const next = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    next.setDate(next.getDate() + n);
+    return next;
+  }
+
+  function todayDate() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  }
+
+  function fmtDay(date) {
+    return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  }
+
+  function fmtTime(hhmm) {
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    const suffix = h >= 12 ? "PM" : "AM";
+    const hour = h % 12 || 12;
+    return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
+  }
+
+  function fmtTimeShort(hhmm) {
+    if (!hhmm) return "";
+    const [h, m] = hhmm.split(":").map(Number);
+    const hour = h % 12 || 12;
+    return `${hour}${m ? `:${String(m).padStart(2, "0")}` : ""}${h >= 12 ? "p" : "a"}`;
+  }
+
+  function eventTimeLabel(ev) {
+    if (ev.all_day) return "All day";
+    return ev.end_time ? `${fmtTime(ev.start_time)} – ${fmtTime(ev.end_time)}` : fmtTime(ev.start_time);
+  }
+
+  function eventSpanDays(ev) {
+    return Math.round((parseYmd(ev.end_date || ev.date) - parseYmd(ev.date)) / 86400000) + 1;
+  }
+
+  function isPlayerView() {
+    return state.role === "player";
+  }
+
+  function teamById(id) {
+    return shell.teams.find((t) => t.id === id) || null;
+  }
+
+  function teamShort(id) {
+    const team = teamById(id);
+    return team ? team.name : "Team";
+  }
+
+  function typeLabel(id) {
+    const type = EVENT_TYPES.find((t) => t.id === id);
+    return type ? type.label : id;
+  }
+
+  function teamSelected(teamId) {
+    return !shell.teamSel.size || shell.teamSel.has(teamId);
+  }
+
+  // Roster rail, Home numbers and the calendar all follow the team switcher.
+  function teamPlayers() {
+    if (shell.teams.length < 2 || !shell.teamSel.size) return state.players;
+    return state.players.filter((p) => shell.teamSel.has(p.team_id));
+  }
+
+  function saveTeamSel() {
+    writeStored("idev.teams", JSON.stringify([...shell.teamSel]));
+  }
+
+  function setTeamSel(ids) {
+    shell.teamSel = new Set(ids);
+    saveTeamSel();
+    teamSelectionChanged();
+  }
+
+  function teamSelectionChanged() {
+    renderTeamSwitch();
+    renderBrandTeam();
+    renderRoster();
+    renderBrandMeta();
+    const pool = teamPlayers();
+    if (!isPlayerView() && pool.length && !pool.some((p) => p.id === state.selectedId)) {
+      selectPlayer(pool[0].id);
+    }
+    renderShell();
+  }
+
+  // ----- loading -----
+  async function loadTeams() {
+    if (!state.role) return;
+    const data = await request("/api/teams");
+    shell.teams = data.teams || [];
+    let stored = [];
+    try {
+      stored = JSON.parse(readStored("idev.teams", "[]"));
+    } catch (_error) {
+      stored = [];
+    }
+    const valid = (Array.isArray(stored) ? stored : []).filter((id) => teamById(id));
+    shell.teamSel = new Set(isPlayerView() ? [] : valid);
+    fillTeamSelects();
+    renderTeamSummary();
+    renderTeamSwitch();
+    renderBrandTeam();
+    renderRoster();
+    renderBrandMeta();
+    renderManagePlayers();
+    renderShell();
+  }
+
+  function eventsWindow() {
+    const today = todayDate();
+    const month = shell.month || new Date(today.getFullYear(), today.getMonth(), 1);
+    const gridStart = addDays(month, -month.getDay());
+    const gridEnd = addDays(gridStart, 41);
+    const from = gridStart < today ? gridStart : addDays(today, -1);
+    const horizon = addDays(today, 45);
+    const to = gridEnd > horizon ? gridEnd : horizon;
+    return { from: ymd(from), to: ymd(to) };
+  }
+
+  async function loadEvents() {
+    if (!state.role) return;
+    const range = eventsWindow();
+    const data = await request(`/api/events?from=${range.from}&to=${range.to}`);
+    shell.events = data.events || [];
+    shell.eventsLoaded = true;
+    renderShell();
+  }
+
+  function visibleEvents() {
+    return shell.events.filter((ev) => teamSelected(ev.team_id) && shell.types.has(ev.type));
+  }
+
+  function eventsOn(day) {
+    const key = ymd(day);
+    return visibleEvents().filter((ev) => ev.date <= key && key <= (ev.end_date || ev.date));
+  }
+
+  function upcoming(days) {
+    const out = [];
+    const today = todayDate();
+    for (let i = 0; i < days; i += 1) {
+      const day = addDays(today, i);
+      const list = eventsOn(day);
+      if (list.length) out.push({ day, list });
+    }
+    return out;
+  }
+
+  function nextEvent() {
+    const now = new Date();
+    const nowTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const today = todayDate();
+    for (let i = 0; i < 45; i += 1) {
+      const day = addDays(today, i);
+      const list = eventsOn(day).filter(
+        (ev) => i > 0 || ev.all_day || (ev.end_time || ev.start_time) >= nowTime,
+      );
+      if (list.length) return { day, ev: list[0] };
+    }
+    return null;
+  }
+
+  // ----- sidebar -----
+  function navGroups() {
+    const messagesBadge = isPlayerView() ? unreadCount(state.messages) : 0;
+    const alarmsBadge = isPlayerView() ? unreadCount(state.alarms) : 0;
+    if (isPlayerView()) {
+      return [
+        [
+          { id: "home", label: "Home", icon: "home" },
+          { id: "schedule", label: "Schedule", icon: "calendar" },
+          { id: "dev", label: "My Development", icon: "trend" },
+        ],
+        [
+          { id: "messages", label: "Messages", icon: "mail", badge: messagesBadge, action: openMessageModal },
+          { id: "alarms", label: "Reminders", icon: "bell", badge: alarmsBadge, action: openAlarmModal },
+          { id: "help", label: "Help", icon: "help" },
+        ],
+      ];
+    }
+    const manage = [];
+    if (canAdmin()) {
+      manage.push(
+        { id: "roster", label: "Roster & Logins", icon: "users", action: () => openAdminModal("players") },
+        { id: "teams", label: "Team & Staff", icon: "shield", action: () => openAdminModal("team") },
+      );
+    }
+    manage.push(
+      { id: "messages", label: "Messages", icon: "mail", action: openMessageModal },
+      { id: "alarms", label: "Alarms", icon: "bell", action: openAlarmModal },
+      { id: "help", label: "Help", icon: "help" },
+    );
+    return [
+      [
+        { id: "home", label: "Home", icon: "home" },
+        { id: "schedule", label: "Schedule", icon: "calendar" },
+        { id: "dev", label: "Player Development", icon: "trend" },
+        { id: "reports", label: "Reports", icon: "chart" },
+        { id: "drills", label: "Drills & Plans", icon: "clipboard" },
+      ],
+      manage,
+    ];
+  }
+
+  function renderSide() {
+    if (!sideNav) return;
+    appView.classList.toggle("collapsed", shell.collapsed);
+    fill(collapseBtn, shellIcon("chevL"));
+    const label = shell.collapsed ? "Expand menu" : "Minimize menu";
+    collapseBtn.setAttribute("aria-label", label);
+    collapseBtn.title = label;
+    collapseBtn.setAttribute("aria-expanded", String(!shell.collapsed));
+
+    fill(
+      sideNav,
+      navGroups().map((items, i) => [
+        i ? el("div", { className: "nav-sep", role: "separator" }) : null,
+        el(
+          "ul",
+          { className: "nav-list" },
+          items.map((item) => {
+            const active = !item.action && shell.view === item.id;
+            return el(
+              "li",
+              {},
+              el(
+                "button",
+                {
+                  type: "button",
+                  className: "nav-item" + (active ? " active" : ""),
+                  "aria-current": active ? "page" : undefined,
+                  "aria-label": item.label,
+                  "data-tip": item.badge ? `${item.label} (${item.badge})` : item.label,
+                  dataset: { nav: item.id },
+                  onClick: () => {
+                    closeDrawer();
+                    if (item.action) item.action();
+                    else go(item.id);
+                  },
+                },
+                shellIcon(item.icon),
+                el("span", { className: "nav-label" }, item.label),
+                item.badge ? el("span", { className: "nav-badge" }, item.badge > 99 ? "99+" : String(item.badge)) : null,
+              ),
+            );
+          }),
+        ),
+      ]),
+    );
+
+    const who = whoAmI();
+    meAvatar.textContent = initialsOf(who);
+    meName.textContent = who;
+    meBox.setAttribute("data-tip", who);
+    renderNextCard();
+  }
+
+  function whoAmI() {
+    if (isPlayerView()) return (state.player && state.player.name) || "Player";
+    if (state.role === "staff") return state.staffName || "Staff";
+    return "Coach";
+  }
+
+  function initialsOf(name) {
+    const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return "?";
+    return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+  }
+
+  function renderTeamSwitch() {
+    if (!teamSwitchBtn) return;
+    const sports = new Set(shell.teams.map((t) => t.sport));
+    if (isPlayerView() || shell.teams.length < 2) {
+      const team = shell.teams[0];
+      teamSwitchName.textContent = team ? team.name : "My team";
+      teamSwitchSub.textContent = team ? [team.sport, team.season, team.year].filter(Boolean).join(" · ") : "";
+      teamSwitchBtn.disabled = true;
+      return;
+    }
+    teamSwitchBtn.disabled = false;
+    if (!shell.teamSel.size) {
+      teamSwitchName.textContent = "All teams";
+      teamSwitchSub.textContent = `${plural(shell.teams.length, "team")} · ${plural(sports.size, "sport")}`;
+    } else {
+      const picked = shell.teams.filter((t) => shell.teamSel.has(t.id));
+      teamSwitchName.textContent = picked.length === 1 ? picked[0].name : `${picked.length} teams`;
+      teamSwitchSub.textContent =
+        picked.length === 1 ? picked[0].sport : picked.map((t) => t.name).join(" · ");
+    }
+  }
+
+  let teamMenu = null;
+
+  function closeTeamMenu() {
+    if (teamMenu) {
+      teamMenu.remove();
+      teamMenu = null;
+    }
+  }
+
+  function openTeamMenu() {
+    if (teamMenu) {
+      closeTeamMenu();
+      return;
+    }
+    const option = (label, sub, checked, pick) =>
+      el(
+        "button",
+        {
+          type: "button",
+          role: "menuitemradio",
+          "aria-checked": String(checked),
+          onClick: () => {
+            closeTeamMenu();
+            pick();
+          },
+        },
+        label,
+        sub ? el("span", { className: "team-menu-sub" }, sub) : null,
+      );
+    teamMenu = el(
+      "div",
+      { className: "team-menu", role: "menu", "aria-label": "Choose team" },
+      option("All teams", plural(shell.teams.length, "team"), !shell.teamSel.size, () => setTeamSel([])),
+      shell.teams.map((team) =>
+        option(
+          team.name,
+          [team.sport, plural(team.player_count || 0, "player")].join(" · "),
+          shell.teamSel.size === 1 && shell.teamSel.has(team.id),
+          () => setTeamSel([team.id]),
+        ),
+      ),
+    );
+    document.body.append(teamMenu);
+    const box = teamSwitchBtn.getBoundingClientRect();
+    teamMenu.style.left = `${Math.max(8, box.left)}px`;
+    teamMenu.style.top = `${box.bottom + 6}px`;
+    const first = teamMenu.querySelector("button");
+    if (first) first.focus();
+  }
+
+  function renderNextCard() {
+    const next = shell.eventsLoaded ? nextEvent() : null;
+    if (!next) {
+      nextCard.classList.add("hidden");
+      nextCard.replaceChildren();
+      return;
+    }
+    const today = todayDate();
+    const when = next.day.getTime() === today.getTime() ? "Today" : fmtDay(next.day);
+    const time = next.ev.all_day ? "All day" : fmtTime(next.ev.start_time);
+    fill(
+      nextCard,
+      el("p", { className: "next-eyebrow" }, "Next up"),
+      el("span", { className: `type-dot t-${next.ev.type}` }),
+      el("p", { className: "next-title" }, next.ev.title),
+      el("p", { className: "next-meta" }, `${when} · ${time}`),
+      el(
+        "p",
+        { className: "next-meta" },
+        [shell.teams.length > 1 ? teamShort(next.ev.team_id) : "", next.ev.location].filter(Boolean).join(" · "),
+      ),
+      el(
+        "button",
+        {
+          type: "button",
+          className: "btn btn-primary btn-block btn-sm",
+          onClick: (e) => openEventPop(next.ev, e.currentTarget),
+        },
+        "View details",
+      ),
+    );
+    nextCard.classList.remove("hidden");
+  }
+
+  function closeDrawer() {
+    appView.classList.remove("menu-open");
+  }
+
+  // ----- routing -----
+  function viewFromHash() {
+    const name = (window.location.hash || "").replace(/^#/, "");
+    return VIEWS.includes(name) ? name : "home";
+  }
+
+  function go(view) {
+    const target = VIEWS.includes(view) ? view : "home";
+    if (window.location.hash !== `#${target}`) {
+      window.location.hash = target;
+      return;
+    }
+    showView(target);
+  }
+
+  function showView(view) {
+    shell.view = view;
+    closeEventPop();
+    closeDrawer();
+    homeView.classList.toggle("hidden", view !== "home");
+    scheduleView.classList.toggle("hidden", view !== "schedule");
+    devView.classList.toggle("hidden", view !== "dev");
+    pageView.classList.toggle("hidden", !["reports", "drills", "help"].includes(view));
+    const headings = {
+      home: "Home",
+      schedule: "Schedule",
+      dev: isPlayerView() ? "My development" : "Player development",
+      reports: "Reports",
+      drills: "Drills & plans",
+      help: "Help",
+    };
+    pageHeading.textContent = headings[view];
+    // Home, Schedule and the info pages carry their own large title.
+    pageHeading.classList.toggle("hidden", view !== "dev");
+    renderShell();
+    window.scrollTo(0, 0);
+  }
+
+  window.addEventListener("hashchange", () => {
+    if (state.role) showView(viewFromHash());
+  });
+
+  function renderShell() {
+    if (!state.role) return;
+    renderSide();
+    if (shell.view === "home") renderHome();
+    else if (shell.view === "schedule") renderSchedule();
+    else if (["reports", "drills", "help"].includes(shell.view)) renderPage(shell.view);
+  }
+
+  // ----- shared pieces -----
+  function typeChips(onChange, range) {
+    const allTypes = shell.types.size === EVENT_TYPES.length;
+    const counts = {};
+    shell.events.forEach((ev) => {
+      if (!teamSelected(ev.team_id)) return;
+      if (range && ((ev.end_date || ev.date) < range.from || ev.date > range.to)) return;
+      counts[ev.type] = (counts[ev.type] || 0) + 1;
+    });
+    return el(
+      "div",
+      { className: "chips", role: "group", "aria-label": "Event types" },
+      el(
+        "button",
+        {
+          type: "button",
+          className: "chip chip-all" + (allTypes ? " on" : ""),
+          "aria-pressed": String(allTypes),
+          onClick: () => {
+            shell.types = new Set(EVENT_TYPES.map((t) => t.id));
+            onChange();
+          },
+        },
+        "All events",
+      ),
+      EVENT_TYPES.map((t) =>
+        el(
+          "button",
+          {
+            type: "button",
+            className: `chip t-${t.id}` + (shell.types.has(t.id) && !allTypes ? " on" : ""),
+            "aria-pressed": String(shell.types.has(t.id) && !allTypes),
+            onClick: () => {
+              // First click from "All" narrows to that type; later clicks add or remove.
+              if (allTypes) shell.types = new Set([t.id]);
+              else if (shell.types.has(t.id)) shell.types.delete(t.id);
+              else shell.types.add(t.id);
+              if (!shell.types.size) shell.types = new Set(EVENT_TYPES.map((x) => x.id));
+              onChange();
+            },
+          },
+          el("span", { className: `type-dot t-${t.id}` }),
+          t.label,
+          el("span", { className: "chip-count" }, String(counts[t.id] || 0)),
+        ),
+      ),
+    );
+  }
+
+  function teamChips(onChange) {
+    if (isPlayerView() || shell.teams.length < 2) return null;
+    return el(
+      "div",
+      { className: "chips", role: "group", "aria-label": "Teams" },
+      shell.teams.map((team) => {
+        const on = teamSelected(team.id);
+        return el(
+          "button",
+          {
+            type: "button",
+            className: "chip chip-team" + (on ? " on" : ""),
+            "aria-pressed": String(on),
+            onClick: () => {
+              const ids = shell.teamSel.size ? new Set(shell.teamSel) : new Set(shell.teams.map((t) => t.id));
+              if (ids.has(team.id)) {
+                if (ids.size === 1) return;
+                ids.delete(team.id);
+              } else {
+                ids.add(team.id);
+              }
+              shell.teamSel = ids.size === shell.teams.length ? new Set() : ids;
+              saveTeamSel();
+              teamSelectionChanged();
+              onChange();
+            },
+          },
+          el("span", { className: "chip-check" }, on ? shellIcon("check") : null),
+          team.name,
+          el("span", { className: "chip-sport" }, team.sport),
+        );
+      }),
+    );
+  }
+
+  function eventRow(ev, day) {
+    const span = eventSpanDays(ev);
+    const dayIndex = Math.round((day - parseYmd(ev.date)) / 86400000) + 1;
+    return el(
+      "button",
+      { type: "button", className: `ev-row t-${ev.type}`, onClick: (e) => openEventPop(ev, e.currentTarget) },
+      el("span", { className: "ev-time mono" }, ev.all_day ? "All day" : fmtTime(ev.start_time)),
+      el(
+        "span",
+        { className: "ev-main" },
+        el(
+          "span",
+          { className: "ev-title" },
+          ev.title,
+          span > 1 ? el("span", { className: "ev-days" }, ` · day ${dayIndex} of ${span}`) : null,
+        ),
+        ev.location ? el("span", { className: "ev-sub" }, shellIcon("pin", "ico ico-sm"), ev.location) : null,
+      ),
+      !isPlayerView() && shell.teams.length > 1 ? el("span", { className: "ev-team" }, teamShort(ev.team_id)) : el("span", {}),
+      el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
+    );
+  }
+
+  function agendaList(days, full) {
+    const today = todayDate();
+    return el(
+      "div",
+      { className: "agenda" + (full ? " agenda-full" : "") },
+      days.map(({ day, list }) => {
+        const isToday = day.getTime() === today.getTime();
+        return el(
+          "div",
+          { className: "agenda-day" },
+          el("p", { className: "agenda-date" + (isToday ? " today" : "") }, isToday ? (full ? `Today · ${fmtDay(day)}` : "Today") : fmtDay(day)),
+          list.map((ev) => eventRow(ev, day)),
+        );
+      }),
+    );
+  }
+
+  function kpiCard(k) {
+    return el(
+      "article",
+      { className: `kpi a-${k.accent}` },
+      el("p", { className: "kpi-label" }, k.label),
+      el("p", { className: "kpi-value" }, k.value, k.unit ? el("span", { className: "kpi-unit" }, ` ${k.unit}`) : null),
+      k.foot ? el("p", { className: "kpi-foot" + (k.footCls ? ` ${k.footCls}` : "") }, k.foot) : null,
+    );
+  }
+
+  function greeting() {
+    const hour = new Date().getHours();
+    const part = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+    if (isPlayerView()) {
+      const first = ((state.player && state.player.name) || "").split(/\s+/)[0];
+      return first ? `Hi ${first}` : "Hi there";
+    }
+    return state.role === "staff" && state.staffName ? `${part}, ${state.staffName}` : `${part}, Coach`;
+  }
+
+  function pageTop(title, actions) {
+    return el(
+      "div",
+      { className: "page-top" },
+      el(
+        "div",
+        { className: "page-titles" },
+        el(
+          "p",
+          { className: "eyebrow" },
+          new Date().toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" }),
+        ),
+        el("h1", {}, title),
+      ),
+      actions && actions.length ? el("div", { className: "page-actions" }, actions) : null,
+    );
+  }
+
+  // ----- Home -----
+  function renderHome() {
+    const week = upcoming(7);
+    const weekCount = week.reduce((sum, d) => sum + d.list.length, 0);
+    const next = shell.eventsLoaded ? nextEvent() : null;
+    const player = isPlayerView();
+    const players = teamPlayers();
+
+    const actions = [];
+    if (!player) {
+      actions.push(
+        el("button", { type: "button", className: "btn", onClick: () => go("dev") }, shellIcon("star"), "Rate a player"),
+      );
+      if (canContent()) {
+        actions.push(
+          el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(null) }, shellIcon("plus"), "Add event"),
+        );
+      }
+    }
+
+    let kpis;
+    if (player) {
+      const metrics = state.detail ? computeMetrics(state.detail) : null;
+      const change = state.detail ? Number(state.detail.week_change) : NaN;
+      const changeView = Number.isFinite(change) ? weekChangeView(change) : null;
+      kpis = [
+        {
+          label: "My overall",
+          value: metrics && metrics.rated ? String(metrics.overall) : "—",
+          unit: metrics && metrics.rated ? "%" : "",
+          accent: "cyan",
+          foot: changeView && changeView.text ? `${changeView.text} since last week` : "No change since last week",
+          footCls: changeView ? changeView.cls : "",
+        },
+        {
+          label: "My top skill",
+          value: metrics && metrics.top ? metrics.top.name : "—",
+          accent: "green",
+          foot: metrics && metrics.top ? `${roundHalf(metrics.top.value)} / 5` : "Not rated yet",
+        },
+        { label: "This week", value: String(weekCount), unit: weekCount === 1 ? "event" : "events", accent: "orange", foot: next ? `Next: ${next.ev.title}` : "Nothing scheduled" },
+        { label: "Messages", value: String(unreadCount(state.messages)), unit: "unread", accent: "purple", foot: `${plural(unreadCount(state.alarms), "reminder")} unread` },
+      ];
+    } else {
+      const changes = players.map((p) => Number(p.week_change)).filter((v) => Number.isFinite(v));
+      const ups = changes.filter((v) => v >= 0.05);
+      const downs = changes.filter((v) => v <= -0.05);
+      const avg = (list) => (list.reduce((a, b) => a + b, 0) / list.length).toFixed(1);
+      const sports = new Set(shell.teams.filter((t) => teamSelected(t.id)).map((t) => t.sport));
+      const teamCount = shell.teams.filter((t) => teamSelected(t.id)).length;
+      const noLogin = players.filter((p) => !p.has_login).length;
+      kpis = [
+        { label: "Players", value: String(players.length), accent: "cyan", foot: `${plural(teamCount, "team")} · ${plural(sports.size, "sport")}` },
+        { label: "Improved this week", value: String(ups.length), accent: "green", foot: ups.length ? `\u25B2 avg +${avg(ups)}` : "No rating gains yet", footCls: ups.length ? "up" : "" },
+        { label: "Dropped this week", value: String(downs.length), accent: "red", foot: downs.length ? `\u25BC avg ${avg(downs)}` : "No drops", footCls: downs.length ? "down" : "" },
+        { label: "This week", value: String(weekCount), unit: weekCount === 1 ? "event" : "events", accent: "orange", foot: next ? `Next: ${next.ev.title}` : "Nothing scheduled" },
+        canAdmin()
+          ? { label: "No login yet", value: String(noLogin), unit: noLogin === 1 ? "player" : "players", accent: "purple", foot: noLogin ? "Set up in Roster & Logins" : "Everyone can sign in" }
+          : { label: "Staff", value: String((state.staff || []).length), accent: "purple", foot: "Coaches and helpers" },
+      ];
+    }
+
+    const agenda = el(
+      "section",
+      { className: "card agenda-card" },
+      el(
+        "div",
+        { className: "card-head" },
+        el(
+          "div",
+          {},
+          el("h2", {}, "Coming up"),
+          el("p", { className: "meta" }, player ? "Your team's next 7 days" : shell.teamSel.size ? "Selected teams · next 7 days" : "All teams · next 7 days"),
+        ),
+        el("button", { type: "button", className: "link-btn", onClick: () => go("schedule") }, "Open calendar", shellIcon("chevR", "ico ico-sm")),
+      ),
+      el("div", { className: "filters" }, typeChips(renderHome, { from: ymd(todayDate()), to: ymd(addDays(todayDate(), 6)) })),
+      !shell.eventsLoaded
+        ? el("p", { className: "empty" }, "Loading schedule…")
+        : week.length
+          ? agendaList(week, false)
+          : el(
+              "p",
+              { className: "empty" },
+              shell.events.length ? "No events match these filters this week." : canContent() ? "Nothing on the schedule yet. Use Add event to create practices, games and more." : "Nothing on the schedule yet.",
+            ),
+    );
+
+    const movers = player ? myProgressCard() : topMoversCard(players);
+
+    const modules = player ? playerModules(weekCount) : coachModules(weekCount, players);
+    const grid = el(
+      "section",
+      { className: "modules-wrap" },
+      el("h2", { className: "section-title" }, player ? "My tools" : "Manage"),
+      el(
+        "div",
+        { className: "modules" },
+        modules.map((m) =>
+          el(
+            "button",
+            { type: "button", className: "module", onClick: m.action },
+            el("span", { className: "module-ico" }, shellIcon(m.icon)),
+            el(
+              "span",
+              { className: "module-text" },
+              el("span", { className: "module-title" }, m.title),
+              el("span", { className: "module-desc" }, m.desc),
+              m.live ? el("span", { className: "module-live" }, m.live) : null,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    fill(homeView, pageTop(greeting(), actions), el("div", { className: "kpis" }, kpis.map(kpiCard)), el("div", { className: "home-row" }, agenda, movers), grid);
+  }
+
+  function topMoversCard(players) {
+    const moved = players
+      .filter((p) => Number.isFinite(Number(p.week_change)) && Math.abs(Number(p.week_change)) >= 0.05)
+      .sort((a, b) => Math.abs(Number(b.week_change)) - Math.abs(Number(a.week_change)))
+      .slice(0, 6);
+    return el(
+      "section",
+      { className: "card movers-card" },
+      el("div", { className: "card-head" }, el("div", {}, el("h2", {}, "Top movers"), el("p", { className: "meta" }, "Average rating change since last week"))),
+      moved.length
+        ? el(
+            "ul",
+            { className: "movers" },
+            moved.map((p) => {
+              const change = Number(p.week_change);
+              return el(
+                "li",
+                {},
+                el(
+                  "button",
+                  {
+                    type: "button",
+                    className: "mover mover-btn",
+                    onClick: () => {
+                      go("dev");
+                      selectPlayer(p.id);
+                    },
+                  },
+                  el("span", { className: "mover-num" }, p.number === null || p.number === undefined ? "—" : `#${p.number}`),
+                  el("span", { className: "mover-name" }, p.name, el("span", { className: "mover-skill" }, positionLabel(p) || " ")),
+                  el("span", { className: "mover-chg " + (change > 0 ? "up" : "down") }, `${change > 0 ? "\u25B2" : "\u25BC"} ${Math.abs(change).toFixed(1)}`),
+                ),
+              );
+            }),
+          )
+        : el("p", { className: "empty" }, "No rating changes this week yet."),
+    );
+  }
+
+  function myProgressCard() {
+    const rated = state.detail ? (state.detail.progress || []).filter((item) => item.current) : [];
+    const items = progressRows(rated)
+      .filter((row) => row && row.change !== null && row.change !== undefined && Math.abs(row.change) >= 0.05)
+      .slice(0, 6);
+    return el(
+      "section",
+      { className: "card movers-card" },
+      el("div", { className: "card-head" }, el("div", {}, el("h2", {}, "My progress"), el("p", { className: "meta" }, "Change since the previous rating"))),
+      items.length
+        ? el(
+            "ul",
+            { className: "movers" },
+            items.map((row) =>
+              el(
+                "li",
+                { className: "mover" },
+                el("span", { className: "mover-name" }, row.name, el("span", { className: "mover-skill" }, `Now ${row.current} / 5`)),
+                el("span", { className: "mover-chg " + (row.change > 0 ? "up" : "down") }, `${row.change > 0 ? "\u25B2" : "\u25BC"} ${Math.abs(row.change)}`),
+              ),
+            ),
+          )
+        : el("p", { className: "empty" }, "No rating changes yet."),
+      el("button", { type: "button", className: "link-btn", onClick: () => go("dev") }, "Open My Development", shellIcon("chevR", "ico ico-sm")),
+    );
+  }
+
+  function coachModules(weekCount, players) {
+    const improved = players.filter((p) => Number(p.week_change) >= 0.05).length;
+    const noLogin = players.filter((p) => !p.has_login).length;
+    const list = [
+      { icon: "calendar", title: "Schedule", desc: "Practices, games, tournaments, training and scrimmages across every team.", live: `${plural(weekCount, "event")} this week`, action: () => go("schedule") },
+      { icon: "trend", title: "Player Development", desc: "Skill ratings, performance profiles, progress tables and GameChanger stats.", live: improved ? `${improved} improved this week` : "", action: () => go("dev") },
+      { icon: "chart", title: "Reports", desc: "Team skill averages over time, most improved and not rated recently.", live: "Coming next", action: () => go("reports") },
+      { icon: "clipboard", title: "Drills & Practice Plans", desc: "A team drill library and practice plans for schedule events.", live: "Coming next", action: () => go("drills") },
+    ];
+    if (canAdmin()) {
+      list.push(
+        { icon: "users", title: "Roster & Logins", desc: "Add, import and edit players; manage player logins.", live: noLogin ? `${plural(noLogin, "player")} without a login` : "", action: () => openAdminModal("players") },
+        { icon: "shield", title: "Team & Staff", desc: "Teams and sports, seasons, coaches and staff access levels.", live: `${plural(shell.teams.length, "team")} · ${plural((state.staff || []).length, "staff member")}`, action: () => openAdminModal("team") },
+      );
+    }
+    list.push(
+      { icon: "mail", title: "Messages & Alarms", desc: "Message the team, staff or one player; send reminders.", live: "", action: openMessageModal },
+      { icon: "help", title: "Help", desc: "How the pages fit together, and where your data is saved.", live: "", action: () => go("help") },
+    );
+    return list;
+  }
+
+  function playerModules(weekCount) {
+    const metrics = state.detail ? computeMetrics(state.detail) : null;
+    return [
+      { icon: "calendar", title: "Schedule", desc: "Practices, games, tournaments, training and scrimmages for your team.", live: `${plural(weekCount, "event")} this week`, action: () => go("schedule") },
+      { icon: "trend", title: "My Development", desc: "Skill ratings, performance profile, progress history and coach notes.", live: metrics && metrics.rated ? `Overall ${metrics.overall}%` : "", action: () => go("dev") },
+      { icon: "mail", title: "Messages", desc: "Messages from your coaches.", live: unreadCount(state.messages) ? `${unreadCount(state.messages)} unread` : "", action: openMessageModal },
+      { icon: "help", title: "Help", desc: "How to read your ratings and use the app.", live: "", action: () => go("help") },
+    ];
+  }
+
+  // ----- Schedule -----
+  function renderSchedule() {
+    const today = todayDate();
+    if (!shell.month) shell.month = new Date(today.getFullYear(), today.getMonth(), 1);
+    const first = shell.month;
+    const last = new Date(first.getFullYear(), first.getMonth() + 1, 0);
+    const shift = (n) => {
+      shell.month = new Date(first.getFullYear(), first.getMonth() + n, 1);
+      renderSchedule();
+      loadEvents().catch((error) => showError(error.message));
+    };
+    const actions = canContent()
+      ? [el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(null) }, shellIcon("plus"), "Add event")]
+      : [];
+
+    const toolbar = el(
+      "div",
+      { className: "cal-toolbar" },
+      el(
+        "div",
+        { className: "cal-nav" },
+        el("button", { type: "button", className: "icon-btn", "aria-label": "Previous month", onClick: () => shift(-1) }, shellIcon("chevL")),
+        el("h2", { className: "cal-month" }, first.toLocaleDateString(undefined, { month: "long", year: "numeric" })),
+        el("button", { type: "button", className: "icon-btn", "aria-label": "Next month", onClick: () => shift(1) }, shellIcon("chevR")),
+        el(
+          "button",
+          {
+            type: "button",
+            className: "btn btn-sm",
+            onClick: () => {
+              const now = todayDate();
+              shift((now.getFullYear() - first.getFullYear()) * 12 + now.getMonth() - first.getMonth());
+            },
+          },
+          "Today",
+        ),
+      ),
+      el(
+        "div",
+        { className: "seg", role: "group", "aria-label": "Calendar view" },
+        ["month", "list"].map((mode) =>
+          el(
+            "button",
+            {
+              type: "button",
+              className: "seg-btn" + (shell.calMode === mode ? " on" : ""),
+              "aria-pressed": String(shell.calMode === mode),
+              onClick: () => {
+                shell.calMode = mode;
+                writeStored("idev.calMode", mode);
+                renderSchedule();
+              },
+            },
+            shellIcon(mode === "month" ? "grid" : "list", "ico ico-sm"),
+            mode === "month" ? "Month" : "List",
+          ),
+        ),
+      ),
+    );
+
+    const range = { from: ymd(first), to: ymd(last) };
+    const monthEvents = visibleEvents().filter((ev) => (ev.end_date || ev.date) >= range.from && ev.date <= range.to);
+    const shownTeams = shell.teams.filter((t) => teamSelected(t.id));
+    const summary = el(
+      "p",
+      { className: "meta cal-summary" },
+      `Showing ${plural(monthEvents.length, "event")}` +
+        (isPlayerView() || shell.teams.length < 2
+          ? shell.teams[0] ? ` for ${shell.teams[0].name}` : ""
+          : ` across ${shownTeams.length} of ${plural(shell.teams.length, "team")}`),
+    );
+
+    let body;
+    if (shell.calMode === "month") {
+      const startGrid = addDays(first, -first.getDay());
+      const cells = [];
+      for (let i = 0; i < 42; i += 1) {
+        const day = addDays(startGrid, i);
+        if (i >= 35 && day.getMonth() !== first.getMonth()) break;
+        const list = eventsOn(day);
+        const shown = list.slice(0, 3);
+        const canAdd = canContent();
+        cells.push(
+          el(
+            "div",
+            {
+              className:
+                "cal-cell" +
+                (day.getMonth() !== first.getMonth() ? " out" : "") +
+                (day.getTime() === today.getTime() ? " today" : "") +
+                (canAdd ? " can-add" : ""),
+              title: canAdd ? `Add an event on ${fmtDay(day)}` : undefined,
+              onClick: canAdd
+                ? (e) => {
+                    if (e.target.closest(".cal-ev")) return;
+                    openEventModal(null, ymd(day));
+                  }
+                : undefined,
+            },
+            el("span", { className: "cal-date" }, String(day.getDate())),
+            shown.map((ev) =>
+              el(
+                "button",
+                {
+                  type: "button",
+                  className: `cal-ev t-${ev.type}`,
+                  title: `${ev.title} · ${teamShort(ev.team_id)}`,
+                  onClick: (e) => openEventPop(ev, e.currentTarget),
+                },
+                el("span", { className: "cal-ev-time" }, ev.all_day ? "All day" : fmtTimeShort(ev.start_time)),
+                el("span", { className: "cal-ev-title" }, ev.title),
+              ),
+            ),
+            list.length > shown.length
+              ? el(
+                  "button",
+                  {
+                    type: "button",
+                    className: "cal-more link-btn",
+                    onClick: () => {
+                      shell.calMode = "list";
+                      renderSchedule();
+                    },
+                  },
+                  `+${list.length - shown.length} more`,
+                )
+              : null,
+          ),
+        );
+      }
+      body = el(
+        "div",
+        { className: "cal" },
+        el("div", { className: "cal-head" }, ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => el("span", {}, d))),
+        el("div", { className: "cal-grid" }, cells),
+      );
+    } else {
+      const days = [];
+      for (let d = new Date(first); d <= last; d = addDays(d, 1)) {
+        const list = eventsOn(d);
+        if (list.length) days.push({ day: d, list });
+      }
+      body = days.length ? agendaList(days, true) : el("p", { className: "empty" }, "No events match these filters this month.");
+    }
+
+    fill(
+      scheduleView,
+      pageTop("Schedule", actions),
+      el(
+        "section",
+        { className: "card cal-card" },
+        toolbar,
+        el("div", { className: "filters" }, typeChips(renderSchedule, range), teamChips(renderSchedule)),
+        summary,
+        body,
+        isPlayerView() ? el("p", { className: "privacy-note" }, "You only see events for your own team.") : null,
+      ),
+    );
+  }
+
+  // ----- Event popover -----
+  let popEvent = null;
+
+  function closeEventPop() {
+    popEvent = null;
+    if (eventPop) eventPop.classList.add("hidden");
+  }
+
+  function openEventPop(ev, anchor) {
+    popEvent = ev;
+    const team = teamById(ev.team_id);
+    const span = eventSpanDays(ev);
+    const start = parseYmd(ev.date);
+    const dateLine = span > 1 ? `${fmtDay(start)} – ${fmtDay(parseYmd(ev.end_date))}` : fmtDay(start);
+    const actions = [];
+    if (isPlayerView()) {
+      const answer = (status) =>
+        el(
+          "button",
+          {
+            type: "button",
+            className: "btn rsvp-btn" + (status === "yes" ? " btn-primary" : " no") + (ev.my_rsvp === status ? " on" : ""),
+            "aria-pressed": String(ev.my_rsvp === status),
+            onClick: () => sendRsvp(ev, ev.my_rsvp === status ? "" : status, anchor),
+          },
+          status === "yes" ? "I'll be there" : "Can't make it",
+        );
+      actions.push(answer("yes"), answer("no"));
+    } else if (canContent()) {
+      actions.push(
+        el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(ev) }, "Edit"),
+        el("button", { type: "button", className: "btn btn-danger", onClick: () => removeEvent(ev) }, "Delete"),
+      );
+    }
+    fill(
+      eventPop,
+      el(
+        "div",
+        { className: "pop-head" },
+        el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
+        el("button", { type: "button", className: "icon-btn", "aria-label": "Close", onClick: closeEventPop }, shellIcon("x")),
+      ),
+      el("h3", { id: "event-pop-title", className: "pop-title" }, ev.title),
+      el("p", { className: "pop-line" }, shellIcon("calendar", "ico ico-sm"), dateLine),
+      el("p", { className: "pop-line" }, shellIcon("clock", "ico ico-sm"), eventTimeLabel(ev)),
+      ev.location ? el("p", { className: "pop-line" }, shellIcon("pin", "ico ico-sm"), ev.location) : null,
+      team ? el("p", { className: "pop-line" }, shellIcon("users", "ico ico-sm"), `${team.name} · ${team.sport}`) : null,
+      ev.notes ? el("p", { className: "pop-note" }, ev.notes) : null,
+      ev.rsvp
+        ? el(
+            "p",
+            { className: "pop-att" },
+            `${ev.rsvp.yes} going · ${ev.rsvp.no} can't make it · ${ev.rsvp.roster - ev.rsvp.yes - ev.rsvp.no} no answer`,
+          )
+        : null,
+      isPlayerView() && ev.my_rsvp ? el("p", { className: "meta" }, ev.my_rsvp === "yes" ? "You said you'll be there." : "You said you can't make it.") : null,
+      actions.length ? el("div", { className: "pop-actions" }, actions) : null,
+    );
+    eventPop.classList.remove("hidden");
+    const box = anchor.getBoundingClientRect();
+    const pw = eventPop.offsetWidth;
+    const ph = eventPop.offsetHeight;
+    let left = box.left;
+    let top = box.bottom + 6;
+    if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+    if (top + ph > window.innerHeight - 8) top = Math.max(8, box.top - ph - 6);
+    eventPop.style.left = `${Math.max(8, left)}px`;
+    eventPop.style.top = `${top}px`;
+    const focusTarget = eventPop.querySelector(".pop-actions .btn") || eventPop.querySelector(".icon-btn");
+    if (focusTarget) focusTarget.focus();
+  }
+
+  async function sendRsvp(ev, status, anchor) {
+    try {
+      await request(`/api/events/${encodeURIComponent(ev.id)}/rsvp`, {
+        method: "POST",
+        body: JSON.stringify({ status }),
+      });
+      await loadEvents();
+      const fresh = shell.events.find((item) => item.id === ev.id);
+      if (fresh && anchor && anchor.isConnected) openEventPop(fresh, anchor);
+      else closeEventPop();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  async function removeEvent(ev) {
+    if (!window.confirm(`Delete "${ev.title}" from the schedule?`)) return;
+    try {
+      await request(`/api/events/${encodeURIComponent(ev.id)}`, { method: "DELETE" });
+      closeEventPop();
+      hideDialog(eventModal);
+      await loadEvents();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  document.addEventListener("pointerdown", (e) => {
+    if (eventPop && !eventPop.classList.contains("hidden") && !eventPop.contains(e.target) && !e.target.closest(".cal-ev, .ev-row, .next-card .btn")) {
+      closeEventPop();
+    }
+    if (teamMenu && !teamMenu.contains(e.target) && !teamSwitchBtn.contains(e.target)) {
+      closeTeamMenu();
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeEventPop();
+      closeTeamMenu();
+      closeDrawer();
+    }
+  });
+  window.addEventListener("resize", closeEventPop);
+
+  // ----- Event dialog -----
+  function syncAllDay() {
+    eventTimes.classList.toggle("hidden", eventAllDay.checked);
+    eventForm.elements.start_time.required = !eventAllDay.checked;
+  }
+
+  function editableTeams() {
+    return shell.teams;
+  }
+
+  function openEventModal(ev, date) {
+    closeEventPop();
+    eventForm.reset();
+    shell.editingEventId = ev ? ev.id : null;
+    document.getElementById("event-modal-title").textContent = ev ? "Edit event" : "Add event";
+    fill(eventTeamSelect, editableTeams().map((t) => el("option", { value: t.id }, `${t.name} (${t.sport})`)));
+    eventTeamSelect.closest("label").classList.toggle("hidden", editableTeams().length < 2);
+    const f = eventForm.elements;
+    if (ev) {
+      f.team_id.value = ev.team_id;
+      f.type.value = ev.type;
+      f.title.value = ev.title;
+      f.date.value = ev.date;
+      f.end_date.value = ev.end_date && ev.end_date !== ev.date ? ev.end_date : "";
+      f.all_day.checked = Boolean(ev.all_day);
+      f.start_time.value = ev.start_time || "";
+      f.end_time.value = ev.end_time || "";
+      f.location.value = ev.location || "";
+      f.notes.value = ev.notes || "";
+    } else {
+      const picked = shell.teams.filter((t) => shell.teamSel.has(t.id));
+      if (picked.length === 1) f.team_id.value = picked[0].id;
+      const onlyType = shell.types.size === 1 ? [...shell.types][0] : "practice";
+      f.type.value = onlyType;
+      f.date.value = date || ymd(todayDate());
+      f.start_time.value = "18:00";
+      f.end_time.value = "20:00";
+    }
+    deleteEventBtn.classList.toggle("hidden", !ev);
+    syncAllDay();
+    showDialog(eventModal);
+    f.title.focus();
+  }
+
+  if (eventAllDay) eventAllDay.addEventListener("change", syncAllDay);
+  document.getElementById("cancel-event").addEventListener("click", () => hideDialog(eventModal));
+  eventModal.addEventListener("click", (event) => {
+    if (event.target === eventModal) hideDialog(eventModal);
+  });
+  deleteEventBtn.addEventListener("click", () => {
+    const ev = shell.events.find((item) => item.id === shell.editingEventId);
+    if (ev) removeEvent(ev);
+  });
+  eventForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const f = eventForm.elements;
+    const body = {
+      team_id: f.team_id.value,
+      type: f.type.value,
+      title: f.title.value,
+      date: f.date.value,
+      end_date: f.end_date.value || f.date.value,
+      all_day: f.all_day.checked,
+      start_time: f.all_day.checked ? "" : f.start_time.value,
+      end_time: f.all_day.checked ? "" : f.end_time.value,
+      location: f.location.value,
+      notes: f.notes.value,
+    };
+    try {
+      if (shell.editingEventId) {
+        await request(`/api/events/${encodeURIComponent(shell.editingEventId)}`, { method: "PUT", body: JSON.stringify(body) });
+      } else {
+        await request("/api/events", { method: "POST", body: JSON.stringify(body) });
+      }
+      hideDialog(eventModal);
+      const day = parseYmd(body.date);
+      if (shell.view === "schedule") shell.month = new Date(day.getFullYear(), day.getMonth(), 1);
+      await loadEvents();
+    } catch (error) {
+      showError(error.message);
+    }
+  });
+
+  // ----- Reports / Drills / Help -----
+  function renderPage(view) {
+    if (view === "help") {
+      const player = isPlayerView();
+      const topics = player
+        ? [
+            ["Home", "Your next events, your overall rating, and what changed since your coach last rated you."],
+            ["Schedule", "Every practice, game, tournament, training session and scrimmage for your team. Tap an event to say whether you'll be there."],
+            ["My Development", "Your skill ratings, performance profile, progress table, GameChanger stats and notes from your coaches."],
+            ["Messages and reminders", "Messages and reminders from your coaches show a number in the menu until you open them."],
+          ]
+        : [
+            ["Home", "Your starting page: this week's numbers, what's coming up, who moved the most, and shortcuts to everything else."],
+            ["Team switcher", "The box under the logo picks which team you're looking at. The roster, Home numbers and schedule follow it. Choose All teams to see everything."],
+            ["Schedule", "Add practices, games, tournaments, training and scrimmages for a team. Click a day to add an event there. Players only see their own team's events and can answer whether they'll be there."],
+            ["Player Development", "The roster and player pages you already know: ratings, performance profile, progress table, GameChanger stats, notes and drills."],
+            ["Teams and staff", "Admin → Team holds your teams (softball or baseball). Each player belongs to one team. Staff can be limited to certain teams, or left with access to all of them."],
+            ["Minimize the menu", "Use the small arrow on the menu's edge to shrink it to icons. Your choice is remembered on this computer."],
+            ["Your data", "Everything is saved in the idev data folder in your Documents, with automatic backups."],
+          ];
+      fill(
+        pageView,
+        pageTop("Help", []),
+        el(
+          "section",
+          { className: "card help-list" },
+          topics.map(([title, text]) => el("div", {}, el("h3", {}, title), el("p", {}, text))),
+        ),
+      );
+      return;
+    }
+    const info =
+      view === "reports"
+        ? ["Reports", "Team skill averages over time, most improved, players not rated recently, and exports. This page is next on the list."]
+        : ["Drills & practice plans", "One drill library for the whole team and practice plans you can attach to schedule events. This page is next on the list. Drills assigned to a single player are still on their Player Development page."];
+    fill(
+      pageView,
+      pageTop(info[0], []),
+      el(
+        "section",
+        { className: "card placeholder" },
+        el("h2", {}, "Coming next"),
+        el("p", { className: "meta" }, info[1]),
+        el("button", { type: "button", className: "btn", onClick: () => go("home") }, "Back to Home"),
+      ),
+    );
+  }
+
+  // ----- team pickers in the admin forms -----
+  function fillTeamSelects() {
+    document.querySelectorAll(".team-select").forEach((select) => {
+      const current = select.value;
+      fill(select, shell.teams.map((t) => el("option", { value: t.id }, `${t.name} (${t.sport})`)));
+      if (current && teamById(current)) select.value = current;
+      const label = select.closest("label");
+      if (label) label.classList.toggle("hidden", shell.teams.length < 2);
+    });
+    renderStaffTeamChecks(staffTeamsBox, []);
+  }
+
+  function renderStaffTeamChecks(container, selected) {
+    if (!container) return;
+    const fieldset = container.closest("fieldset");
+    if (fieldset) fieldset.classList.toggle("hidden", shell.teams.length < 2);
+    fill(
+      container,
+      shell.teams.map((t) =>
+        el(
+          "label",
+          {},
+          el("input", { type: "checkbox", name: "team_ids", value: t.id, checked: selected.includes(t.id) }),
+          t.name,
+        ),
+      ),
+    );
+  }
+
+  function staffTeamsRow(member) {
+    if (shell.teams.length < 2) return null;
+    const selected = Array.isArray(member.team_ids) ? member.team_ids : [];
+    const boxes = shell.teams.map((t) => {
+      const input = el("input", { type: "checkbox", value: t.id, checked: selected.includes(t.id) });
+      input.addEventListener("change", () => {
+        const ids = Array.from(row.querySelectorAll("input:checked")).map((box) => box.value);
+        updateStaffIdentity(member, { team_ids: ids });
+      });
+      return el("label", { className: "check-row" }, input, t.name);
+    });
+    const row = el(
+      "div",
+      { className: "staff-manage-teams" },
+      el("span", { className: "meta" }, selected.length ? "Teams:" : "Teams (none checked = all):"),
+      boxes,
+    );
+    return row;
+  }
+
+  function staffTeamsText(member) {
+    if (shell.teams.length < 2) return "";
+    const ids = Array.isArray(member.team_ids) ? member.team_ids : [];
+    if (!ids.length) return "All teams";
+    return ids.map((id) => (teamById(id) || {}).name).filter(Boolean).join(", ");
+  }
+
+  async function removeTeam(team) {
+    if (!window.confirm(`Delete ${team.name}? Its schedule events are deleted too.`)) return;
+    try {
+      await request(`/api/teams/${encodeURIComponent(team.id)}`, { method: "DELETE" });
+      await loadTeams();
+      await loadTeam();
+      await loadEvents();
+    } catch (error) {
+      showError(error.message);
+    }
+  }
+
+  // ----- shell controls -----
+  collapseBtn.addEventListener("click", () => {
+    shell.collapsed = !shell.collapsed;
+    writeStored("idev.sideCollapsed", shell.collapsed ? "1" : "0");
+    renderSide();
+  });
+  hamburgerBtn.addEventListener("click", () => appView.classList.add("menu-open"));
+  sideScrim.addEventListener("click", closeDrawer);
+  teamSwitchBtn.addEventListener("click", () => {
+    if (!isPlayerView() && shell.teams.length > 1) openTeamMenu();
+  });
+
+  function startShell() {
+    shell.view = viewFromHash();
+    shell.month = null;
+    shell.events = [];
+    shell.eventsLoaded = false;
+    showView(shell.view);
+    loadTeams().catch((error) => showError(error.message));
+    loadEvents().catch((error) => showError(error.message));
+  }
+
+  function stopShell() {
+    closeEventPop();
+    closeTeamMenu();
+    closeDrawer();
+    shell.teams = [];
+    shell.events = [];
+    shell.eventsLoaded = false;
+  }
 
   bootstrap();
 })();
