@@ -18,6 +18,52 @@ if str(ROOT) not in sys.path:
 import app
 
 
+class DataLocationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.home = Path(self.tmp.name) / "home"
+        self.program = Path(self.tmp.name) / "idev-main"
+        self.home.mkdir()
+        self.program.mkdir()
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def test_default_path_prefers_documents(self) -> None:
+        self.assertEqual(app.default_data_path(self.home), self.home / "idev data" / "data.json")
+        (self.home / "OneDrive" / "Documents").mkdir(parents=True)
+        self.assertEqual(
+            app.default_data_path(self.home),
+            self.home / "OneDrive" / "Documents" / "idev data" / "data.json",
+        )
+        (self.home / "Documents").mkdir()
+        self.assertEqual(
+            app.default_data_path(self.home), self.home / "Documents" / "idev data" / "data.json"
+        )
+
+    def test_migrates_program_folder_data_once(self) -> None:
+        legacy = self.program / "data.json"
+        legacy.write_text('{"players": [{"id": "p1", "name": "Allison"}]}')
+        (self.program / "data_backups").mkdir()
+        (self.program / "data_backups" / "data-1.json").write_text("{}")
+        target = self.home / "idev data" / "data.json"
+
+        self.assertTrue(app.migrate_legacy_data(target, legacy))
+        self.assertIn("Allison", target.read_text())
+        self.assertTrue((target.parent / "data_backups" / "data-1.json").exists())
+        self.assertFalse(legacy.exists())
+        self.assertTrue((self.program / "data.json.moved").exists())
+
+        legacy.write_text('{"players": []}')
+        self.assertFalse(app.migrate_legacy_data(target, legacy))
+        self.assertIn("Allison", target.read_text())
+
+    def test_no_migration_without_legacy_file(self) -> None:
+        target = self.home / "idev data" / "data.json"
+        self.assertFalse(app.migrate_legacy_data(target, self.program / "data.json"))
+        self.assertFalse(target.exists())
+
+
 class StoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()

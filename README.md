@@ -23,10 +23,21 @@ Double-click the launcher in the idev folder:
 - **Windows:** `Start idev.bat`
 
 Each time you start idev this way, it checks GitHub for a newer version,
-downloads it if there is one, and then opens idev in your browser. Your
-roster and ratings in `data.json` are never replaced; a copy is saved in
-`data_backups/` before every update. If the computer is offline, idev just
-starts with the version you already have.
+downloads it if there is one, and then opens idev in your browser. If the
+computer is offline, idev just starts with the version you already have.
+
+## Where your data is saved
+
+Your roster, ratings, notes, and logins are saved in a folder named
+**idev data** inside your **Documents** folder (`Documents/idev data/data.json`),
+not in the program folder. Updates, a fresh download, or deleting the program
+folder never touch it. Timestamped backups are kept next to it in
+`Documents/idev data/data_backups`. When idev starts, the window shows the exact
+location.
+
+If your computer has no Documents folder, idev uses `idev data` in your home
+folder instead. To use a different file, set `IDEV_DATA` to its path before
+starting.
 
 Leave the window that opens running while you use idev. Close it (or press
 `Ctrl+C`) to stop. To pick up an update, close idev and start it again.
@@ -36,10 +47,12 @@ is from an unidentified developer". Right-click (or Control-click)
 `Start idev.command`, choose **Open**, then click **Open** again. You only have
 to do this once.
 
-**Moving from an older copy:** if you already have an idev folder with your
-players in it, copy `data.json` (and the `data_backups` folder) from the old
-folder into the new one before you start it. Then you can delete the old
-folder.
+**Moving from an older copy:** older versions kept `data.json` inside the
+program folder. The first time the new version starts, it moves that file (and
+`data_backups`) into `Documents/idev data` for you and renames the old file
+to `data.json.moved`. If your players are in a different, older idev folder,
+copy that folder's `data.json` into the new program folder once before you
+start idev, and it will be moved automatically.
 
 ## Run it from a terminal (optional)
 
@@ -65,7 +78,7 @@ python app.py
 
 That address only works on the same computer that is running `app.py`. Leave the terminal window open while you use the app. Press `Ctrl+C` in the terminal when you want to stop.
 
-The first launch creates two sample players so you can click around. Your changes are saved in `data.json` in the same folder.
+The first launch creates two sample players so you can click around. Your changes are saved in `Documents/idev data` (see "Where your data is saved").
 
 ## Signing in
 
