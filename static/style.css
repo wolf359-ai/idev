@@ -1725,6 +1725,156 @@ h1, h2, h3, p {
   }
 }
 
+/* ---------- Combined Performance Profile + skills card (prototype layouts) ---------- */
+.profile-card {
+  grid-column: 1 / -1;
+}
+
+.profile-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.profile-head h2 {
+  font-size: 0.98rem;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.3rem;
+}
+
+.profile-head .meta {
+  margin: 0;
+}
+
+.profile-head .seg-btn {
+  white-space: nowrap;
+}
+
+.profile-body {
+  display: grid;
+  gap: 1rem;
+  align-items: center;
+}
+
+.profile-card .radar-wrap {
+  padding: 0;
+}
+
+.profile-card .radar {
+  max-width: 380px;
+}
+
+.profile-card .profile-body .skills {
+  gap: 0.5rem;
+}
+
+/* A: radar left, skills as a 2-column grid on the right. */
+.layout-side .profile-body {
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.4fr);
+}
+
+.layout-side .profile-body .skills {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+/* B: five skills on each side of the radar. */
+.layout-wings .profile-body {
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 1.15fr) minmax(0, 1fr);
+}
+
+.layout-wings .profile-body .skills {
+  grid-template-columns: 1fr;
+}
+
+/* C: radar left, one slim row per skill on the right, like a chart legend. */
+.layout-legend .profile-body {
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.3fr);
+}
+
+.layout-legend .profile-body .skills {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.layout-legend .skill {
+  flex-wrap: nowrap;
+  align-items: center;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  min-height: 2.45rem;
+  padding: 0.3rem 0.75rem;
+}
+
+.layout-legend .skill:last-child {
+  border-bottom: none;
+}
+
+.layout-legend .skill:nth-child(odd) {
+  background: var(--panel-2);
+}
+
+.layout-legend .skill-main {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.layout-legend .skill-main h3 {
+  flex: none;
+  width: 7.5rem;
+  margin: 0;
+}
+
+.layout-legend .skill-main .meta {
+  min-width: 4.5rem;
+}
+
+.layout-legend .skill-main {
+  flex: none;
+}
+
+.layout-legend .skill-metric {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+@container skill (max-width: 30rem) {
+  .layout-legend .skill-main h3 {
+    width: 6.5rem;
+  }
+
+  .layout-legend .skill-metric h3 {
+    display: none;
+  }
+}
+
+/* Not enough room beside the radar: stack it above the skills. */
+@container (max-width: 40rem) {
+  .profile-card .profile-body {
+    grid-template-columns: 1fr;
+  }
+
+  .layout-wings .profile-body .radar-wrap {
+    order: -1;
+  }
+
+  .layout-side .profile-body .skills,
+  .layout-wings .profile-body .skills {
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  }
+}
+
 /* Ten skills as two rows of five whenever the card is wide enough for the dots. */
 @container (min-width: 44rem) {
   .skills-card .skills {

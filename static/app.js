@@ -1417,48 +1417,19 @@
     const metrics = computeMetrics(player);
     const hero = renderHero(player, metrics);
 
-    const skills = el(
-      "section",
-      { className: "card skills-card" },
-      el("h2", {}, "Skills and ratings"),
+    const skillTile = (item) =>
       el(
-        "p",
-        { className: "meta" },
-        readOnly
-          ? "Your latest rating for each skill (1–5)."
-          : "Click a circle to rate (1–5); click its left half for a half point (e.g. 3.5). Older ratings stay in Progress.",
-      ),
-      el(
-        "div",
-        { className: "skills" },
-        (player.progress || []).map((item) =>
-          el(
-            "article",
-            { className: "skill", "data-skill-id": item.skill_id },
-            el(
-              "div",
-              { className: "skill-main" },
-              el("h3", {}, item.skill_name || "Skill"),
-              scoreDots(item.skill_id, item.current, readOnly),
-              el(
-                "div",
-                { className: "meta" },
-                item.current ? `${item.current} / 5` : "Not rated yet",
-              ),
-            ),
-            skillMetric(player, item.skill_name || "", !canEditProfile),
-          ),
+        "article",
+        { className: "skill", "data-skill-id": item.skill_id },
+        el(
+          "div",
+          { className: "skill-main" },
+          el("h3", {}, item.skill_name || "Skill"),
+          scoreDots(item.skill_id, item.current, readOnly),
+          el("div", { className: "meta" }, item.current ? `${item.current} / 5` : "Not rated yet"),
         ),
-      ),
-    );
-
-    const radar = el(
-      "section",
-      { className: "card radar-card" },
-      el("h2", {}, "Performance Profile"),
-      el("p", { className: "meta" }, "Strengths and weaknesses across every skill at a glance."),
-      el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
-    );
+        skillMetric(player, item.skill_name || "", !canEditProfile),
+      );
 
     const progress = renderProgressCard(player, rated, readOnly);
 
@@ -1467,12 +1438,81 @@
     const dash = el(
       "div",
       { className: "dash" },
-      radar,
-      skills,
+      renderProfileCard(player, skillTile, readOnly),
       progress,
     );
 
     main.replaceChildren(hero, dash);
+  }
+
+  // Prototype: three ways to show the radar and skill ratings in one card.
+  const PROFILE_LAYOUTS = [
+    { id: "side", label: "A · Side by side" },
+    { id: "wings", label: "B · Wings" },
+    { id: "legend", label: "C · Legend list" },
+  ];
+
+  function profileLayout() {
+    const stored = readStored("idev.profileLayout", "side");
+    return PROFILE_LAYOUTS.some((l) => l.id === stored) ? stored : "side";
+  }
+
+  function renderProfileCard(player, skillTile, readOnly) {
+    const layout = profileLayout();
+    const items = player.progress || [];
+    const radar = el("div", { className: "radar-wrap" }, renderRadar(items));
+    let body;
+    if (layout === "wings") {
+      const half = Math.ceil(items.length / 2);
+      body = [
+        el("div", { className: "skills skills-wing" }, items.slice(0, half).map(skillTile)),
+        radar,
+        el("div", { className: "skills skills-wing" }, items.slice(half).map(skillTile)),
+      ];
+    } else {
+      body = [radar, el("div", { className: "skills" }, items.map(skillTile))];
+    }
+    const switcher = el(
+      "div",
+      { className: "seg", role: "group", "aria-label": "Profile layout" },
+      PROFILE_LAYOUTS.map((l) =>
+        el(
+          "button",
+          {
+            type: "button",
+            className: "seg-btn" + (layout === l.id ? " on" : ""),
+            "aria-pressed": String(layout === l.id),
+            onClick: () => {
+              writeStored("idev.profileLayout", l.id);
+              renderDetail();
+            },
+          },
+          l.label,
+        ),
+      ),
+    );
+    return el(
+      "section",
+      { className: `card skills-card profile-card layout-${layout}` },
+      el(
+        "div",
+        { className: "profile-head" },
+        el(
+          "div",
+          {},
+          el("h2", {}, "Performance Profile"),
+          el(
+            "p",
+            { className: "meta" },
+            readOnly
+              ? "Strengths and weaknesses across every skill, with your latest rating (1–5) for each."
+              : "Strengths and weaknesses at a glance. Click a circle to rate (1–5); click its left half for a half point.",
+          ),
+        ),
+        switcher,
+      ),
+      el("div", { className: "profile-body" }, body),
+    );
   }
 
   const PROGRESS_STATUS = {
