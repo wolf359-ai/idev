@@ -55,6 +55,7 @@
           <span id="message-badge" class="icon-badge hidden">0</span>
         </button>
         <span id="session-label" class="session-label"></span>
+        <button type="button" id="admin-btn" class="btn admin-btn">Admin</button>
         <button type="button" id="logout-btn" class="btn">Sign out</button>
       </div>
     </header>
@@ -64,24 +65,42 @@
         <h2>Players</h2>
       </div>
       <ul id="player-list" class="player-list"></ul>
-      <hr class="roster-sep">
-      <details class="admin" id="admin-tools">
-        <summary class="admin-summary">
-          <span class="admin-title">Admin</span>
-          <span class="admin-caret" aria-hidden="true"></span>
-        </summary>
-        <div class="admin-body">
-        <details class="admin admin-sub" id="import-roster">
-          <summary class="admin-summary">
-            <span class="admin-title">Import roster</span>
-            <span class="admin-caret" aria-hidden="true"></span>
-          </summary>
-          <div class="admin-body">
-      <form id="import-roster-form" class="form" autocomplete="off">
+    </aside>
+
+    <main class="main" id="main">
+      <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, GameChanger stats, notes, and progress.</p>
+    </main>
+
+    <dialog id="admin-modal" class="modal modal-admin" aria-labelledby="admin-modal-title">
+      <div class="admin-modal-head">
+        <h3 class="modal-title" id="admin-modal-title">Admin</h3>
+        <button type="button" id="close-admin" class="btn">Close</button>
+      </div>
+      <div class="admin-tabs" role="tablist" aria-label="Admin sections">
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-players" data-tab="players" aria-controls="admin-panel-players" aria-selected="true">Players</button>
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-logins" data-tab="logins" aria-controls="admin-panel-logins" aria-selected="false" tabindex="-1">Logins</button>
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-stats" data-tab="stats" aria-controls="admin-panel-stats" aria-selected="false" tabindex="-1">Stats</button>
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-staff" data-tab="staff" aria-controls="admin-panel-staff" aria-selected="false" tabindex="-1">Staff</button>
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-team" data-tab="team" aria-controls="admin-panel-team" aria-selected="false" tabindex="-1">Team</button>
+      </div>
+
+      <section class="admin-panel" id="admin-panel-players" role="tabpanel" aria-labelledby="admin-tab-players">
+        <div class="admin-section">
+          <div class="admin-section-head">
+            <div>
+              <h4>Add a player</h4>
+              <p class="meta">Enter one player's name, position, and jersey number.</p>
+            </div>
+            <button type="button" id="open-add-player" class="btn btn-primary">Add player</button>
+          </div>
+        </div>
+        <div class="admin-section">
+          <h4>Import roster</h4>
+          <form id="import-roster-form" class="form" autocomplete="off">
         <p class="meta">
           In GameChanger, open Stats and choose Export Stats. Select that CSV here;
-          the importer reads the # and Roster columns. You can also paste one player
-          per line.
+          the importer reads the Number, First, and Last columns. You can also paste
+          one player per line.
         </p>
         <label>
           GameChanger CSV
@@ -99,18 +118,29 @@
         <div id="roster-preview" class="import-preview hidden" aria-live="polite"></div>
         <div class="row">
           <button type="submit" id="preview-roster" class="btn btn-primary">Preview roster</button>
-          <button type="button" id="cancel-import-roster" class="btn">Cancel</button>
+          <button type="button" id="cancel-import-roster" class="btn">Clear</button>
         </div>
       </form>
+        </div>
+      </section>
+
+      <section class="admin-panel hidden" id="admin-panel-logins" role="tabpanel" aria-labelledby="admin-tab-logins">
+        <div class="admin-section">
+          <div>
+            <h4>Player logins</h4>
+            <p class="meta">
+              Give a player a username and password so they can sign in and see only their
+              own development. Resetting replaces the old login; removing turns off access.
+            </p>
           </div>
-        </details>
-        <details class="admin admin-sub" id="import-stats">
-          <summary class="admin-summary">
-            <span class="admin-title">Import stats</span>
-            <span class="admin-caret" aria-hidden="true"></span>
-          </summary>
-          <div class="admin-body">
-      <form id="import-stats-form" class="form" autocomplete="off">
+          <ul id="player-login-list" class="login-list"></ul>
+        </div>
+      </section>
+
+      <section class="admin-panel hidden" id="admin-panel-stats" role="tabpanel" aria-labelledby="admin-tab-stats">
+        <div class="admin-section">
+          <h4>Import GameChanger stats</h4>
+          <form id="import-stats-form" class="form" autocomplete="off">
         <p class="meta">
           In GameChanger, open Stats and choose Export Stats. Select that CSV here to
           update each player's season batting and fielding totals. Players are matched
@@ -132,46 +162,41 @@
         <div id="stats-preview" class="import-preview hidden" aria-live="polite"></div>
         <div class="row">
           <button type="submit" id="preview-stats" class="btn btn-primary">Preview stats</button>
-          <button type="button" id="cancel-import-stats" class="btn">Cancel</button>
+          <button type="button" id="cancel-import-stats" class="btn">Clear</button>
         </div>
       </form>
-          </div>
-        </details>
-        <div class="admin-sub admin-launch">
-          <button type="button" id="open-add-player" class="btn btn-primary">Add player</button>
         </div>
-        <details class="admin admin-sub" id="staff-tools">
-          <summary class="admin-summary">
-            <span class="admin-title">Staff</span>
-            <span class="admin-caret" aria-hidden="true"></span>
-          </summary>
-          <div class="admin-body">
-            <ul id="staff-list" class="staff-list"></ul>
+      </section>
+
+      <section class="admin-panel hidden" id="admin-panel-staff" role="tabpanel" aria-labelledby="admin-tab-staff">
+        <div class="admin-section">
+          <div class="admin-section-head">
+            <div>
+              <h4>Staff</h4>
+              <p class="meta">Coaches and team helpers who can sign in.</p>
+            </div>
             <div class="row">
               <button type="button" id="open-add-staff" class="btn btn-primary">Add staff</button>
               <button type="button" id="open-manage-staff" class="btn">Manage access</button>
             </div>
           </div>
-        </details>
-        <details class="admin admin-sub" id="team-tools">
-          <summary class="admin-summary">
-            <span class="admin-title">Team information</span>
-            <span class="admin-caret" aria-hidden="true"></span>
-          </summary>
-          <div class="admin-body">
-            <dl id="team-summary" class="team-summary"></dl>
-            <div class="row">
-              <button type="button" id="open-team-info" class="btn btn-primary">Edit team information</button>
-            </div>
-          </div>
-        </details>
+          <ul id="staff-list" class="staff-list"></ul>
         </div>
-      </details>
-    </aside>
+      </section>
 
-    <main class="main" id="main">
-      <p class="empty" id="empty-state">Add a player to start tracking skills, ratings, GameChanger stats, notes, and progress.</p>
-    </main>
+      <section class="admin-panel hidden" id="admin-panel-team" role="tabpanel" aria-labelledby="admin-tab-team">
+        <div class="admin-section">
+          <div class="admin-section-head">
+            <div>
+              <h4>Team information</h4>
+              <p class="meta">Shown in the header for everyone who signs in.</p>
+            </div>
+            <button type="button" id="open-team-info" class="btn btn-primary">Edit team information</button>
+          </div>
+          <dl id="team-summary" class="team-summary"></dl>
+        </div>
+      </section>
+    </dialog>
 
     <dialog id="staff-modal" class="modal" aria-labelledby="staff-modal-title">
       <form id="add-staff-form" class="form" autocomplete="off">

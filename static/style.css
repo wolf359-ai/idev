@@ -159,122 +159,187 @@ h1, h2, h3, p {
   margin-bottom: 0.5rem;
 }
 
-/* Simple divider between the player list and the Admin section below it. */
-.roster-sep {
-  border: none;
-  border-top: 1px solid var(--line);
-  margin: 0.75rem 0;
+/* ---------- Admin modal ---------- */
+.admin-btn {
+  border-color: rgba(251, 146, 60, 0.55);
+  color: #fdba74;
+  font-weight: 700;
 }
 
-/* Collapsible admin section styled like a Cursor hover-highlight row:
-   no frame by default, a soft rounded highlight on hover, expands on click. */
-.admin {
-  border: none;
-  background: none;
-  margin-bottom: 0.5rem;
+.admin-btn:hover {
+  border-color: var(--orange);
+  background: rgba(251, 146, 60, 0.12);
 }
 
-.admin-summary {
-  list-style: none;
-  cursor: pointer;
+.modal.modal-admin {
+  width: min(720px, 94vw);
+  max-height: min(88vh, 900px);
+  padding: 0;
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal.modal-admin[open] {
+  display: flex;
+}
+
+.admin-modal-head {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.35rem 0.5rem;
-  border-radius: 8px;
-  font-size: 0.68rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  font-weight: 700;
-  color: var(--muted);
-  background: transparent;
-  user-select: none;
-  transition: color 0.12s ease, background 0.12s ease;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.25rem 0.75rem;
 }
 
-.admin-summary::-webkit-details-marker {
+.admin-modal-head .modal-title {
+  margin: 0;
+  font-size: 1.15rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0.25rem;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+}
+
+.admin-tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  padding: 0.6rem 0.9rem;
+  margin-bottom: -1px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-tab:hover {
+  color: var(--ink);
+}
+
+.admin-tab[aria-selected="true"] {
+  color: var(--ink);
+  border-bottom-color: var(--orange);
+}
+
+.admin-tab:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: -2px;
+  border-radius: 6px 6px 0 0;
+}
+
+.admin-panel {
+  padding: 1.1rem 1.25rem 1.25rem;
+  overflow-y: auto;
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+}
+
+.admin-panel.hidden {
   display: none;
 }
 
-.admin-summary:hover {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.admin[open] .admin-summary {
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.04);
-}
-
-/* Small chevron that rotates open, placed right after the label. */
-.admin-caret {
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  /* Collapsed: caret points down. */
-  border-top: 5px solid currentColor;
-  opacity: 0.75;
-}
-
-/* Open: caret points up. Scoped to this row's own summary so an open parent
-   doesn't flip the carets of its collapsed child rows. */
-.admin[open] > .admin-summary .admin-caret {
-  border-top: 0;
-  border-bottom: 5px solid currentColor;
-}
-
-.admin-body {
-  padding: 0.55rem 0.5rem 0.2rem;
+.admin-section {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-2);
+  padding: 1rem;
   display: grid;
-  gap: 0.6rem;
-  animation: admin-reveal 0.16s ease;
+  gap: 0.75rem;
 }
 
-@keyframes admin-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(-2px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.admin-section h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
 }
 
-/* Nested accordion rows (Import roster / Add player) sit flush inside Admin. */
-.admin-sub {
-  margin-bottom: 0;
+.admin-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-/* Launch row: a plain trigger button (Add player) that opens a modal. */
-.admin-launch {
-  padding: 0.1rem 0;
+.admin-section-head .meta {
+  margin-top: 0.2rem;
 }
 
-.admin-launch .btn {
-  width: 100%;
-}
-
-/* Staff actions stack full-width to match the Add player button. */
-#staff-tools .row {
-  flex-direction: column;
-}
-
-#staff-tools .row .btn {
-  width: 100%;
-}
-
-.admin-sub > .admin-body {
-  padding: 0.35rem 0 0.1rem;
-}
-
-/* Forms nested in the accordion don't need their own card frame. */
-.admin-body .form {
+.admin-section .form {
   border: none;
   background: none;
   padding: 0;
   margin: 0;
+}
+
+.admin-section textarea {
+  min-height: 7rem;
+}
+
+.admin-section .staff-list {
+  margin: 0;
+}
+
+.login-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.login-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+
+.login-info {
+  display: grid;
+  min-width: 0;
+}
+
+.login-info strong,
+.login-info .meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.login-actions {
+  display: flex;
+  gap: 0.4rem;
+  justify-content: flex-end;
+  /* Reset + Remove width, so the buttons line up across rows. */
+  min-width: 11.5rem;
+}
+
+@media (max-width: 560px) {
+  .login-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .login-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+    min-width: 0;
+  }
 }
 
 .roster-head h2,
@@ -1181,7 +1246,8 @@ textarea {
 .staff-pw-set,
 #open-team-info,
 #team-form .btn-primary,
-#preview-roster {
+#preview-roster,
+#preview-stats {
   background: linear-gradient(180deg, #fdba74, #fb923c);
   color: #2a1405;
 }
@@ -1193,7 +1259,8 @@ textarea {
 .staff-pw-set:hover,
 #open-team-info:hover,
 #team-form .btn-primary:hover,
-#preview-roster:hover {
+#preview-roster:hover,
+#preview-stats:hover {
   background: linear-gradient(180deg, #fecb94, #fca44f);
 }
 
@@ -1973,8 +2040,8 @@ textarea {
 }
 
 /* Managers and view-only staff can browse the roster but not the admin tools. */
-.app.no-admin #admin-tools,
-.app.no-admin .roster-sep {
+.app.no-admin #admin-btn,
+.app.role-player #admin-btn {
   display: none;
 }
 
