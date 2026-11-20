@@ -1,0 +1,3 @@
+# To do
+
+- [ ] **GameChanger stats: decide where they live and how they're used.** The "GameChanger stats" button on the player card was removed for now. The stats popup (`#stats-modal`, `openStatsModal` in `static/app.js`) and the Admin → Stats CSV import still work, but there is no way to open the popup from the player page. Decide where stats should appear (for example a Stats tab on Player Development, a Reports page, or game results on the Schedule) and how coaches enter or view them, then reconnect it.

@@ -65,6 +65,10 @@ h1, h2, h3, p {
   transition: grid-template-columns 0.2s ease;
 }
 
+.app.collapsed {
+  grid-template-columns: var(--side-w-collapsed) minmax(0, 1fr);
+}
+
 .app-body {
   min-width: 0;
   display: flex;
@@ -1530,17 +1534,10 @@ h1, h2, h3, p {
     align-items: stretch;
   }
 
-  /* Row 1: skills next to the radar, forced to the same height. */
+  /* Performance profile on top, then the skills as one full-width strip. */
+  .radar-card,
   .skills-card {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  .radar-card {
-    grid-column: 2;
-    grid-row: 1;
-    /* Fill the shared row so it always matches the skills card's height. */
-    height: 100%;
+    grid-column: 1 / -1;
   }
 
   /* Rows 2+: stats and progress each span the full width. */
@@ -1562,8 +1559,89 @@ h1, h2, h3, p {
   /* Columns must be wide enough for the rating dots plus a measurement
      (e.g. Exit Velo), otherwise the card content overflows and is clipped. */
   .skills-card .skills {
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-    gap: 0.55rem;
+    grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+    gap: 0.5rem;
+  }
+
+  /* Compact skill tiles: name, dots and score stacked, measurement underneath. */
+  .skills-card .skill {
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0.35rem;
+    padding: 0.55rem 0.65rem;
+  }
+
+  .skills-card .skill h3 {
+    margin-bottom: 0.35rem;
+  }
+
+  .skills-card .dots {
+    gap: 0.3rem;
+  }
+
+  .skills-card .dot {
+    flex: none;
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+
+  .skills-card .skill-metric {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.35rem;
+    min-width: 0;
+    margin-top: auto;
+    padding-top: 0.35rem;
+    border-top: 1px solid var(--line-soft);
+    text-align: left;
+  }
+
+  .skills-card .skill-metric h3 {
+    margin: 0;
+    white-space: nowrap;
+    font-size: 0.74rem;
+    color: var(--muted);
+  }
+
+  .skills-card .skill-metric-value,
+  .skills-card .skill-metric-input {
+    width: 3rem;
+    font-size: 1rem;
+    text-align: left;
+  }
+
+  .skills-card .skill-metric-unit {
+    margin: 0;
+    font-size: 0.74rem;
+  }
+
+  .skills-card > .meta {
+    margin-bottom: 0.7rem;
+  }
+
+  .radar-card > .meta {
+    font-size: 0.85rem;
+  }
+
+  .radar-card .radar-wrap {
+    padding: 0;
+  }
+
+  .radar-card .radar {
+    max-width: 380px;
+  }
+}
+
+.skills-card {
+  container-type: inline-size;
+}
+
+/* Ten skills as two rows of five whenever the card is wide enough for the dots. */
+@container (min-width: 44rem) {
+  .skills-card .skills {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 }
 
@@ -2632,32 +2710,6 @@ textarea {
     letter-spacing: 0.05em;
     line-height: 1.3;
   }
-}
-
-/* Entry point on the player card. */
-.stats-launch {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.65rem;
-  margin-top: 0.6rem;
-}
-
-.stats-open {
-  border-color: rgba(34, 211, 238, 0.45);
-  color: var(--cyan);
-  font-size: 0.8rem;
-  font-weight: 700;
-}
-
-.stats-open:hover {
-  background: rgba(34, 211, 238, 0.1);
-}
-
-.stats-summary {
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .stat-group h3 {

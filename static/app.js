@@ -1371,7 +1371,7 @@
           y: y.toFixed(1),
           "text-anchor": anchor,
           "dominant-baseline": "middle",
-          "font-size": "10",
+          "font-size": "13",
           fill: "#9fb0c0",
         },
         `${item.label} (${item.value || 0})`,
@@ -1467,8 +1467,8 @@
     const dash = el(
       "div",
       { className: "dash" },
-      skills,
       radar,
+      skills,
       progress,
     );
 
@@ -2459,7 +2459,6 @@
       el("div", { className: "hero-name" }, player.name),
       el("div", { className: "hero-sub" }, positionLabel(player) || "Athlete"),
       el("div", { className: "tags" }, tags),
-      statsLauncher(player, m),
     );
 
     const tiles = el(
@@ -2658,34 +2657,6 @@
     }
     drillForm.reset();
     drillTargetId = null;
-  }
-
-  // "GameChanger stats" button on the player card, with a one-line AVG / OPS
-  // summary once any game totals have been entered.
-  function statsLauncher(player, m) {
-    const stats = player.stats || {};
-    const hasStats = [...(stats.offense || []), ...(stats.defense || [])].some(
-      (item) => item.kind === "count" && Number(item.value) > 0,
-    );
-    const summary = hasStats
-      ? ["AVG", "OPS"]
-          .map((abbr) => {
-            const value = m.findStat(abbr);
-            return value === null ? null : `${abbr} ${value}`;
-          })
-          .filter(Boolean)
-          .join(" · ")
-      : "";
-    return el(
-      "div",
-      { className: "stats-launch" },
-      el(
-        "button",
-        { type: "button", className: "btn stats-open", "aria-haspopup": "dialog", onClick: openStatsModal },
-        "GameChanger stats",
-      ),
-      el("span", { className: "stats-summary" }, summary || (hasStats ? "" : "No game stats yet")),
-    );
   }
 
   function statsGroup(title, items) {
@@ -5123,7 +5094,7 @@
     const noLogin = players.filter((p) => !p.has_login).length;
     const list = [
       { icon: "calendar", title: "Schedule", desc: "Practices, games, tournaments, training and scrimmages across every team.", live: `${plural(weekCount, "event")} this week`, action: () => go("schedule") },
-      { icon: "trend", title: "Player Development", desc: "Skill ratings, performance profiles, progress tables and GameChanger stats.", live: improved ? `${improved} improved this week` : "", action: () => go("dev") },
+      { icon: "trend", title: "Player Development", desc: "Skill ratings, performance profiles and progress tables.", live: improved ? `${improved} improved this week` : "", action: () => go("dev") },
       { icon: "chart", title: "Reports", desc: "Team skill averages over time, most improved and not rated recently.", live: "Coming next", action: () => go("reports") },
       { icon: "clipboard", title: "Drills & Practice Plans", desc: "A team drill library and practice plans for schedule events.", live: "Coming next", action: () => go("drills") },
     ];
@@ -5517,14 +5488,14 @@
         ? [
             ["Home", "Your next events, your overall rating, and what changed since your coach last rated you."],
             ["Schedule", "Every practice, game, tournament, training session and scrimmage for your team. Tap an event to say whether you'll be there."],
-            ["My Development", "Your skill ratings, performance profile, progress table, GameChanger stats and notes from your coaches."],
+            ["My Development", "Your skill ratings, performance profile, progress table and notes from your coaches."],
             ["Messages and reminders", "Messages and reminders from your coaches show a number in the menu until you open them."],
           ]
         : [
             ["Home", "Your starting page: this week's numbers, what's coming up, who moved the most, and shortcuts to everything else."],
             ["Team switcher", "The box under the logo picks which team you're looking at. The roster, Home numbers and schedule follow it. Choose All teams to see everything."],
             ["Schedule", "Add practices, games, tournaments, training and scrimmages for a team. Click a day to add an event there. Players only see their own team's events and can answer whether they'll be there."],
-            ["Player Development", "The roster and player pages you already know: ratings, performance profile, progress table, GameChanger stats, notes and drills."],
+            ["Player Development", "The roster and player pages you already know: ratings, performance profile, progress table, notes and drills."],
             ["Teams and staff", "Admin → Team holds your teams (softball or baseball). Each player belongs to one team. Staff can be limited to certain teams, or left with access to all of them."],
             ["Minimize the menu", "Use the small arrow on the menu's edge to shrink it to icons. Your choice is remembered on this computer."],
             ["Your data", "Everything is saved in the idev data folder in your Documents, with automatic backups."],
