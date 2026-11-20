@@ -173,8 +173,8 @@ h1, h2, h3, p {
 
 /* Fixed size so switching tabs never resizes the window; panels scroll inside. */
 .modal.modal-admin {
-  width: min(720px, 94vw);
-  height: min(88vh, 760px);
+  width: min(1080px, 96vw);
+  height: min(92vh, 920px);
   max-height: none;
   padding: 0;
   display: none;
@@ -207,6 +207,10 @@ h1, h2, h3, p {
   padding: 0 1.25rem;
   border-bottom: 1px solid var(--line);
   overflow-x: auto;
+  /* overflow-x alone makes the row vertically scrollable too, and the tabs'
+     -1px underline overlap would show a stray scrollbar on macOS. */
+  overflow-y: hidden;
+  flex-shrink: 0;
 }
 
 .admin-tab {
@@ -295,12 +299,14 @@ h1, h2, h3, p {
   margin: 0;
 }
 
+/* Two columns on a wide modal so a 20-player roster fits without scrolling.
+   Multi-column keeps alphabetical order running down each column. */
 .login-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 0.4rem;
+  columns: 2 420px;
+  column-gap: 0.6rem;
 }
 
 .login-item {
@@ -308,7 +314,10 @@ h1, h2, h3, p {
   grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.55rem 0.7rem;
+  min-height: 3rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.7rem;
+  margin-bottom: 0.35rem;
+  break-inside: avoid;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--panel);
@@ -331,7 +340,12 @@ h1, h2, h3, p {
   gap: 0.4rem;
   justify-content: flex-end;
   /* Reset + Remove width, so the buttons line up across rows. */
-  min-width: 11.5rem;
+  min-width: 10.5rem;
+}
+
+.login-actions .btn {
+  padding: 0.32rem 0.7rem;
+  font-size: 0.85rem;
 }
 
 @media (max-width: 560px) {
