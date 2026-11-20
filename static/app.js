@@ -21,6 +21,7 @@
   const closeAdminBtn = document.getElementById("close-admin");
   const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
   const playerLoginList = document.getElementById("player-login-list");
+  const managePlayerList = document.getElementById("manage-player-list");
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
@@ -87,6 +88,7 @@
   const closeMessage = document.getElementById("close-message");
   let drillTargetId = null;
   let loginTargetId = null;
+  let editTargetId = null;
   let noteTargetCategory = "focus";
 
   const state = {
@@ -1347,23 +1349,15 @@
 
     const player = state.detail;
     const readOnly = isReadOnly();
-    // Editing the player profile, access codes, metrics, and stats is an admin
-    // action (coach or "Full" staff). Managers still rate, add notes/drills.
+    // Editing metrics and stats is an admin action (coach or "Full" staff).
+    // Managers still rate, add notes/drills.
     const canEditProfile = canAdmin();
     emptyState.classList.add("hidden");
 
     const rated = (player.progress || []).filter((item) => item.current);
 
-    const actions = [];
-    if (canEditProfile) {
-      actions.push(el("button", { type: "button", className: "btn", onClick: editPlayer }, "Edit"));
-      actions.push(
-        el("button", { type: "button", className: "btn btn-danger", onClick: removePlayer }, "Delete"),
-      );
-    }
-
     const metrics = computeMetrics(player);
-    const hero = renderHero(player, actions, metrics);
+    const hero = renderHero(player, metrics);
     const statTiles = renderStatTiles(metrics);
 
     const skills = el(
@@ -1999,7 +1993,7 @@
     return d.join(" ");
   }
 
-  function renderHero(player, actions, m) {
+  function renderHero(player, m) {
     const tags = [el("span", { className: "tag on" }, `Overall ${m.overall}%`)];
     if (player.team_year) {
       tags.push(el("span", { className: "tag" }, `${player.team_year} team year`));
@@ -2019,7 +2013,6 @@
       el("div", { className: "hero-name" }, player.name),
       el("div", { className: "hero-sub" }, positionLabel(player) || "Athlete"),
       el("div", { className: "tags" }, tags),
-      actions.length ? el("div", { className: "row", style: "margin-top:0.7rem" }, actions) : null,
     );
 
     const tiles = el(
@@ -2311,6 +2304,7 @@
     renderRoster();
     renderBrandMeta();
     renderPlayerLogins();
+    renderManagePlayers();
     if (state.selectedId) {
       await loadDetail(state.selectedId);
     } else {
@@ -2591,29 +2585,36 @@
     }
   }
 
-  async function removePlayer() {
-    if (!state.selectedId) {
+  async function removePlayer(player) {
+    if (!player) {
       return;
     }
-    const name = state.detail && state.detail.name ? state.detail.name : "this player";
+    const name = player.name || "this player";
     if (!window.confirm(`Delete ${name} and their ratings and notes?`)) {
       return;
     }
     try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}`, { method: "DELETE" });
-      state.selectedId = null;
-      state.detail = null;
+      await request(`/api/players/${encodeURIComponent(player.id)}`, { method: "DELETE" });
+      if (state.selectedId === player.id) {
+        state.selectedId = null;
+        state.detail = null;
+      }
       await loadPlayers();
     } catch (error) {
       showError(error.message);
     }
   }
 
-  function editPlayer() {
-    if (!state.detail || !editPlayerModal) {
+  function editPlayer(player) {
+    if (!player || !editPlayerModal) {
       return;
     }
-    const p = state.detail;
+    const p = player;
+    editTargetId = player.id;
+    const title = document.getElementById("edit-player-title");
+    if (title) {
+      title.textContent = `Edit ${player.name || "player"}`;
+    }
     editPlayerForm.reset();
     editPlayerForm.elements.name.value = p.name || "";
     editPlayerForm.elements.position.value = p.position || "";
@@ -2634,6 +2635,41 @@
       editPlayerModal.close();
     }
     editPlayerForm.reset();
+    editTargetId = null;
+  }
+
+  function renderManagePlayers() {
+    if (!managePlayerList) {
+      return;
+    }
+    if (!state.players.length) {
+      managePlayerList.replaceChildren(el("li", { className: "meta" }, "No players yet."));
+      return;
+    }
+    managePlayerList.replaceChildren(
+      ...state.players.map((player) =>
+        el(
+          "li",
+          { className: "login-item manage-item" },
+          el(
+            "div",
+            { className: "login-info" },
+            el("strong", {}, [jersey(player), player.name].filter(Boolean).join(" ")),
+            el("span", { className: "meta" }, positionLabel(player) || "Athlete"),
+          ),
+          el(
+            "div",
+            { className: "login-actions" },
+            el("button", { type: "button", className: "btn", onClick: () => editPlayer(player) }, "Edit"),
+            el(
+              "button",
+              { type: "button", className: "btn btn-danger", onClick: () => removePlayer(player) },
+              "Delete",
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   function renderPlayerLogins() {
@@ -3075,12 +3111,12 @@
   if (editPlayerForm) {
     editPlayerForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.selectedId) {
+      if (!editTargetId) {
         return;
       }
       const form = new FormData(editPlayerForm);
       try {
-        await request(`/api/players/${encodeURIComponent(state.selectedId)}`, {
+        await request(`/api/players/${encodeURIComponent(editTargetId)}`, {
           method: "PUT",
           body: JSON.stringify({
             name: form.get("name"),
@@ -3091,7 +3127,7 @@
           }),
         });
         closeEditPlayer();
-        await loadPlayers(state.selectedId);
+        await loadPlayers();
       } catch (error) {
         showError(error.message);
       }
