@@ -20,6 +20,10 @@
   const adminBtn = document.getElementById("admin-btn");
   const adminModal = document.getElementById("admin-modal");
   const closeAdminBtn = document.getElementById("close-admin");
+  const statsModal = document.getElementById("stats-modal");
+  const statsModalTitle = document.getElementById("stats-modal-title");
+  const statsModalBody = document.getElementById("stats-modal-body");
+  const closeStatsBtn = document.getElementById("close-stats");
   const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
   const playerLoginList = document.getElementById("player-login-list");
   const managePlayerList = document.getElementById("manage-player-list");
@@ -1392,7 +1396,6 @@
 
     const metrics = computeMetrics(player);
     const hero = renderHero(player, metrics);
-    const statTiles = renderGameStats(metrics);
 
     const skills = el(
       "section",
@@ -1436,33 +1439,6 @@
       el("p", { className: "meta" }, "Strengths and weaknesses across every skill at a glance."),
       el("div", { className: "radar-wrap" }, renderRadar(player.progress)),
     );
-
-    const stats = player.stats || { offense: [], defense: [] };
-    const statsCard = !canEditProfile
-      ? el(
-          "section",
-          { className: "card stats-card" },
-          el("h2", {}, "GameChanger stats"),
-          statsReadOnly("Offense", stats.offense || []),
-          statsReadOnly("Defense", stats.defense || []),
-        )
-      : el(
-          "section",
-          { className: "card stats-card" },
-          el("h2", {}, "GameChanger stats"),
-          el(
-            "p",
-            { className: "meta" },
-            "Most common offense and defense totals from GameChanger. AVG, OBP, SLG, OPS, and FLD% update when you save.",
-          ),
-          el(
-            "form",
-            { className: "form", onSubmit: saveStats },
-            statsGroup("Offense", stats.offense || []),
-            statsGroup("Defense", stats.defense || []),
-            el("button", { type: "submit", className: "btn btn-primary" }, "Save stats"),
-          ),
-        );
 
     const activity = player.activity || [];
     const activityBlock = activity.length
@@ -1516,16 +1492,58 @@
       { className: "dash" },
       skills,
       radar,
-      statsCard,
       progress,
     );
 
-    const nodes = [hero];
-    if (statTiles) {
-      nodes.push(statTiles);
+    main.replaceChildren(hero, dash);
+  }
+
+  // GameChanger stats live in a modal opened from the player card. Admins get
+  // the editable form; everyone else sees the totals read-only.
+  function renderStatsModal(statusText) {
+    const player = state.detail;
+    if (!player || !statsModalBody) {
+      return;
     }
-    nodes.push(dash);
-    main.replaceChildren(...nodes);
+    const number = jersey(player);
+    statsModalTitle.textContent = `GameChanger stats — ${number ? `${number} ` : ""}${player.name}`;
+    const stats = player.stats || { offense: [], defense: [] };
+    if (!canAdmin()) {
+      statsModalBody.replaceChildren(
+        statsReadOnly("Offense", stats.offense || []),
+        statsReadOnly("Defense", stats.defense || []),
+      );
+      return;
+    }
+    const status = el("span", { className: "stats-saved meta", role: "status" }, statusText || "");
+    statsModalBody.replaceChildren(
+      el(
+        "p",
+        { className: "meta" },
+        "Most common offense and defense totals from GameChanger. AVG, OBP, SLG, OPS, and FLD% update when you save.",
+      ),
+      el(
+        "form",
+        { className: "form", onSubmit: saveStats },
+        statsGroup("Offense", stats.offense || []),
+        statsGroup("Defense", stats.defense || []),
+        el(
+          "div",
+          { className: "stats-actions" },
+          el("button", { type: "submit", className: "btn btn-primary" }, "Save stats"),
+          status,
+        ),
+      ),
+    );
+  }
+
+  function openStatsModal() {
+    renderStatsModal();
+    showDialog(statsModal);
+  }
+
+  function closeStatsModal() {
+    hideDialog(statsModal);
   }
 
   // Map a 1-5 value to a tile accent color name.
@@ -2056,6 +2074,7 @@
       el("div", { className: "hero-name" }, player.name),
       el("div", { className: "hero-sub" }, positionLabel(player) || "Athlete"),
       el("div", { className: "tags" }, tags),
+      statsLauncher(player, m),
     );
 
     const tiles = el(
@@ -2256,85 +2275,32 @@
     drillTargetId = null;
   }
 
-  // Secondary tile row from GameChanger computed stats, when present.
-  function renderStatTiles(m) {
-    const specs = [
-      { abbr: "AVG", label: "Batting Avg", accent: "yellow" },
-      { abbr: "OBP", label: "On-Base %", accent: "cyan" },
-      { abbr: "SLG", label: "Slugging", accent: "orange" },
-      { abbr: "OPS", label: "OPS", accent: "lime" },
-      { abbr: "FLD%", label: "Fielding %", accent: "green" },
-    ];
-    const tiles = specs
-      .map((spec) => {
-        const display = m.findStat(spec.abbr);
-        if (display === null) {
-          return null;
-        }
-        return metricTile({ label: spec.label, value: display, accent: spec.accent, foot: "GameChanger" });
-      })
-      .filter(Boolean);
-    if (!tiles.length) {
-      return null;
-    }
-    return el("div", { className: "tiles game-stats-tiles", id: "game-stats-tiles" }, tiles);
-  }
-
-  const GAME_STATS_KEY = "idev.gameStatsOpen";
-
-  function gameStatsOpen() {
-    try {
-      return window.localStorage.getItem(GAME_STATS_KEY) === "1";
-    } catch (error) {
-      return false;
-    }
-  }
-
-  // The GameChanger tiles are rarely needed, so they sit closed behind a
-  // one-line toggle that remembers its state on this computer.
-  function renderGameStats(m) {
-    const tiles = renderStatTiles(m);
-    if (!tiles) {
-      return null;
-    }
-    const chevron = svgEl(
-      "svg",
-      { class: "game-stats-chevron", viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true" },
-      svgEl("path", {
-        d: "M6 9 L12 15 L18 9",
-        fill: "none",
-        stroke: "currentColor",
-        "stroke-width": "2.2",
-        "stroke-linecap": "round",
-        "stroke-linejoin": "round",
-      }),
+  // "GameChanger stats" button on the player card, with a one-line AVG / OPS
+  // summary once any game totals have been entered.
+  function statsLauncher(player, m) {
+    const stats = player.stats || {};
+    const hasStats = [...(stats.offense || []), ...(stats.defense || [])].some(
+      (item) => item.kind === "count" && Number(item.value) > 0,
     );
-    const stateText = el("span", { className: "game-stats-state" });
-    const toggle = el(
-      "button",
-      { type: "button", className: "game-stats-toggle", "aria-controls": tiles.id },
-      el("span", { className: "game-stats-title" }, "Game stats (GameChanger)"),
-      stateText,
-      chevron,
+    const summary = hasStats
+      ? ["AVG", "OPS"]
+          .map((abbr) => {
+            const value = m.findStat(abbr);
+            return value === null ? null : `${abbr} ${value}`;
+          })
+          .filter(Boolean)
+          .join(" · ")
+      : "";
+    return el(
+      "div",
+      { className: "stats-launch" },
+      el(
+        "button",
+        { type: "button", className: "btn stats-open", "aria-haspopup": "dialog", onClick: openStatsModal },
+        "GameChanger stats",
+      ),
+      el("span", { className: "stats-summary" }, summary || (hasStats ? "" : "No game stats yet")),
     );
-    const section = el("section", { className: "game-stats", "aria-label": "Game stats" }, toggle, tiles);
-    const apply = (open) => {
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
-      stateText.textContent = open ? "Hide" : "Show";
-      tiles.hidden = !open;
-      section.classList.toggle("open", open);
-    };
-    toggle.addEventListener("click", () => {
-      const open = toggle.getAttribute("aria-expanded") !== "true";
-      apply(open);
-      try {
-        window.localStorage.setItem(GAME_STATS_KEY, open ? "1" : "0");
-      } catch (error) {
-        // Private browsing can block storage; the toggle still works this visit.
-      }
-    });
-    apply(gameStatsOpen());
-    return section;
   }
 
   function statsGroup(title, items) {
@@ -2573,17 +2539,28 @@
     if (!state.selectedId) {
       return;
     }
+    const form = event.currentTarget;
     const body = {};
-    new FormData(event.currentTarget).forEach((value, key) => {
+    new FormData(form).forEach((value, key) => {
       body[key] = value;
     });
+    const submit = form.querySelector('button[type="submit"]');
+    if (submit) {
+      submit.disabled = true;
+      submit.textContent = "Saving…";
+    }
     try {
       await request(`/api/players/${encodeURIComponent(state.selectedId)}/stats`, {
         method: "PUT",
         body: JSON.stringify(body),
       });
       await loadDetail(state.selectedId);
+      renderStatsModal(`Saved ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`);
     } catch (error) {
+      if (submit) {
+        submit.disabled = false;
+        submit.textContent = "Save stats";
+      }
       showError(error.message);
     }
   }
@@ -3315,6 +3292,20 @@
     } else {
       adminModal.removeAttribute("open");
     }
+  }
+
+  closeStatsBtn.addEventListener("click", closeStatsModal);
+  statsModal.addEventListener("click", (event) => {
+    if (event.target === statsModal) {
+      closeStatsModal();
+    }
+  });
+
+  // The old Game stats toggle remembered its state here; it no longer exists.
+  try {
+    window.localStorage.removeItem("idev.gameStatsOpen");
+  } catch (error) {
+    // Storage can be blocked in private browsing; nothing to clean up then.
   }
 
   adminBtn.addEventListener("click", () => openAdminModal());
