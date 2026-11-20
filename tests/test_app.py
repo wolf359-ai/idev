@@ -827,6 +827,67 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(players["Jordan Blake"]["position"], "Pitcher")
         self.assertEqual(players["Taylor Brooks"]["position"], "Utility")
 
+    GC_STATS_CSV = (
+        ",,,Batting,,,,,,,,,,,,,,,,,,,Pitching,,,,,Fielding,,,,,\n"
+        "Number,Last,First,GP,PA,AB,AVG,H,2B,3B,HR,RBI,R,BB,SO,HBP,SAC,SF,SB,CS,PS,PS/PA,"
+        "GP,IP,H,BB,SO,TC,A,PO,FPCT,E,DP\n"
+        "7,Rivera,Alex,12,40,35,.400,14,3,0,1,9,10,4,5,1,0,0,5,1,150,3.75,"
+        "2,3.1,4,2,3,30,10,18,.933,2,1\n"
+        "21,Blake,Jordan,12,30,26,.231,6,1,0,0,2,3,3,8,1,0,0,1,0,110,3.67,"
+        "10,40.2,35,12,44,15,5,9,.933,1,0\n"
+        "99,Nobody,Pat,1,1,1,.000,0,0,0,0,0,0,0,1,0,0,0,0,0,4,4,-,-,-,-,-,-,-,-,-,-,-\n"
+        "Team,,,12,70,61,.328,20,4,0,1,11,13,7,13,2,0,0,6,1,260,3.7,"
+        "12,44,39,14,47,45,15,27,.933,3,1\n"
+        "\n"
+        "Glossary,,,\n"
+    )
+
+    def test_stats_import_reads_batting_and_fielding_groups(self) -> None:
+        alex = self.store.add_player({"name": "Alex Rivera", "position": "Shortstop", "number": 7})
+        jordan = self.store.add_player({"name": "Jordan Blake", "position": "Pitcher", "number": 21})
+        self.store.update_stats(alex["id"], {"inn": 48, "gp": 3})
+
+        preview = self.store.import_stats({"text": self.GC_STATS_CSV, "preview": True})
+        self.assertNotIn("INN", preview["columns"])
+        self.assertEqual([m["player_name"] for m in preview["matches"]], ["Alex Rivera", "Jordan Blake"])
+        self.assertEqual([row["name"] for row in preview["unmatched"]], ["Pat Nobody"])
+        self.assertEqual(preview["updated"], [])
+        self.assertEqual(self.store.get_player(alex["id"])["stats"]["counts"]["gp"], 3)
+
+        result = self.store.import_stats({"text": self.GC_STATS_CSV, "preview": False})
+        self.assertEqual(result["updated"], [alex["id"], jordan["id"]])
+        counts = self.store.get_player(alex["id"])["stats"]["counts"]
+        # Batting H/SO, not the pitching columns with the same names.
+        self.assertEqual((counts["h"], counts["so"], counts["pitches"]), (14, 5, 150))
+        self.assertEqual((counts["po"], counts["a"], counts["e"], counts["dp"]), (18, 10, 2, 1))
+        # Innings played is not in the export, so the saved value is kept.
+        self.assertEqual(counts["inn"], 48)
+        self.assertEqual(self.store.get_player(jordan["id"])["stats"]["counts"]["so"], 8)
+
+    def test_stats_import_matches_comma_names_and_jersey_numbers(self) -> None:
+        alex = self.store.add_player({"name": "Alex Rivera", "position": "Shortstop", "number": 7})
+        jordan = self.store.add_player({"name": "Jordan Blake", "position": "Pitcher", "number": 21})
+        text = '#,Player,AB,H\n7,"Rivera, Alex",10,4\n21,J. Blake,8,2\n21,Jordan Blake,9,3\n'
+        result = self.store.import_stats({"text": text, "preview": False})
+        by_id = {m["player_id"]: m for m in result["matches"]}
+        self.assertEqual(by_id[alex["id"]]["matched_by"], "name")
+        self.assertEqual(by_id[jordan["id"]]["matched_by"], "number")
+        self.assertEqual(by_id[jordan["id"]]["csv_name"], "J. Blake")
+        self.assertIn("more than once", result["skipped"][0]["reason"])
+        self.assertEqual(self.store.get_player(jordan["id"])["stats"]["counts"]["h"], 2)
+
+    def test_stats_import_rejects_bad_files_and_values(self) -> None:
+        self.store.add_player({"name": "Alex Rivera", "position": "Shortstop", "number": 7})
+        with self.assertRaises(ValueError):
+            self.store.import_stats({"text": "", "preview": True})
+        with self.assertRaises(ValueError):
+            self.store.import_stats({"text": "Name,Favorite color\nAlex Rivera,Blue\n"})
+        with self.assertRaises(ValueError):
+            self.store.import_stats({"text": "GP,AB\n1,2\n"})
+        result = self.store.import_stats({"text": "Name,AB,H\nAlex Rivera,4,1.5\n"})
+        self.assertEqual(result["matches"], [])
+        self.assertIn("whole number", result["skipped"][0]["reason"])
+
     def test_import_rejects_empty_and_invalid_rosters(self) -> None:
         with self.assertRaises(ValueError):
             self.store.import_roster({"text": "", "preview": True})
@@ -1275,6 +1336,29 @@ class HttpTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(duplicate["players"], [])
         self.assertEqual(len(duplicate["skipped"]), 2)
+
+    def test_stats_import_endpoint_and_permissions(self) -> None:
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Alex Rivera", "position": "Shortstop", "number": 7}
+        )
+        self.assertEqual(status, 201)
+        text = "Number,Last,First,GP,AB,H\n7,Rivera,Alex,12,35,14\n"
+        status, preview = self.call("POST", "/api/stats/import", {"text": text, "preview": True})
+        self.assertEqual(status, 200)
+        self.assertEqual(preview["matches"][0]["player_id"], player["id"])
+        status, result = self.call("POST", "/api/stats/import", {"text": text, "preview": False})
+        self.assertEqual(status, 200)
+        self.assertEqual(result["updated"], [player["id"]])
+        status, detail = self.call("GET", f"/api/players/{player['id']}")
+        self.assertEqual(detail["stats"]["computed"]["avg"], 0.4)
+        status, payload = self.call("POST", "/api/stats/import", {"text": "", "preview": True})
+        self.assertEqual(status, 400)
+
+        self.make_staff("Morgan", "Manager", "manager-pass")
+        self.sign_out()
+        self.login_staff("Morgan", "manager-pass")
+        status, _ = self.call("POST", "/api/stats/import", {"text": text, "preview": True})
+        self.assertEqual(status, 403)
 
     def test_xss_is_stored_as_text(self) -> None:
         status, player = self.call(

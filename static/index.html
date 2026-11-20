@@ -104,6 +104,39 @@
       </form>
           </div>
         </details>
+        <details class="admin admin-sub" id="import-stats">
+          <summary class="admin-summary">
+            <span class="admin-title">Import stats</span>
+            <span class="admin-caret" aria-hidden="true"></span>
+          </summary>
+          <div class="admin-body">
+      <form id="import-stats-form" class="form" autocomplete="off">
+        <p class="meta">
+          In GameChanger, open Stats and choose Export Stats. Select that CSV here to
+          update each player's season batting and fielding totals. Players are matched
+          to the roster by name, then by jersey number.
+        </p>
+        <label>
+          GameChanger stats CSV
+          <input id="stats-file" type="file" accept=".csv,text/csv">
+        </label>
+        <label>
+          Or paste stats
+          <textarea
+            id="stats-text"
+            name="text"
+            maxlength="204800"
+            placeholder="Number,Last,First,GP,PA,AB,H&#10;7,Rivera,Alex,12,40,35,14"
+          ></textarea>
+        </label>
+        <div id="stats-preview" class="import-preview hidden" aria-live="polite"></div>
+        <div class="row">
+          <button type="submit" id="preview-stats" class="btn btn-primary">Preview stats</button>
+          <button type="button" id="cancel-import-stats" class="btn">Cancel</button>
+        </div>
+      </form>
+          </div>
+        </details>
         <div class="admin-sub admin-launch">
           <button type="button" id="open-add-player" class="btn btn-primary">Add player</button>
         </div>

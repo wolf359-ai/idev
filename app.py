@@ -244,6 +244,7 @@ DEFENSE_COMPUTED_FIELDS = (
 )
 
 COUNT_FIELDS = OFFENSE_COUNT_FIELDS + DEFENSE_COUNT_FIELDS
+DEFENSE_KEYS = {key for key, _abbr, _label in DEFENSE_COUNT_FIELDS}
 DECIMAL_COUNT_KEYS = {"inn"}
 MAX_STAT = 9999
 
@@ -687,6 +688,182 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
     if not candidates:
         raise ValueError("No valid players found. Include a Roster, Player, or Name column.")
     return candidates, skipped
+
+
+# Header spellings GameChanger (and hand-made sheets) use for each stat we store.
+STAT_IMPORT_ALIASES = {
+    "gp": {"gp", "g", "games"},
+    "pa": {"pa"},
+    "ab": {"ab"},
+    "h": {"h", "hits"},
+    "doubles": {"2b", "doubles"},
+    "triples": {"3b", "triples"},
+    "hr": {"hr"},
+    "r": {"r", "runs"},
+    "rbi": {"rbi"},
+    "bb": {"bb", "walks"},
+    "so": {"so", "k"},
+    "hbp": {"hbp"},
+    "sf": {"sf"},
+    "sac": {"sac", "sh"},
+    "sb": {"sb"},
+    "cs": {"cs"},
+    "pitches": {"ps", "pit", "pitches", "pitchesseen"},
+    "inn": {"inn", "innings", "inningsplayed", "ip"},
+    "po": {"po"},
+    "a": {"a"},
+    "e": {"e"},
+    "dp": {"dp"},
+}
+OFFENSE_SECTIONS = ("batting", "offense", "hitting")
+DEFENSE_SECTIONS = ("fielding", "defense", "innings")
+STAT_GROUP_NAMES = OFFENSE_SECTIONS + DEFENSE_SECTIONS + ("pitching", "catching")
+STAT_NAME_ALIASES = {"roster", "player", "playername", "name"}
+STAT_FIRST_ALIASES = {"first", "firstname"}
+STAT_LAST_ALIASES = {"last", "lastname"}
+STAT_NUMBER_ALIASES = {"number", "no", "num", "jersey", "jerseynumber"}
+STAT_EMPTY_VALUES = {"", "-", "—", "n/a", "na"}
+STAT_TOTAL_ROWS = {"team", "total", "totals", "glossary"}
+
+
+def name_key(value: str) -> str:
+    """Fold a player name so "Rivera, Alex" and "alex  rivera" compare equal."""
+    text = " ".join(value.split())
+    if text.count(",") == 1:
+        last, first = (part.strip() for part in text.split(","))
+        if last and first:
+            text = f"{first} {last}"
+    return text.casefold()
+
+
+def parse_import_stat(value: str, abbr: str, decimal: bool) -> int | float:
+    text = value.replace(",", "").strip()
+    if text.casefold() in STAT_EMPTY_VALUES:
+        return 0
+    if not decimal:
+        try:
+            number = float(text)
+        except ValueError as exc:
+            raise ValueError(f"{abbr} must be a number from 0 to {MAX_STAT}") from exc
+        if number != int(number):
+            raise ValueError(f"{abbr} must be a whole number")
+        text = str(int(number))
+    return parse_stat_value(text, abbr, decimal=decimal)
+
+
+def parse_stats_text(text: object) -> tuple[list[dict], list[str], list[dict]]:
+    """Read a GameChanger "Export Stats" CSV into per-player stat counts.
+
+    GameChanger puts Batting, Pitching, and Fielding columns side by side and
+    repeats headers such as GP, H, and SO in each group, with the group names
+    in the row above the headers. Offense stats are only read from the batting
+    group and fielding stats from the fielding group, so pitching totals never
+    overwrite a player's hitting line.
+    """
+    if not isinstance(text, str) or not text.strip():
+        raise ValueError("Choose a CSV file or paste GameChanger stats")
+    if len(text.encode("utf-8")) > MAX_ROSTER_TEXT_BYTES:
+        raise ValueError("Stats file must be 200 KB or smaller")
+    try:
+        rows = [[cell.strip() for cell in row] for row in csv.reader(io.StringIO(text))]
+    except csv.Error as exc:
+        raise ValueError("Stats file is not valid CSV") from exc
+
+    identity_aliases = STAT_NAME_ALIASES | STAT_FIRST_ALIASES | STAT_LAST_ALIASES
+    header_index = None
+    for index, row in enumerate(rows[:15]):
+        if any(normalize_header(cell) in identity_aliases for cell in row):
+            header_index = index
+            break
+    if header_index is None:
+        raise ValueError("No player column found. Include a Name, or First and Last, column.")
+    header = [normalize_header(cell) for cell in rows[header_index]]
+
+    sections = [""] * len(header)
+    if header_index > 0:
+        current = ""
+        group_row = rows[header_index - 1]
+        for index in range(len(header)):
+            label = group_row[index] if index < len(group_row) else ""
+            if label:
+                current = label.casefold()
+            sections[index] = current
+        # A title line above the headers (e.g. "2025 Season") is not a group row.
+        if not any(name in label for label in sections for name in STAT_GROUP_NAMES):
+            sections = [""] * len(header)
+
+    def column(aliases: set[str]) -> int | None:
+        for index, value in enumerate(header):
+            if value in aliases:
+                return index
+        return None
+
+    def stat_column(key: str) -> int | None:
+        wanted = DEFENSE_SECTIONS if key in DEFENSE_KEYS else OFFENSE_SECTIONS
+        matches = [i for i, value in enumerate(header) if value in STAT_IMPORT_ALIASES[key]]
+        if not any(sections):
+            # Without group labels, "IP" is pitching innings, not innings played.
+            if key == "inn":
+                matches = [i for i in matches if header[i] != "ip"]
+            return matches[0] if matches else None
+        for index in matches:
+            if any(name in sections[index] for name in wanted):
+                return index
+        return None
+
+    stat_columns = {}
+    for key, _abbr, _label in COUNT_FIELDS:
+        index = stat_column(key)
+        if index is not None:
+            stat_columns[key] = index
+    if not stat_columns:
+        raise ValueError("No GameChanger stat columns found (for example GP, AB, H, PO).")
+
+    name_index = column(STAT_NAME_ALIASES)
+    first_index = column(STAT_FIRST_ALIASES)
+    last_index = column(STAT_LAST_ALIASES)
+    number_index = column(STAT_NUMBER_ALIASES)
+    abbrs = {key: abbr for key, abbr, _label in COUNT_FIELDS}
+
+    def cell(row: list[str], index: int | None) -> str:
+        return row[index] if index is not None and index < len(row) else ""
+
+    players = []
+    skipped = []
+    for line, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
+        if not any(row):
+            continue
+        if len(players) >= MAX_ROSTER_PLAYERS:
+            skipped.append({"line": line, "reason": "200-player import limit reached"})
+            continue
+        raw_name = cell(row, name_index)
+        if not raw_name:
+            raw_name = " ".join(
+                part for part in (cell(row, first_index), cell(row, last_index)) if part
+            )
+        raw_number = cell(row, number_index).lstrip("#")
+        if not raw_name or raw_name.casefold() in STAT_TOTAL_ROWS:
+            continue
+        if cell(row, number_index).casefold() in STAT_TOTAL_ROWS:
+            continue
+        try:
+            name = clean_text(raw_name, "Player name", MAX_NAME_LEN)
+            number = parse_number(raw_number)
+            stats = {
+                key: parse_import_stat(
+                    cell(row, index), abbrs[key], decimal=key in DECIMAL_COUNT_KEYS
+                )
+                for key, index in stat_columns.items()
+            }
+        except ValueError as exc:
+            skipped.append({"line": line, "reason": f"{raw_name or 'Row'}: {exc}"})
+            continue
+        players.append({"line": line, "name": name, "number": number, "stats": stats})
+
+    if not players and not skipped:
+        raise ValueError("No player rows found in this stats file")
+    columns = [abbrs[key] for key, _abbr, _label in COUNT_FIELDS if key in stat_columns]
+    return players, columns, skipped
 
 
 def empty_stat_counts() -> dict:
@@ -1500,6 +1677,74 @@ class Store:
             "preview": preview,
             "players": unique,
             "imported": imported,
+            "skipped": skipped,
+        }
+
+    def import_stats(self, payload: dict) -> dict:
+        rows, columns, skipped = parse_stats_text(payload.get("text"))
+        preview = payload.get("preview", True)
+        if not isinstance(preview, bool):
+            raise ValueError("Preview must be true or false")
+
+        with self.lock:
+            roster = [p for p in self.data["players"] if isinstance(p.get("name"), str)]
+            by_name: dict[str, list[dict]] = {}
+            by_number: dict[int, list[dict]] = {}
+            for player in roster:
+                by_name.setdefault(name_key(player["name"]), []).append(player)
+                if isinstance(player.get("number"), int):
+                    by_number.setdefault(player["number"], []).append(player)
+
+            matches = []
+            unmatched = []
+            claimed = set()
+            for row in rows:
+                named = by_name.get(name_key(row["name"]), [])
+                numbered = by_number.get(row["number"], []) if row["number"] is not None else []
+                if len(named) > 1:
+                    named = [p for p in named if p.get("number") == row["number"]]
+                if len(named) == 1:
+                    player, matched_by = named[0], "name"
+                elif not named and len(numbered) == 1:
+                    player, matched_by = numbered[0], "number"
+                else:
+                    unmatched.append({"line": row["line"], "name": row["name"], "number": row["number"]})
+                    continue
+                if player["id"] in claimed:
+                    skipped.append(
+                        {"line": row["line"], "reason": f"{player['name']} appears more than once"}
+                    )
+                    continue
+                claimed.add(player["id"])
+                matches.append(
+                    {
+                        "line": row["line"],
+                        "player_id": player["id"],
+                        "player_name": player["name"],
+                        "number": player.get("number"),
+                        "csv_name": row["name"],
+                        "matched_by": matched_by,
+                        "stats": row["stats"],
+                        "_player": player,
+                    }
+                )
+
+            if not preview and matches:
+                for match in matches:
+                    player = match["_player"]
+                    counts = normalize_stat_counts(player.get("stats"))
+                    counts.update(match["stats"])
+                    player["stats"] = counts
+                self._save()
+
+        for match in matches:
+            del match["_player"]
+        return {
+            "preview": preview,
+            "columns": columns,
+            "matches": matches,
+            "updated": [] if preview else [m["player_id"] for m in matches],
+            "unmatched": unmatched,
             "skipped": skipped,
         }
 
@@ -2603,6 +2848,9 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/players/import":
                 result = self.store.import_roster(payload)
                 send_json(self, 200 if result["preview"] else 201, result)
+                return
+            if path == "/api/stats/import":
+                send_json(self, 200, self.store.import_stats(payload))
                 return
             if path == "/api/players":
                 send_json(self, 201, self.store.add_player(payload))
