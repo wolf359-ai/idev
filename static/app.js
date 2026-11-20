@@ -22,6 +22,7 @@
   const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
   const playerLoginList = document.getElementById("player-login-list");
   const managePlayerList = document.getElementById("manage-player-list");
+  const managePlayerCount = document.getElementById("manage-player-count");
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
@@ -2648,6 +2649,67 @@
   ];
   const manageSort = { key: "name", dir: 1 };
 
+  const POSITION_ABBR = {
+    Pitcher: "P",
+    Catcher: "C",
+    "First Base": "1B",
+    "Second Base": "2B",
+    "Third Base": "3B",
+    Shortstop: "SS",
+    "Left Field": "LF",
+    "Center Field": "CF",
+    "Right Field": "RF",
+    Utility: "UT",
+    "DP/Flex": "DP",
+  };
+
+  // Lucide icon outlines (24x24, stroked); static markup only.
+  const MENU_ICONS = {
+    edit: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',
+    view: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/>',
+    key: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
+    resetLogin: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    delete: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
+  };
+
+  function menuIcon(name) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "menu-icon");
+    svg.innerHTML = MENU_ICONS[name];
+    return svg;
+  }
+
+  function numberBadge(player) {
+    const hasNumber = player.number !== null && player.number !== undefined && player.number !== "";
+    return hasNumber
+      ? el("span", { className: "num-badge" }, String(player.number))
+      : el("span", { className: "empty-cell" }, "—");
+  }
+
+  function positionChip(position) {
+    if (!position) {
+      return el("span", { className: "empty-cell" }, "—");
+    }
+    const abbr = POSITION_ABBR[position];
+    return el(
+      "span",
+      { className: "pos-chip" },
+      abbr ? el("span", { className: "pos-abbr" }, abbr) : null,
+      el("span", { className: "pos-name" }, position),
+    );
+  }
+
+  function loginPill(player) {
+    return el(
+      "span",
+      { className: player.has_login ? "status-pill on" : "status-pill" },
+      el("span", { className: "status-dot", "aria-hidden": "true" }),
+      player.has_login ? "Login set" : "No login",
+    );
+  }
+
   function sortedManagePlayers() {
     const column = MANAGE_COLUMNS.find((c) => c.key === manageSort.key) || MANAGE_COLUMNS[1];
     return [...state.players].sort((a, b) => {
@@ -2664,8 +2726,13 @@
       return;
     }
     closePlayerMenu();
+    if (managePlayerCount) {
+      const count = state.players.length;
+      managePlayerCount.textContent = `${count} ${count === 1 ? "player" : "players"}`;
+      managePlayerCount.closest(".manage-toolbar").hidden = !count;
+    }
     if (!state.players.length) {
-      managePlayerList.replaceChildren(el("p", { className: "meta" }, "No players yet."));
+      managePlayerList.replaceChildren(el("p", { className: "meta manage-empty" }, "No players yet."));
       return;
     }
     const head = el(
@@ -2717,16 +2784,16 @@
             }
           },
         },
-        el("td", { className: "col-number" }, jersey(player) || "—"),
+        el("td", { className: "col-number" }, numberBadge(player)),
         el("td", { className: "col-name" }, el("strong", {}, player.name)),
-        el("td", { className: "col-position" }, player.position || "—"),
-        el("td", { className: "col-secondary_position" }, player.secondary_position || "—"),
-        el("td", { className: "col-grad_year" }, player.grad_year || "—"),
+        el("td", { className: "col-position" }, positionChip(player.position)),
+        el("td", { className: "col-secondary_position" }, positionChip(player.secondary_position)),
         el(
           "td",
-          { className: "col-login" },
-          el("span", { className: player.has_login ? "tag on" : "tag" }, player.has_login ? "Set" : "None"),
+          { className: "col-grad_year" },
+          player.grad_year || el("span", { className: "empty-cell" }, "—"),
         ),
+        el("td", { className: "col-login" }, loginPill(player)),
         el(
           "td",
           { className: "col-menu" },
@@ -2775,32 +2842,70 @@
       closePlayerMenu();
       action();
     };
-    const items = [
-      ["Edit player", run(() => editPlayer(player))],
-      ["View on main page", run(() => {
-        closeAdminModal();
-        selectPlayer(player.id);
-      })],
-      [player.has_login ? "Reset login" : "Set login", run(() => managePlayerLogin(player))],
+    const loginItems = player.has_login
+      ? [
+          { label: "Reset login", icon: "resetLogin", action: () => managePlayerLogin(player) },
+          { label: "Remove login", icon: "key", action: () => clearPlayerLogin(player) },
+        ]
+      : [{ label: "Set login", icon: "key", action: () => managePlayerLogin(player) }];
+    const groups = [
+      {
+        label: "Profile",
+        items: [
+          { label: "Edit player", icon: "edit", action: () => editPlayer(player) },
+          {
+            label: "View on main page",
+            icon: "view",
+            action: () => {
+              closeAdminModal();
+              selectPlayer(player.id);
+            },
+          },
+        ],
+      },
+      { label: "Login", items: loginItems },
+      {
+        label: "Danger",
+        items: [{ label: "Delete player", icon: "delete", danger: true, action: () => removePlayer(player) }],
+      },
     ];
-    if (player.has_login) {
-      items.push(["Remove login", run(() => clearPlayerLogin(player))]);
-    }
-    items.push(null, ["Delete player", run(() => removePlayer(player)), "danger"]);
+    const details = [player.position, player.grad_year ? `Class of ${player.grad_year}` : ""]
+      .filter(Boolean)
+      .join(" · ");
 
     const node = el(
       "div",
       { className: "context-menu", role: "menu", "aria-label": player.name },
-      el("div", { className: "context-menu-title" }, [jersey(player), player.name].filter(Boolean).join(" ")),
-      items.map((item) =>
-        item
-          ? el(
-              "button",
-              { type: "button", role: "menuitem", className: item[2] ? `menu-item ${item[2]}` : "menu-item", onClick: item[1] },
-              item[0],
-            )
-          : el("div", { className: "menu-sep", role: "separator" }),
+      el(
+        "div",
+        { className: "context-menu-head" },
+        player.number !== null && player.number !== undefined && player.number !== ""
+          ? el("span", { className: "num-badge small" }, String(player.number))
+          : null,
+        el(
+          "div",
+          { className: "context-menu-who" },
+          el("div", { className: "context-menu-name" }, player.name),
+          details ? el("div", { className: "context-menu-sub" }, details) : null,
+        ),
       ),
+      groups.flatMap((group, index) => [
+        index ? el("div", { className: "menu-sep", role: "separator" }) : null,
+        el("div", { className: "menu-group-label", "aria-hidden": "true" }, group.label),
+        ...group.items.map((item) =>
+          el(
+            "button",
+            {
+              type: "button",
+              role: "menuitem",
+              className: item.danger ? "menu-item danger" : "menu-item",
+              onClick: run(item.action),
+            },
+            menuIcon(item.icon),
+            item.label,
+          ),
+        ),
+      ]),
     );
     // Inside the dialog so it renders in the same top layer as the Admin window.
     (adminModal || document.body).append(node);
