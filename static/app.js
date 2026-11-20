@@ -3113,6 +3113,7 @@
   const MANAGE_COLUMNS = [
     { key: "number", label: "#", value: (p) => (p.number === null || p.number === undefined ? -1 : Number(p.number)) },
     { key: "name", label: "Name", value: (p) => (p.name || "").toLowerCase() },
+    { key: "team", label: "Team", value: (p) => ((teamById(p.team_id) || {}).name || "").toLowerCase() },
     { key: "position", label: "Position", value: (p) => (p.position || "").toLowerCase() },
     { key: "secondary_position", label: "2nd position", value: (p) => (p.secondary_position || "").toLowerCase() },
     { key: "grad_year", label: "Class", value: (p) => String(p.grad_year || "") },
@@ -3161,6 +3162,19 @@
     return hasNumber
       ? el("span", { className: "num-badge" }, String(player.number))
       : el("span", { className: "empty-cell" }, "—");
+  }
+
+  function teamCell(player) {
+    const team = teamById(player.team_id);
+    if (!team) {
+      return el("span", { className: "empty-cell" }, "—");
+    }
+    return el(
+      "span",
+      { className: "team-cell" },
+      el("span", { className: "team-cell-name" }, team.name),
+      el("span", { className: "sport-tag" }, team.sport),
+    );
   }
 
   function positionChip(position) {
@@ -3260,7 +3274,13 @@
           },
         },
         el("td", { className: "col-number" }, numberBadge(player)),
-        el("td", { className: "col-name" }, el("strong", {}, player.name)),
+        el(
+          "td",
+          { className: "col-name" },
+          el("strong", {}, player.name),
+          el("span", { className: "name-team" }, (teamById(player.team_id) || {}).name || ""),
+        ),
+        el("td", { className: "col-team" }, teamCell(player)),
         el("td", { className: "col-position" }, positionChip(player.position)),
         el("td", { className: "col-secondary_position" }, positionChip(player.secondary_position)),
         el(
