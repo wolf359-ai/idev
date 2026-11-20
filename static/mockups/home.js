@@ -78,7 +78,7 @@
     add("a14", "tournament", "December Showcase", new Date(2026, 11, 5), "7:30 AM", "6:00 PM", "Valley Sports Park", { days: 2 });
     add("b10", "tournament", "Fall Classic", new Date(2026, 10, 14), "8:00 AM", "4:00 PM", "Legion Fields", { days: 1 });
     // Today
-    add("a12", "training", "Bullpen session (pitchers)", new Date(TODAY), "4:30 PM", "5:30 PM", "Alpha Training Center");
+    add("a12", "training", "Bullpen session", new Date(TODAY), "4:30 PM", "5:30 PM", "Alpha Training Center");
     events.forEach((ev) => {
       ev.attendance = ev.type === "tournament" ? null : { yes: 9 + (ev.id.length % 3), total: 12 };
     });
@@ -252,7 +252,8 @@
                   type: "button",
                   className: "nav-item" + (state.view === item.id ? " active" : ""),
                   "aria-current": state.view === item.id ? "page" : null,
-                  title: item.label,
+                  "data-tip": item.badge ? `${item.label} (${item.badge})` : item.label,
+                  "aria-label": item.label,
                   onClick: () => go(item.id, item.label),
                 },
                 icon(item.icon),
@@ -299,6 +300,7 @@
     );
 
     document.getElementById("me-avatar").textContent = isPlayer() ? "AH" : "CM";
+    document.getElementById("me").setAttribute("data-tip", isPlayer() ? "Allison Harrop" : "Casey Morgan");
     document.getElementById("me-name").textContent = isPlayer() ? "Allison Harrop" : "Casey Morgan";
   }
 
@@ -820,6 +822,11 @@
 
   document.getElementById("collapse-btn").addEventListener("click", () => {
     state.collapsed = !state.collapsed;
+    try {
+      localStorage.setItem("idev.sideCollapsed", state.collapsed ? "1" : "0");
+    } catch (error) {
+      // Private browsing can block storage; the toggle still works for this visit.
+    }
     renderSide();
   });
   document.getElementById("hamburger").addEventListener("click", () => {
@@ -850,6 +857,11 @@
   }
   if (params.get("view") === "schedule") state.view = "schedule";
   if (params.get("cal") === "list") state.calMode = "list";
-  if (params.get("collapsed") === "1") state.collapsed = true;
+  try {
+    state.collapsed = localStorage.getItem("idev.sideCollapsed") === "1";
+  } catch (error) {
+    state.collapsed = false;
+  }
+  if (params.has("collapsed")) state.collapsed = params.get("collapsed") === "1";
   renderAll();
 })();
