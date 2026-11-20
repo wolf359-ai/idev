@@ -2507,7 +2507,24 @@
       drillsTile(player),
     );
 
-    return el("div", { className: "hero" }, idPanel, tiles);
+    return el("div", { className: "hero" }, idPanel, el("div", { className: "hero-kpis" }, tiles, gameStatTiles(m)));
+  }
+
+  function gameStatTiles(m) {
+    const specs = [
+      { abbr: "AVG", label: "Batting Avg", accent: "yellow" },
+      { abbr: "OBP", label: "On-Base %", accent: "cyan" },
+      { abbr: "SLG", label: "Slugging", accent: "orange" },
+      { abbr: "OPS", label: "OPS", accent: "lime" },
+      { abbr: "FLD%", label: "Fielding %", accent: "green" },
+    ];
+    return el(
+      "div",
+      { className: "game-kpis", "aria-label": "GameChanger stats" },
+      specs.map((spec) =>
+        metricTile({ label: spec.label, value: m.findStat(spec.abbr) ?? "—", accent: spec.accent, foot: "GameChanger" }),
+      ),
+    );
   }
 
   // Only http(s) links may become clickable anchors (blocks javascript:/data:).
