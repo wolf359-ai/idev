@@ -1461,7 +1461,7 @@
         ? rated.map((item) =>
             el(
               "div",
-              { className: "stack" },
+              { className: "progress-item" },
               el("strong", {}, item.skill_name || "Skill"),
               deltaLabel(item.delta),
               el(

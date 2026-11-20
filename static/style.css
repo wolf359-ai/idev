@@ -1019,7 +1019,7 @@ h1, h2, h3, p {
 
 @media (min-width: 1100px) {
   .dash {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
     /* Cards in the same row stretch to a shared, content-driven height. */
     align-items: stretch;
   }
@@ -1054,9 +1054,10 @@ h1, h2, h3, p {
     align-items: center;
   }
 
-  /* Two-column skill grid so all skills fit comfortably side by side. */
+  /* Columns must be wide enough for the rating dots plus a measurement
+     (e.g. Exit Velo), otherwise the card content overflows and is clipped. */
   .skills-card .skills {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
     gap: 0.55rem;
   }
 }
@@ -1730,6 +1731,24 @@ textarea {
   margin-top: 0.35rem;
 }
 
+.progress-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2rem 0.6rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.progress-card > h2 + .progress-item {
+  margin-top: 0.6rem;
+}
+
+.progress-item .history {
+  flex-basis: 100%;
+  margin-top: 0;
+}
+
 .activity {
   margin-top: 1.1rem;
   padding-top: 0.9rem;
@@ -1975,5 +1994,27 @@ textarea {
 
   .hero {
     grid-template-columns: 1fr;
+  }
+
+  .top {
+    flex-wrap: wrap;
+    padding: 0.7rem 1rem;
+  }
+
+  .top .logo {
+    height: 56px;
+  }
+
+  .top .brand p:first-child {
+    font-size: 1.05rem;
+    margin-top: 10px;
+  }
+
+  .session-controls {
+    margin-left: auto;
+  }
+
+  .session-label {
+    display: none;
   }
 }
