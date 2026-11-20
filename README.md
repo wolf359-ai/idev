@@ -80,21 +80,23 @@ reach it.
 
 ### Giving a player a login
 
-1. Sign in as Coach and open a player.
-2. Click **Set login**, then choose a username and password for that player and
-   share it with them (or their family).
+1. Sign in as Coach, click **Admin**, and open the **Logins** tab. It lists every
+   player and whether they have a login.
+2. Click **Set login** next to the player, then choose a username and password
+   and share it with them (or their family).
 3. The player opens idev and signs in with those credentials. They see only
    their own skills, ratings, stats, notes, and progress — they cannot see or
    change anyone else.
-4. To turn off access, open the player and click **Remove login** (or **Reset
-   login** to set new credentials; the old ones stop working).
+4. To turn off access, click **Remove** next to the player on the **Logins** tab
+   (or **Reset login** to set new credentials; the old ones stop working).
 
 ### The Admin button
 
 Coaches and Full-access staff see an **Admin** button next to **Sign out**. It
-opens a window with four tabs:
+opens a window with five tabs:
 
 - **Players** — add a player or import a roster
+- **Logins** — set, reset, or remove player logins
 - **Stats** — import GameChanger stats
 - **Staff** — add staff and manage their access
 - **Team** — edit the team name, season, and other team information

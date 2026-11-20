@@ -20,6 +20,7 @@
   const adminModal = document.getElementById("admin-modal");
   const closeAdminBtn = document.getElementById("close-admin");
   const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
+  const playerLoginList = document.getElementById("player-login-list");
   const cancelImport = document.getElementById("cancel-import-roster");
   const rosterFile = document.getElementById("roster-file");
   const rosterText = document.getElementById("roster-text");
@@ -85,6 +86,7 @@
   const messageList = document.getElementById("message-list");
   const closeMessage = document.getElementById("close-message");
   let drillTargetId = null;
+  let loginTargetId = null;
   let noteTargetCategory = "focus";
 
   const state = {
@@ -1338,22 +1340,6 @@
     if (canEditProfile) {
       actions.push(el("button", { type: "button", className: "btn", onClick: editPlayer }, "Edit"));
       actions.push(
-        el(
-          "button",
-          { type: "button", className: "btn", onClick: managePlayerLogin },
-          player.has_login ? "Reset login" : "Set login",
-        ),
-      );
-      if (player.has_login) {
-        actions.push(
-          el(
-            "button",
-            { type: "button", className: "btn btn-danger", onClick: clearPlayerLogin },
-            "Remove login",
-          ),
-        );
-      }
-      actions.push(
         el("button", { type: "button", className: "btn btn-danger", onClick: removePlayer }, "Delete"),
       );
     }
@@ -2306,6 +2292,7 @@
     state.selectedId = exists ? nextId : (state.players[0] && state.players[0].id) || null;
     renderRoster();
     renderBrandMeta();
+    renderPlayerLogins();
     if (state.selectedId) {
       await loadDetail(state.selectedId);
     } else {
@@ -2631,15 +2618,60 @@
     editPlayerForm.reset();
   }
 
-  function managePlayerLogin() {
-    if (!state.selectedId || !state.detail || !playerLoginModal) {
+  function renderPlayerLogins() {
+    if (!playerLoginList) {
       return;
     }
-    const has = state.detail.has_login;
+    if (!state.players.length) {
+      playerLoginList.replaceChildren(el("li", { className: "meta" }, "Add players to give them a login."));
+      return;
+    }
+    playerLoginList.replaceChildren(
+      ...state.players.map((player) => {
+        const buttons = [
+          el(
+            "button",
+            { type: "button", className: "btn", onClick: () => managePlayerLogin(player) },
+            player.has_login ? "Reset login" : "Set login",
+          ),
+        ];
+        if (player.has_login) {
+          buttons.push(
+            el(
+              "button",
+              { type: "button", className: "btn btn-danger", onClick: () => clearPlayerLogin(player) },
+              "Remove",
+            ),
+          );
+        }
+        return el(
+          "li",
+          { className: "login-item" },
+          el(
+            "div",
+            { className: "login-info" },
+            el("strong", {}, [jersey(player), player.name].filter(Boolean).join(" ")),
+            player.has_login
+              ? el("span", { className: "meta" }, `Username: ${player.username || "—"}`)
+              : null,
+          ),
+          el("span", { className: player.has_login ? "tag on" : "tag" }, player.has_login ? "Login set" : "No login"),
+          el("div", { className: "login-actions" }, buttons),
+        );
+      }),
+    );
+  }
+
+  function managePlayerLogin(player) {
+    if (!player || !playerLoginModal) {
+      return;
+    }
+    loginTargetId = player.id;
+    const has = player.has_login;
     const title = document.getElementById("player-login-title");
     const help = document.getElementById("player-login-help");
     if (title) {
-      title.textContent = has ? "Reset player login" : "Set player login";
+      title.textContent = `${has ? "Reset" : "Set"} login for ${player.name}`;
     }
     if (help) {
       help.textContent = has
@@ -2648,7 +2680,7 @@
     }
     playerLoginForm.reset();
     if (playerLoginUsername) {
-      playerLoginUsername.value = state.detail.username || "";
+      playerLoginUsername.value = player.username || "";
     }
     if (typeof playerLoginModal.showModal === "function") {
       playerLoginModal.showModal();
@@ -2668,18 +2700,18 @@
     }
   }
 
-  async function clearPlayerLogin() {
-    if (!state.selectedId) {
+  async function clearPlayerLogin(player) {
+    if (!player) {
       return;
     }
-    if (!window.confirm("Remove this player's login? They will no longer be able to sign in.")) {
+    if (!window.confirm(`Remove ${player.name}'s login? They will no longer be able to sign in.`)) {
       return;
     }
     try {
-      await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
+      await request(`/api/players/${encodeURIComponent(player.id)}/login`, {
         method: "DELETE",
       });
-      await loadDetail(state.selectedId);
+      await loadPlayers();
     } catch (error) {
       showError(error.message);
     }
@@ -3061,18 +3093,18 @@
   if (playerLoginForm) {
     playerLoginForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      if (!state.selectedId) {
+      if (!loginTargetId) {
         return;
       }
       const username = playerLoginUsername.value.trim();
       const password = playerLoginPassword.value;
       try {
-        await request(`/api/players/${encodeURIComponent(state.selectedId)}/login`, {
+        await request(`/api/players/${encodeURIComponent(loginTargetId)}/login`, {
           method: "PUT",
           body: JSON.stringify({ username, password }),
         });
         closePlayerLoginModal();
-        await loadDetail(state.selectedId);
+        await loadPlayers();
       } catch (error) {
         showError(error.message);
       }

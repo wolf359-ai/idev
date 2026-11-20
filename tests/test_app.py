@@ -1284,6 +1284,7 @@ class HttpTests(unittest.TestCase):
         self.assertIn("Export Stats", html)
         self.assertIn('id="admin-btn"', html)
         self.assertIn('id="admin-modal"', html)
+        self.assertIn('id="player-login-list"', html)
         self.assertNotIn('id="admin-tools"', html)
         status, script = self.call("GET", "/static/app.js")
         self.assertEqual(status, 200)

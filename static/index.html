@@ -78,6 +78,7 @@
       </div>
       <div class="admin-tabs" role="tablist" aria-label="Admin sections">
         <button type="button" class="admin-tab" role="tab" id="admin-tab-players" data-tab="players" aria-controls="admin-panel-players" aria-selected="true">Players</button>
+        <button type="button" class="admin-tab" role="tab" id="admin-tab-logins" data-tab="logins" aria-controls="admin-panel-logins" aria-selected="false" tabindex="-1">Logins</button>
         <button type="button" class="admin-tab" role="tab" id="admin-tab-stats" data-tab="stats" aria-controls="admin-panel-stats" aria-selected="false" tabindex="-1">Stats</button>
         <button type="button" class="admin-tab" role="tab" id="admin-tab-staff" data-tab="staff" aria-controls="admin-panel-staff" aria-selected="false" tabindex="-1">Staff</button>
         <button type="button" class="admin-tab" role="tab" id="admin-tab-team" data-tab="team" aria-controls="admin-panel-team" aria-selected="false" tabindex="-1">Team</button>
@@ -120,6 +121,19 @@
           <button type="button" id="cancel-import-roster" class="btn">Clear</button>
         </div>
       </form>
+        </div>
+      </section>
+
+      <section class="admin-panel hidden" id="admin-panel-logins" role="tabpanel" aria-labelledby="admin-tab-logins">
+        <div class="admin-section">
+          <div>
+            <h4>Player logins</h4>
+            <p class="meta">
+              Give a player a username and password so they can sign in and see only their
+              own development. Resetting replaces the old login; removing turns off access.
+            </p>
+          </div>
+          <ul id="player-login-list" class="login-list"></ul>
         </div>
       </section>
 
