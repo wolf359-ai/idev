@@ -1013,14 +1013,8 @@ h1, h2, h3, p {
   align-content: stretch;
 }
 
-.hero-kpis {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
 .game-kpis {
+  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 0.75rem;
@@ -1611,58 +1605,78 @@ h1, h2, h3, p {
     gap: 0.5rem;
   }
 
-  /* Compact skill tiles: name, dots and score stacked, measurement underneath. */
+  /* Compact skill tiles: name over dots + score on the left, the measurement
+     stacked in a right-hand column (it drops below only when the tile is too
+     narrow for both). */
   .skills-card .skill {
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    gap: 0.35rem;
-    padding: 0.55rem 0.65rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.3rem 0.5rem;
+    padding: 0.45rem 0.6rem;
   }
 
-  .skills-card .skill h3 {
-    margin-bottom: 0.35rem;
+  .skills-card .skill-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    flex: 1 1 auto;
+  }
+
+  .skills-card .skill-main h3 {
+    margin: 0;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .skills-card .skill-main .meta {
+    font-size: 0.72rem;
+    white-space: nowrap;
   }
 
   .skills-card .dots {
-    gap: 0.3rem;
+    gap: 0.22rem;
   }
 
   .skills-card .dot {
     flex: none;
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 0.95rem;
+    height: 0.95rem;
   }
 
   .skills-card .skill-metric {
     display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 0.35rem;
+    flex-direction: column;
+    align-items: flex-end;
+    flex: none;
     min-width: 0;
-    margin-top: auto;
-    padding-top: 0.35rem;
-    border-top: 1px solid var(--line-soft);
-    text-align: left;
+    text-align: right;
   }
 
   .skills-card .skill-metric h3 {
     margin: 0;
     white-space: nowrap;
-    font-size: 0.74rem;
+    font-size: 0.68rem;
     color: var(--muted);
   }
 
   .skills-card .skill-metric-value,
   .skills-card .skill-metric-input {
     width: 3rem;
-    font-size: 1rem;
-    text-align: left;
+    font-size: 1.05rem;
+    text-align: right;
+  }
+
+  .skills-card .skill-metric-value {
+    width: auto;
   }
 
   .skills-card .skill-metric-unit {
     margin: 0;
-    font-size: 0.74rem;
+    font-size: 0.68rem;
   }
 
   .skills-card > .meta {
@@ -1684,6 +1698,31 @@ h1, h2, h3, p {
 
 .skills-card {
   container-type: inline-size;
+}
+
+.skills-card .skill {
+  container: skill / inline-size;
+}
+
+/* Too narrow for a right-hand column: the measurement drops below as one line. */
+@container skill (max-width: 11rem) {
+  .skills-card .skill-metric {
+    flex: 1 1 100%;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 0.3rem;
+    text-align: left;
+  }
+
+  .skills-card .skill-metric-value,
+  .skills-card .skill-metric-input {
+    width: 2rem;
+    text-align: left;
+  }
+
+  .skills-card .skill-metric-value {
+    width: auto;
+  }
 }
 
 /* Ten skills as two rows of five whenever the card is wide enough for the dots. */
