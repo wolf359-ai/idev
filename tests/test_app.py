@@ -864,17 +864,57 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(counts["inn"], 48)
         self.assertEqual(self.store.get_player(jordan["id"])["stats"]["counts"]["so"], 8)
 
-    def test_stats_import_matches_comma_names_and_jersey_numbers(self) -> None:
+    def test_stats_import_matches_on_name_and_jersey_number(self) -> None:
         alex = self.store.add_player({"name": "Alex Rivera", "position": "Shortstop", "number": 7})
+        allison = self.store.add_player({"name": "Allison Harrop", "position": "Pitcher", "number": 7})
         jordan = self.store.add_player({"name": "Jordan Blake", "position": "Pitcher", "number": 21})
-        text = '#,Player,AB,H\n7,"Rivera, Alex",10,4\n21,J. Blake,8,2\n21,Jordan Blake,9,3\n'
+        casey = self.store.add_player({"name": "Casey Lee", "position": "Catcher"})
+        text = (
+            "#,Player,AB,H\n"
+            '7,"Rivera, Alex",10,4\n'
+            "7,Allison Harrop,12,5\n"
+            "7,Pat Nobody,3,1\n"
+            "12,Jordan Blake,9,3\n"
+            "4,Casey Lee,6,2\n"
+        )
         result = self.store.import_stats({"text": text, "preview": False})
-        by_id = {m["player_id"]: m for m in result["matches"]}
-        self.assertEqual(by_id[alex["id"]]["matched_by"], "name")
-        self.assertEqual(by_id[jordan["id"]]["matched_by"], "number")
-        self.assertEqual(by_id[jordan["id"]]["csv_name"], "J. Blake")
-        self.assertIn("more than once", result["skipped"][0]["reason"])
-        self.assertEqual(self.store.get_player(jordan["id"])["stats"]["counts"]["h"], 2)
+        self.assertEqual(
+            sorted(m["player_id"] for m in result["matches"]),
+            sorted([alex["id"], allison["id"], casey["id"]]),
+        )
+        counts = lambda p: self.store.get_player(p["id"])["stats"]["counts"]
+        # Teammates sharing #7 each get their own row.
+        self.assertEqual((counts(alex)["ab"], counts(allison)["ab"]), (10, 12))
+        # A shared number alone never matches a different name.
+        unmatched = {row["name"]: row["reason"] for row in result["unmatched"]}
+        self.assertEqual(unmatched["Pat Nobody"], "Not on the roster")
+        # Same name with a different number is reported, not imported.
+        self.assertIn("#12 in the file, #21 on the roster", unmatched["Jordan Blake"])
+        self.assertEqual(counts(jordan)["ab"], 0)
+        # A roster player without a number matches on name alone.
+        self.assertEqual(counts(casey)["h"], 2)
+
+    def test_stats_import_same_name_players_need_numbers(self) -> None:
+        first = self.store.add_player({"name": "Sam Lee", "position": "Catcher", "number": 4})
+        second = self.store.add_player({"name": "Sam Lee", "position": "Pitcher", "number": 9})
+        result = self.store.import_stats(
+            {"text": "#,Player,AB\n9,Sam Lee,5\n4,Sam Lee,8\n", "preview": False}
+        )
+        by_id = {m["player_id"]: m["stats"]["ab"] for m in result["matches"]}
+        self.assertEqual(by_id, {first["id"]: 8, second["id"]: 5})
+
+        self.store.add_player({"name": "Robin Diaz", "position": "Catcher"})
+        self.store.add_player({"name": "Robin Diaz", "position": "Pitcher"})
+        result = self.store.import_stats({"text": "#,Player,AB\n3,Robin Diaz,5\n", "preview": True})
+        self.assertEqual(result["matches"], [])
+        self.assertIn("More than one roster player", result["unmatched"][0]["reason"])
+
+        self.store.add_player({"name": "Kai Park", "position": "Catcher"})
+        result = self.store.import_stats(
+            {"text": "#,Player,AB\n3,Kai Park,5\n8,Kai Park,6\n", "preview": True}
+        )
+        self.assertEqual(result["matches"][0]["stats"]["ab"], 5)
+        self.assertIn("two jersey numbers", result["skipped"][0]["reason"])
 
     def test_gamechanger_export_with_catching_innings_and_duplicate_profiles(self) -> None:
         # Mirrors a real GameChanger export: UTF-8 BOM, First/Last columns, a
