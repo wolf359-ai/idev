@@ -876,6 +876,44 @@ class StoreTests(unittest.TestCase):
         self.assertIn("more than once", result["skipped"][0]["reason"])
         self.assertEqual(self.store.get_player(jordan["id"])["stats"]["counts"]["h"], 2)
 
+    def test_gamechanger_export_with_catching_innings_and_duplicate_profiles(self) -> None:
+        # Mirrors a real GameChanger export: UTF-8 BOM, First/Last columns, a
+        # Fielding group whose INN is innings caught and whose Total is innings
+        # played, one player listed twice, then Totals and Glossary rows.
+        text = (
+            '\ufeff"","","","Batting","","","","Fielding","","","","","",""\n'
+            '"Number","Last","First","GP","AB","H","SO","PO","E","INN","2B","SB","Total"\n'
+            '"4","Shaw","Sam","6","8","2","4","1","4","0.0","3.1","0","16.2"\n'
+            '"4","Shaw","Sam","18","24","7","5","2","5","2.0","10.0","1","48.1"\n'
+            '"11","Wall","Whit","28","38","13","13","69","2","81.2","0.0","3","84.2"\n'
+            '"Totals","","","28","70","22","22","72","11","83.2","13.1","4","149.2"\n'
+            '"","","","","","","","","","","","",""\n'
+            '"Glossary","","","","","","","","","","","",""\n'
+            '"Batting","","","","","","","","","","","",""\n'
+        )
+        roster = self.store.import_roster({"text": text, "preview": False})
+        self.assertEqual(
+            [(p["number"], p["name"]) for p in roster["imported"]],
+            [(4, "Sam Shaw"), (11, "Whit Wall")],
+        )
+        self.assertIn("listed more than once", roster["skipped"][0]["reason"])
+
+        result = self.store.import_stats({"text": text, "preview": False})
+        self.assertEqual(result["unmatched"], [])
+        self.assertEqual(result["skipped"], [])
+        shaw, wall = result["matches"]
+        self.assertEqual(shaw["rows"], 2)
+        # 16⅔ + 48⅓ innings = 65; batting 2B is not the fielding "2B" innings.
+        self.assertEqual(
+            {k: shaw["stats"][k] for k in ("gp", "ab", "h", "so", "po", "e", "inn")},
+            {"gp": 24, "ab": 32, "h": 9, "so": 9, "po": 3, "e": 9, "inn": 65},
+        )
+        self.assertNotIn("doubles", shaw["stats"])
+        self.assertNotIn("sb", shaw["stats"])
+        self.assertEqual(wall["stats"]["inn"], 84.2)
+        counts = self.store.get_player(wall["player_id"])["stats"]["counts"]
+        self.assertEqual((counts["h"], counts["inn"]), (13, 84.2))
+
     def test_stats_import_rejects_bad_files_and_values(self) -> None:
         self.store.add_player({"name": "Alex Rivera", "position": "Shortstop", "number": 7})
         with self.assertRaises(ValueError):

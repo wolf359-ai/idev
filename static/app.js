@@ -312,6 +312,9 @@
                 match.matched_by === "number"
                   ? el("span", { className: "meta" }, ` (CSV: ${match.csv_name}, matched by #)`)
                   : null,
+                match.rows > 1
+                  ? el("span", { className: "meta" }, ` (${match.rows} rows combined)`)
+                  : null,
                 el("div", { className: "meta" }, statsSummary(match.stats)),
               ),
             ),

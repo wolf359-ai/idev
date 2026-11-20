@@ -604,7 +604,7 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
         raise ValueError("Roster file must be 200 KB or smaller")
 
     try:
-        rows = list(csv.reader(io.StringIO(text)))
+        rows = list(csv.reader(io.StringIO(text.lstrip("\ufeff"))))
     except csv.Error as exc:
         raise ValueError("Roster is not valid CSV") from exc
     rows = [
@@ -620,9 +620,11 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
     position_aliases = {"position", "pos", "primaryposition"}
     header_index = None
     header = []
+    # GameChanger exports split names into First and Last columns.
+    identity_aliases = name_aliases | STAT_FIRST_ALIASES | STAT_LAST_ALIASES
     for index, row in enumerate(rows[:15]):
         normalized = [normalize_header(cell) for cell in row]
-        if any(cell in name_aliases for cell in normalized):
+        if any(cell in identity_aliases for cell in normalized):
             header_index = index
             header = normalized
             break
@@ -638,8 +640,13 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
         return None
 
     name_index = column(name_aliases)
+    first_index = column(STAT_FIRST_ALIASES)
+    last_index = column(STAT_LAST_ALIASES)
     number_index = column(number_aliases)
     position_index = column(position_aliases)
+
+    def cell(row: list[str], index: int | None) -> str:
+        return row[index] if index is not None and index < len(row) else ""
 
     first_line = header_index + 2 if header_index is not None else 1
     for offset, row in enumerate(data_rows, start=first_line):
@@ -647,17 +654,15 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
             skipped.append({"line": offset, "reason": "200-player import limit reached"})
             continue
         if header_index is not None:
-            raw_name = row[name_index] if name_index is not None and name_index < len(row) else ""
-            raw_number = (
-                row[number_index]
-                if number_index is not None and number_index < len(row)
-                else ""
+            raw_name = cell(row, name_index) or " ".join(
+                part for part in (cell(row, first_index), cell(row, last_index)) if part
             )
-            raw_position = (
-                row[position_index]
-                if position_index is not None and position_index < len(row)
-                else ""
-            )
+            raw_number = cell(row, number_index)
+            raw_position = cell(row, position_index)
+            if row[0].casefold() == "glossary":
+                break
+            if raw_number.casefold() in STAT_TOTAL_ROWS:
+                continue
         elif len(row) == 1:
             raw_name, raw_number, raw_position = row[0], "", ""
         elif row[0].lstrip("#").isdigit():
@@ -669,7 +674,7 @@ def parse_roster_text(text: object) -> tuple[list[dict], list[dict]]:
             raw_number = row[1].lstrip("#") if len(row) > 1 else ""
             raw_position = row[2] if len(row) > 2 else ""
 
-        if raw_name.casefold() in {"team", "total", "totals", "roster"}:
+        if raw_name.casefold() in STAT_TOTAL_ROWS | {"roster"}:
             continue
         try:
             name = clean_text(raw_name, "Player name", MAX_NAME_LEN)
@@ -715,6 +720,7 @@ STAT_IMPORT_ALIASES = {
     "e": {"e"},
     "dp": {"dp"},
 }
+GC_INNINGS_ALIASES = {"total", "totalinnings", "inningsplayed"}
 OFFENSE_SECTIONS = ("batting", "offense", "hitting")
 DEFENSE_SECTIONS = ("fielding", "defense", "innings")
 STAT_GROUP_NAMES = OFFENSE_SECTIONS + DEFENSE_SECTIONS + ("pitching", "catching")
@@ -751,6 +757,24 @@ def parse_import_stat(value: str, abbr: str, decimal: bool) -> int | float:
     return parse_stat_value(text, abbr, decimal=decimal)
 
 
+def innings_to_outs(value: int | float) -> int:
+    """Baseball innings notation: 16.2 is 16 innings and 2 outs."""
+    whole = int(value)
+    return whole * 3 + min(2, round((value - whole) * 10))
+
+
+def combine_stat_rows(first: dict, second: dict) -> dict:
+    combined = dict(first)
+    for key, value in second.items():
+        if key == "inn":
+            outs = innings_to_outs(combined.get(key, 0)) + innings_to_outs(value)
+            total = outs // 3 + (outs % 3) / 10
+            combined[key] = int(total) if outs % 3 == 0 else total
+        else:
+            combined[key] = combined.get(key, 0) + value
+    return combined
+
+
 def parse_stats_text(text: object) -> tuple[list[dict], list[str], list[dict]]:
     """Read a GameChanger "Export Stats" CSV into per-player stat counts.
 
@@ -765,7 +789,10 @@ def parse_stats_text(text: object) -> tuple[list[dict], list[str], list[dict]]:
     if len(text.encode("utf-8")) > MAX_ROSTER_TEXT_BYTES:
         raise ValueError("Stats file must be 200 KB or smaller")
     try:
-        rows = [[cell.strip() for cell in row] for row in csv.reader(io.StringIO(text))]
+        rows = [
+            [cell.strip() for cell in row]
+            for row in csv.reader(io.StringIO(text.lstrip("\ufeff")))
+        ]
     except csv.Error as exc:
         raise ValueError("Stats file is not valid CSV") from exc
 
@@ -800,7 +827,12 @@ def parse_stats_text(text: object) -> tuple[list[dict], list[str], list[dict]]:
 
     def stat_column(key: str) -> int | None:
         wanted = DEFENSE_SECTIONS if key in DEFENSE_KEYS else OFFENSE_SECTIONS
-        matches = [i for i, value in enumerate(header) if value in STAT_IMPORT_ALIASES[key]]
+        aliases = STAT_IMPORT_ALIASES[key]
+        if key == "inn" and any(sections):
+            # In GameChanger's Fielding group INN is innings caught; total
+            # innings played is the "Total" column at the end of the group.
+            aliases = GC_INNINGS_ALIASES
+        matches = [i for i, value in enumerate(header) if value in aliases]
         if not any(sections):
             # Without group labels, "IP" is pitching innings, not innings played.
             if key == "inn":
@@ -833,6 +865,8 @@ def parse_stats_text(text: object) -> tuple[list[dict], list[str], list[dict]]:
     for line, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
         if not any(row):
             continue
+        if row[0].casefold() == "glossary":
+            break
         if len(players) >= MAX_ROSTER_PLAYERS:
             skipped.append({"line": line, "reason": "200-player import limit reached"})
             continue
@@ -1647,8 +1681,9 @@ class Store:
             for player in candidates:
                 folded = player["name"].casefold()
                 if folded in seen:
+                    where = "on the roster" if folded in existing_names else "listed more than once"
                     skipped.append(
-                        {"line": None, "reason": f"{player['name']} is already on the roster"}
+                        {"line": None, "reason": f"{player['name']} is already {where}"}
                     )
                     continue
                 seen.add(folded)
@@ -1697,7 +1732,7 @@ class Store:
 
             matches = []
             unmatched = []
-            claimed = set()
+            claimed: dict[str, dict] = {}
             for row in rows:
                 named = by_name.get(name_key(row["name"]), [])
                 numbered = by_number.get(row["number"], []) if row["number"] is not None else []
@@ -1708,26 +1743,36 @@ class Store:
                 elif not named and len(numbered) == 1:
                     player, matched_by = numbered[0], "number"
                 else:
-                    unmatched.append({"line": row["line"], "name": row["name"], "number": row["number"]})
+                    if all(name_key(u["name"]) != name_key(row["name"]) for u in unmatched):
+                        unmatched.append(
+                            {"line": row["line"], "name": row["name"], "number": row["number"]}
+                        )
                     continue
-                if player["id"] in claimed:
-                    skipped.append(
-                        {"line": row["line"], "reason": f"{player['name']} appears more than once"}
-                    )
+                earlier = claimed.get(player["id"])
+                if earlier is not None:
+                    # GameChanger lists a player twice when they have two team
+                    # profiles; its Totals row counts both, so add them up.
+                    if name_key(earlier["csv_name"]) == name_key(row["name"]):
+                        earlier["stats"] = combine_stat_rows(earlier["stats"], row["stats"])
+                        earlier["rows"] += 1
+                    else:
+                        skipped.append(
+                            {"line": row["line"], "reason": f"{player['name']} appears more than once"}
+                        )
                     continue
-                claimed.add(player["id"])
-                matches.append(
-                    {
-                        "line": row["line"],
-                        "player_id": player["id"],
-                        "player_name": player["name"],
-                        "number": player.get("number"),
-                        "csv_name": row["name"],
-                        "matched_by": matched_by,
-                        "stats": row["stats"],
-                        "_player": player,
-                    }
-                )
+                match = {
+                    "line": row["line"],
+                    "player_id": player["id"],
+                    "player_name": player["name"],
+                    "number": player.get("number"),
+                    "csv_name": row["name"],
+                    "matched_by": matched_by,
+                    "rows": 1,
+                    "stats": row["stats"],
+                    "_player": player,
+                }
+                claimed[player["id"]] = match
+                matches.append(match)
 
             if not preview and matches:
                 for match in matches:
