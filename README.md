@@ -43,6 +43,23 @@ That address only works on the same computer that is running `app.py`. Leave the
 
 The first launch creates two sample players so you can click around. Your changes are saved in `data.json` in the same folder.
 
+## Mobile app (React)
+
+The phone layout lives in `web/` and uses the same local API and `data.json`. The page at http://127.0.0.1:8765 stays the original desktop app.
+
+1. Start the API and leave it running (`python3 app.py`).
+2. In a second terminal:
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+3. Open http://127.0.0.1:5173
+
+Sign in the same way as the desktop app. Coaches land on the roster. Players land on their own skills, stats, notes, drills, and progress. The bottom bar opens alarms, messages, and Admin (add player, roster import, staff, and team info).
+
 ## Signing in
 
 idev has a single sign-in page: everyone enters a **username and password**.
