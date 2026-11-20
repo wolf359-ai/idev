@@ -1598,7 +1598,16 @@ class Store:
 
     def list_players(self) -> list[dict]:
         with self.lock:
-            players = [public_player(player) for player in self.data["players"]]
+            ratings_by_player: dict[str, list[dict]] = {}
+            for rating in self.data["ratings"]:
+                ratings_by_player.setdefault(rating.get("player_id"), []).append(rating)
+            players = []
+            for record in self.data["players"]:
+                player = public_player(record)
+                player["week_change"], _ = week_rating_change(
+                    ratings_by_player.get(record.get("id"), [])
+                )
+                players.append(player)
         players.sort(key=lambda player: player.get("name", "").casefold())
         return players
 
@@ -1651,6 +1660,7 @@ class Store:
         player["records"] = records[:MAX_RECORDS]
         player["progress"] = build_progress(skills, ratings)
         player["stats"] = build_stats_view(raw_stats)
+        player["week_change"], player["week_prior_avg"] = week_rating_change(ratings)
         return player
 
     def add_player(self, payload: dict) -> dict:
@@ -2569,6 +2579,50 @@ def build_progress(skills: list[dict], ratings: list[dict]) -> list[dict]:
             }
         )
     return progress
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        stamp = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp
+
+
+def week_rating_change(
+    ratings: list[dict], now: datetime | None = None
+) -> tuple[float | None, float | None]:
+    """Average rating change over the last 7 days for one player's ratings.
+
+    For each skill, compare its latest score with its score as of 7 days ago
+    and average across skills that have both. Returns ``(change, prior_avg)``,
+    or ``(None, None)`` when no skill was rated before the cutoff.
+    """
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(days=7)
+    latest: dict[str, tuple[datetime, float]] = {}
+    prior: dict[str, tuple[datetime, float]] = {}
+    for rating in ratings:
+        skill_id = rating.get("skill_id")
+        score = rating.get("score")
+        stamp = _parse_timestamp(rating.get("created_at"))
+        if not isinstance(skill_id, str) or stamp is None:
+            continue
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
+            continue
+        if skill_id not in latest or stamp >= latest[skill_id][0]:
+            latest[skill_id] = (stamp, float(score))
+        if stamp <= cutoff and (skill_id not in prior or stamp >= prior[skill_id][0]):
+            prior[skill_id] = (stamp, float(score))
+    shared = [skill_id for skill_id in prior if skill_id in latest]
+    if not shared:
+        return None, None
+    change = sum(latest[s][1] - prior[s][1] for s in shared) / len(shared)
+    prior_avg = sum(prior[s][1] for s in shared) / len(shared)
+    return round(change, 1) + 0.0, round(prior_avg, 2)
 
 
 def json_body(handler: BaseHTTPRequestHandler) -> dict:
