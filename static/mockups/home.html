@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>idev · Team Home (mockup)</title>
+  <link rel="stylesheet" href="/static/mockups/home.css">
+</head>
+<body>
+  <div class="mock-banner" role="note">
+    <strong>Mockup</strong> · sample data, not connected to the app
+    <span class="mock-sep" aria-hidden="true">|</span>
+    <label class="mock-viewas">View as
+      <select id="view-as">
+        <option value="coach">Coach (all teams)</option>
+        <option value="player">Player: #7 Allison Harrop (12U)</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="shell" id="shell">
+    <aside class="side" id="side" aria-label="Main menu">
+      <div class="side-head">
+        <img class="side-logo" src="/static/logo.png" alt="Alpha" width="123" height="40">
+        <button type="button" class="team-switch" id="team-switch" aria-haspopup="listbox">
+          <span class="team-switch-name" id="team-switch-name">All teams</span>
+          <span class="team-switch-sub" id="team-switch-sub">3 teams · 2 sports</span>
+        </button>
+        <button type="button" class="collapse-btn" id="collapse-btn" aria-label="Collapse menu" title="Collapse menu"></button>
+      </div>
+
+      <nav class="side-nav" id="side-nav"></nav>
+
+      <div class="side-foot">
+        <div class="next-card" id="next-card"></div>
+        <button type="button" class="me" id="me">
+          <span class="me-avatar" id="me-avatar">CM</span>
+          <span class="me-text">
+            <span class="me-hi">Welcome back</span>
+            <span class="me-name" id="me-name">Casey Morgan</span>
+          </span>
+          <span class="me-chev" aria-hidden="true">›</span>
+        </button>
+      </div>
+    </aside>
+
+    <button type="button" class="side-scrim" id="side-scrim" aria-label="Close menu"></button>
+
+    <main class="page" id="page">
+      <header class="page-top">
+        <button type="button" class="hamburger" id="hamburger" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+        <div class="page-titles">
+          <p class="eyebrow" id="today-label"></p>
+          <h1 id="page-title">Good afternoon, Coach</h1>
+        </div>
+        <div class="page-actions" id="page-actions"></div>
+      </header>
+
+      <section id="view-home" class="view"></section>
+      <section id="view-schedule" class="view hidden"></section>
+      <section id="view-placeholder" class="view hidden"></section>
+    </main>
+  </div>
+
+  <div class="pop hidden" id="event-pop" role="dialog" aria-modal="false" aria-labelledby="pop-title"></div>
+
+  <script src="/static/mockups/home.js"></script>
+</body>
+</html>
