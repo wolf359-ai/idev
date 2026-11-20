@@ -348,7 +348,374 @@ h1, h2, h3, p {
   font-size: 0.85rem;
 }
 
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.data-table th,
+.data-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.data-table thead th {
+  background: var(--panel-2);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.th-sort {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.th-sort:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+.sort-mark {
+  font-size: 0.6rem;
+  color: var(--cyan);
+}
+
+.manage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 0.125rem;
+}
+
+.manage-toolbar[hidden] {
+  display: none;
+}
+
+.manage-count {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.manage-hint {
+  color: var(--muted-2);
+  font-size: 0.76rem;
+}
+
+.manage-table {
+  font-size: 0.85rem;
+}
+
+.manage-table thead th {
+  font-size: 0.68rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.manage-table thead th .th-sort:hover {
+  color: var(--ink);
+}
+
+.manage-table tbody td {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.manage-table tbody tr {
+  cursor: context-menu;
+  transition: background-color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.manage-table tbody tr:hover {
+  background: rgba(34, 211, 238, 0.06);
+  box-shadow: inset 3px 0 0 0 var(--cyan);
+}
+
+.manage-table tbody tr.menu-open {
+  background: rgba(34, 211, 238, 0.1);
+  box-shadow: inset 3px 0 0 0 var(--cyan);
+}
+
+.manage-table tbody tr:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: -2px;
+}
+
+.manage-table .col-number {
+  width: 3.75rem;
+}
+
+.manage-table .empty-cell {
+  color: var(--muted-2);
+}
+
+.num-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.5rem;
+  padding: 0 0.3rem;
+  box-sizing: border-box;
+  border: 1px solid rgba(251, 146, 60, 0.35);
+  border-radius: 6px;
+  background: rgba(251, 146, 60, 0.12);
+  color: var(--orange);
+  font-weight: 700;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.num-badge.small {
+  min-width: 1.75rem;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+}
+
+.pos-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: 0.72rem;
+}
+
+.pos-abbr {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.pos-name {
+  color: var(--muted);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 0.74rem;
+}
+
+.status-pill.on {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(52, 211, 153, 0.08);
+  color: var(--green);
+}
+
+.status-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--muted-2);
+  flex-shrink: 0;
+}
+
+.status-pill.on .status-dot {
+  background: var(--green);
+}
+
+.manage-table .col-menu {
+  width: 2.75rem;
+  text-align: right;
+  padding-right: 0.375rem;
+}
+
+.row-menu-btn {
+  border: 1px solid transparent;
+  background: none;
+  color: var(--muted);
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.125rem 0.375rem;
+  cursor: pointer;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.row-menu-btn:hover,
+.manage-table tr.menu-open .row-menu-btn {
+  border-color: var(--line);
+  color: var(--ink);
+}
+
+/* Only fade the ⋯ button where a mouse can hover; touch screens always see it. */
+@media (hover: hover) {
+  .manage-table tbody tr .row-menu-btn {
+    opacity: 0;
+  }
+
+  .manage-table tbody tr:hover .row-menu-btn,
+  .manage-table tbody tr:focus-within .row-menu-btn,
+  .manage-table tbody tr.menu-open .row-menu-btn {
+    opacity: 1;
+  }
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 14rem;
+  max-width: calc(100vw - 16px);
+  box-sizing: border-box;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+  box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8);
+  display: grid;
+  text-align: left;
+}
+
+.context-menu-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem 0.625rem;
+  border-bottom: 1px solid var(--line-soft);
+  margin-bottom: 0.25rem;
+}
+
+.context-menu-who {
+  min-width: 0;
+}
+
+.context-menu-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-menu-sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.menu-group-label {
+  padding: 0.25rem 0.625rem 0.125rem;
+  font-size: 0.65rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-2);
+  font-weight: 700;
+}
+
+.menu-item {
+  all: unset;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.45rem 0.625rem;
+  border-radius: 6px;
+  font-size: 0.88rem;
+  color: var(--ink);
+  transition: background-color 0.12s ease;
+}
+
+.menu-icon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: rgba(34, 211, 238, 0.1);
+}
+
+.menu-item.danger {
+  color: var(--red);
+}
+
+.menu-item.danger:hover,
+.menu-item.danger:focus-visible {
+  background: rgba(245, 86, 108, 0.12);
+}
+
+.menu-sep {
+  height: 1px;
+  margin: 0.25rem 0.2rem;
+  background: var(--line-soft);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 @media (max-width: 560px) {
+  .manage-table .col-secondary_position,
+  .manage-table .col-grad_year,
+  .manage-table .col-login {
+    display: none;
+  }
+
+  .manage-table th,
+  .manage-table td {
+    padding: 0.5rem 0.4rem;
+  }
+
+  .manage-table .col-number {
+    width: 2.75rem;
+  }
+
+  .manage-table .col-name {
+    white-space: normal;
+  }
+
+  .manage-table .pos-abbr + .pos-name {
+    display: none;
+  }
+
+  .manage-hint {
+    display: none;
+  }
+
   .login-item {
     grid-template-columns: minmax(0, 1fr) auto;
   }
