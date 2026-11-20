@@ -1255,6 +1255,59 @@ class StoreTests(unittest.TestCase):
             self.store.update_staff(member["id"], {"username": app.ADMIN_USERNAME})
 
 
+class WeekRatingChangeTests(unittest.TestCase):
+    NOW = app.datetime(2026, 11, 20, 12, tzinfo=app.timezone.utc)
+
+    def rating(self, skill: str, score: float, days_ago: float) -> dict:
+        stamp = self.NOW - app.timedelta(days=days_ago)
+        return {"skill_id": skill, "score": score, "created_at": stamp.isoformat()}
+
+    def test_averages_latest_vs_week_ago_across_shared_skills(self) -> None:
+        ratings = [
+            self.rating("hit", 3, 14),
+            self.rating("hit", 3.5, 9),
+            self.rating("hit", 4.5, 1),
+            self.rating("run", 2, 10),
+            self.rating("run", 2, 2),
+            # Rated only this week: no prior score, so it does not count.
+            self.rating("bunt", 5, 1),
+        ]
+        change, prior = app.week_rating_change(ratings, now=self.NOW)
+        self.assertEqual(change, 0.5)
+        self.assertEqual(prior, 2.75)
+
+    def test_drop_and_unchanged(self) -> None:
+        down = [self.rating("hit", 4, 8), self.rating("hit", 3.5, 1)]
+        self.assertEqual(app.week_rating_change(down, now=self.NOW)[0], -0.5)
+        flat = [self.rating("hit", 4, 20)]
+        self.assertEqual(app.week_rating_change(flat, now=self.NOW)[0], 0.0)
+
+    def test_no_prior_data(self) -> None:
+        self.assertEqual(app.week_rating_change([], now=self.NOW), (None, None))
+        recent = [self.rating("hit", 4, 1), {"skill_id": "x", "score": 3, "created_at": "bad"}]
+        self.assertEqual(app.week_rating_change(recent, now=self.NOW), (None, None))
+
+    def test_list_and_detail_include_week_change(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = app.Store(Path(tmp) / "data.json")
+            skill = store.add_skill("Hitting")
+            rated = store.add_player({"name": "Ava", "position": "Catcher"})
+            fresh = store.add_player({"name": "Bea", "position": "Pitcher"})
+            old = (app.datetime.now(app.timezone.utc) - app.timedelta(days=10)).isoformat()
+            store.data["ratings"].append(
+                {"id": "rating-old00001", "player_id": rated["id"], "skill_id": skill["id"],
+                 "score": 3, "created_at": old}
+            )
+            store.add_rating(rated["id"], {"skill_id": skill["id"], "score": 4})
+            listed = {p["name"]: p for p in store.list_players()}
+            self.assertEqual(listed["Ava"]["week_change"], 1.0)
+            self.assertIsNone(listed["Bea"]["week_change"])
+            detail = store.get_player(rated["id"])
+            self.assertEqual(detail["week_change"], 1.0)
+            self.assertEqual(detail["week_prior_avg"], 3.0)
+            self.assertNotIn("password_hash", listed["Ava"])
+
+
 COACH_PASSWORD = "coach-secret-pass"
 
 
