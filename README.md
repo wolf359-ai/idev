@@ -119,7 +119,7 @@ reach it.
 Coaches and Full-access staff see an **Admin** button next to **Sign out**. It
 opens a window with five tabs:
 
-- **Players** — add a player or import a roster
+- **Players** — add, edit, or delete players, or import a roster
 - **Logins** — set, reset, or remove player logins
 - **Stats** — import GameChanger stats
 - **Staff** — add staff and manage their access
