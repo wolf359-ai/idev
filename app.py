@@ -26,7 +26,7 @@ from datetime import datetime, timedelta, timezone
 from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = (ROOT / "static").resolve()
@@ -53,6 +53,18 @@ MAX_DRILL_NAME_LEN = 80
 MAX_DRILL_FREQ_LEN = 60
 MAX_DRILL_LINK_LEN = 300
 MAX_RECORDS = 50
+SPORTS = ("Softball", "Baseball")
+DEFAULT_SPORT = "Softball"
+MAX_TEAMS = 50
+# Schedule events always belong to one whole team; there is no per-player
+# invite list.
+EVENT_TYPES = ("practice", "game", "tournament", "training", "scrimmage")
+EVENT_RSVP = ("yes", "no")
+MAX_EVENTS = 5000
+MAX_EVENT_DAYS = 14
+MAX_EVENT_TITLE_LEN = 100
+MAX_EVENT_LOCATION_LEN = 120
+MAX_EVENT_NOTES_LEN = 1000
 # Numeric performance metrics that track a personal record (PR). "higher_better"
 # marks speed/velocity (a new max is a PR); time metrics improve as they drop.
 PR_METRICS = {
@@ -580,7 +592,101 @@ def parse_team(payload: object) -> dict:
         "season": parse_optional_season(payload.get("season")),
         "age_bracket": parse_optional_age_bracket(payload.get("age_bracket")),
         "play_year": parse_optional_play_year(payload.get("play_year")),
+        "sport": parse_sport(payload.get("sport")),
     }
+
+
+def parse_sport(value: object) -> str:
+    """Softball or Baseball; blank means the default (Softball)."""
+    if value is None:
+        return DEFAULT_SPORT
+    text = " ".join(str(value).split())
+    if not text:
+        return DEFAULT_SPORT
+    for sport in SPORTS:
+        if text.casefold() == sport.casefold():
+            return sport
+    raise ValueError("Choose softball or baseball")
+
+
+def parse_team_record(payload: object) -> dict:
+    """A team in the multi-team list: like parse_team but the name is required."""
+    fields = parse_team(payload)
+    if not fields["name"]:
+        raise ValueError("Team name is required")
+    return fields
+
+
+def parse_event_date(value: object, field: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field} is required")
+    try:
+        return datetime.strptime(value.strip(), "%Y-%m-%d").date().isoformat()
+    except ValueError:
+        raise ValueError(f"{field} must be a date like 2026-11-21") from None
+
+
+def parse_event_time(value: object, field: str) -> str:
+    """24-hour HH:MM, or blank."""
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    try:
+        return datetime.strptime(text, "%H:%M").strftime("%H:%M")
+    except ValueError:
+        raise ValueError(f"{field} must be a time like 18:30") from None
+
+
+def parse_event(payload: object) -> dict:
+    """Validate a schedule event (team checked by the store)."""
+    if not isinstance(payload, dict):
+        raise ValueError("Send event details in the request body")
+    kind = str(payload.get("type") or "").strip().casefold()
+    if kind not in EVENT_TYPES:
+        raise ValueError("Choose practice, game, tournament, training, or scrimmage")
+    title = clean_text(payload.get("title"), "Title", MAX_EVENT_TITLE_LEN)
+    date = parse_event_date(payload.get("date"), "Date")
+    end_raw = payload.get("end_date")
+    end_date = parse_event_date(end_raw, "End date") if end_raw else date
+    start_day = datetime.strptime(date, "%Y-%m-%d")
+    end_day = datetime.strptime(end_date, "%Y-%m-%d")
+    if end_day < start_day:
+        raise ValueError("End date can't be before the start date")
+    if (end_day - start_day).days >= MAX_EVENT_DAYS:
+        raise ValueError(f"Events can span at most {MAX_EVENT_DAYS} days")
+    all_day = payload.get("all_day", False)
+    if not isinstance(all_day, bool):
+        raise ValueError("All day must be true or false")
+    start_time = "" if all_day else parse_event_time(payload.get("start_time"), "Start time")
+    end_time = "" if all_day else parse_event_time(payload.get("end_time"), "End time")
+    if not all_day and not start_time:
+        raise ValueError("Start time is required unless the event is all day")
+    if start_time and end_time and end_date == date and end_time < start_time:
+        raise ValueError("End time can't be before the start time")
+    return {
+        "type": kind,
+        "title": title,
+        "date": date,
+        "end_date": end_date,
+        "all_day": all_day,
+        "start_time": start_time,
+        "end_time": end_time,
+        "location": parse_optional_name(payload.get("location"), "Location", MAX_EVENT_LOCATION_LEN),
+        "notes": parse_optional_notes(payload.get("notes")),
+    }
+
+
+def parse_optional_notes(value: object) -> str:
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ValueError("Notes must be text")
+    text = value.strip()
+    if len(text) > MAX_EVENT_NOTES_LEN:
+        raise ValueError(f"Notes must be {MAX_EVENT_NOTES_LEN} characters or fewer")
+    return text
 
 
 def parse_optional_link(value: object) -> str:
@@ -1076,6 +1182,7 @@ def build_stats_view(raw: object) -> dict:
 
 PUBLIC_PLAYER_FIELDS = (
     "id",
+    "team_id",
     "name",
     "username",
     "position",
@@ -1103,6 +1210,7 @@ def public_player(player: dict) -> dict:
 
 PUBLIC_STAFF_FIELDS = (
     "id",
+    "team_ids",
     "name",
     "username",
     "role",
@@ -1289,8 +1397,9 @@ def required_permission(method: str, path: str):
             return PERM_PUBLIC  # login page and static assets
         if path in ("/api/health", "/api/session"):
             return PERM_PUBLIC
-        if path == "/api/team":
-            # Team name/season is shown in the header for any signed-in user.
+        if path in ("/api/team", "/api/teams", "/api/events"):
+            # Team name/season is shown in the header for any signed-in user;
+            # team and event lists are narrowed to the viewer's teams in do_GET.
             return PERM_AUTHED
         if path in ("/api/alarms", "/api/messages"):
             # Players see their own inbox; coach/staff see all (handled in do_GET).
@@ -1313,6 +1422,11 @@ def required_permission(method: str, path: str):
             return PERM_AUTHED
         if re.fullmatch(rf"/api/(?:alarms|messages)/({ID_RE})/read", path):
             return PERM_AUTHED
+        # Players answer "I'll be there / can't make it" for their own team.
+        if re.fullmatch(rf"/api/events/{ID_RE}/rsvp", path):
+            return PERM_AUTHED
+        if path == "/api/events":
+            return PERM_CONTENT
         # Content actions: ratings, notes, drills, skills, alarms, messages.
         if path in ("/api/skills", "/api/alarms", "/api/messages"):
             return PERM_CONTENT
@@ -1326,9 +1440,11 @@ def required_permission(method: str, path: str):
             return PERM_CONTENT
         if re.fullmatch(rf"/api/players/{ID_RE}/drills/{ID_RE}", path):
             return PERM_CONTENT
-        if re.fullmatch(rf"/api/(?:alarms|messages)/{ID_RE}", path):
+        if re.fullmatch(rf"/api/(?:alarms|messages|events)/{ID_RE}", path):
             return PERM_CONTENT
         return PERM_ADMIN
+    if method == "PUT" and re.fullmatch(rf"/api/events/{ID_RE}", path):
+        return PERM_CONTENT
     # PUT (player profile/stats, staff passwords, team) and any other method.
     return PERM_ADMIN
 
@@ -1341,6 +1457,11 @@ class Store:
         self.backup_dir = self.path.parent / "data_backups"
         self.lock = threading.Lock()
         self.data = self._load()
+        had_file = self.path.exists()
+        with self.lock:
+            changed = self._ensure_teams_unlocked()
+            if changed and had_file:
+                self._save()
 
     def _empty(self) -> dict:
         return {
@@ -1352,6 +1473,8 @@ class Store:
             "staff": [],
             "alarms": [],
             "messages": [],
+            "teams": [],
+            "events": [],
             "team": {},
             "auth": {},
         }
@@ -1370,6 +1493,8 @@ class Store:
             "staff",
             "alarms",
             "messages",
+            "teams",
+            "events",
         ):
             items = raw.get(key, [])
             if isinstance(items, list):
@@ -1575,7 +1700,259 @@ class Store:
                     "created_at": now,
                 },
             ]
+            self._ensure_teams_unlocked()
             self._save()
+
+    # -- teams ---------------------------------------------------------------
+    def _ensure_teams_unlocked(self) -> bool:
+        """Make sure at least one team exists and every player and staff member
+        belongs to one. Data from before multi-team support becomes the first
+        team (from the old single "team" record). Returns True if it changed."""
+        changed = False
+        teams = self.data.setdefault("teams", [])
+        if not teams:
+            legacy = self.data.get("team") if isinstance(self.data.get("team"), dict) else {}
+            try:
+                fields = parse_team(legacy)
+            except ValueError:
+                fields = parse_team({})
+            if not fields["name"]:
+                fields["name"] = "My team"
+            teams.append({"id": new_id("team"), **fields, "created_at": utc_now()})
+            changed = True
+        valid = {team.get("id") for team in teams}
+        first = teams[0]["id"]
+        for player in self.data["players"]:
+            if player.get("team_id") not in valid:
+                player["team_id"] = first
+                changed = True
+        for member in self.data["staff"]:
+            ids = member.get("team_ids")
+            if not isinstance(ids, list):
+                member["team_ids"] = [first]
+                changed = True
+            elif any(team_id not in valid for team_id in ids):
+                member["team_ids"] = [team_id for team_id in ids if team_id in valid]
+                changed = True
+        return changed
+
+    def _team_unlocked(self, team_id: str) -> dict:
+        for team in self.data["teams"]:
+            if team.get("id") == team_id:
+                return team
+        raise KeyError("Team not found")
+
+    def _team_id_for_unlocked(self, value: object) -> str:
+        """Resolve a requested team id; blank means the first team."""
+        self._ensure_teams_unlocked()
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return self.data["teams"][0]["id"]
+        if not isinstance(value, str):
+            raise ValueError("Choose a team from the list")
+        try:
+            return self._team_unlocked(value.strip())["id"]
+        except KeyError:
+            raise ValueError("Choose a team from the list") from None
+
+    def _team_ids_for_unlocked(self, value: object) -> list[str]:
+        """Staff team list. An empty list means every team."""
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise ValueError("Teams must be a list")
+        valid = {team.get("id") for team in self.data["teams"]}
+        out: list[str] = []
+        for team_id in value:
+            if not isinstance(team_id, str) or team_id not in valid:
+                raise ValueError("Choose teams from the list")
+            if team_id not in out:
+                out.append(team_id)
+        return out
+
+    def list_teams(self, scope: set | None = None) -> list[dict]:
+        with self.lock:
+            self._ensure_teams_unlocked()
+            counts: dict[str, int] = {}
+            for player in self.data["players"]:
+                counts[player.get("team_id")] = counts.get(player.get("team_id"), 0) + 1
+            return [
+                {**dict(team), "player_count": counts.get(team.get("id"), 0)}
+                for team in self.data["teams"]
+                if scope is None or team.get("id") in scope
+            ]
+
+    def add_team(self, payload: object) -> dict:
+        fields = parse_team_record(payload)
+        with self.lock:
+            self._ensure_teams_unlocked()
+            if len(self.data["teams"]) >= MAX_TEAMS:
+                raise ValueError(f"You can have at most {MAX_TEAMS} teams")
+            folded = fields["name"].casefold()
+            if any(str(t.get("name", "")).casefold() == folded for t in self.data["teams"]):
+                raise ValueError("A team with that name already exists")
+            team = {"id": new_id("team"), **fields, "created_at": utc_now()}
+            self.data["teams"].append(team)
+            self._save()
+            return {**dict(team), "player_count": 0}
+
+    def update_team(self, team_id: str, payload: object) -> dict:
+        fields = parse_team_record(payload)
+        with self.lock:
+            team = self._team_unlocked(team_id)
+            folded = fields["name"].casefold()
+            if any(
+                t.get("id") != team_id and str(t.get("name", "")).casefold() == folded
+                for t in self.data["teams"]
+            ):
+                raise ValueError("A team with that name already exists")
+            team.update(fields)
+            self._save()
+            count = sum(1 for p in self.data["players"] if p.get("team_id") == team_id)
+            return {**dict(team), "player_count": count}
+
+    def delete_team(self, team_id: str) -> None:
+        with self.lock:
+            self._team_unlocked(team_id)
+            if len(self.data["teams"]) <= 1:
+                raise ValueError("Keep at least one team")
+            if any(p.get("team_id") == team_id for p in self.data["players"]):
+                raise ValueError("Move or delete this team's players first")
+            self.data["teams"] = [t for t in self.data["teams"] if t.get("id") != team_id]
+            self.data["events"] = [e for e in self.data["events"] if e.get("team_id") != team_id]
+            for member in self.data["staff"]:
+                if isinstance(member.get("team_ids"), list):
+                    member["team_ids"] = [t for t in member["team_ids"] if t != team_id]
+            self._save()
+
+    def team_scope(self, session: dict | None) -> set | None:
+        """Teams a session may see: None means every team (the coach and
+        Full-access staff); players see only their own team."""
+        if not session:
+            return set()
+        role = session.get("role")
+        if role == "coach" or session_is_admin(session):
+            return None
+        with self.lock:
+            if role == "staff":
+                for member in self.data["staff"]:
+                    if member.get("id") == session.get("staff_id"):
+                        ids = member.get("team_ids")
+                        if not isinstance(ids, list) or not ids:
+                            return None
+                        return set(ids)
+                return set()
+            if role == "player":
+                for player in self.data["players"]:
+                    if player.get("id") == session.get("player_id"):
+                        return {player.get("team_id")}
+        return set()
+
+    def player_team_id(self, player_id: str) -> str | None:
+        with self.lock:
+            for player in self.data["players"]:
+                if player.get("id") == player_id:
+                    return player.get("team_id")
+        return None
+
+    # -- schedule ------------------------------------------------------------
+    def _event_view(self, event: dict, viewer_player_id: str | None) -> dict:
+        view = {key: value for key, value in event.items() if key != "rsvps"}
+        rsvps = event.get("rsvps") if isinstance(event.get("rsvps"), dict) else {}
+        if viewer_player_id is not None:
+            view["my_rsvp"] = rsvps.get(viewer_player_id, "")
+        else:
+            roster = [
+                p.get("id") for p in self.data["players"] if p.get("team_id") == event.get("team_id")
+            ]
+            view["rsvp"] = {
+                "yes": sum(1 for pid in roster if rsvps.get(pid) == "yes"),
+                "no": sum(1 for pid in roster if rsvps.get(pid) == "no"),
+                "roster": len(roster),
+            }
+        return view
+
+    def list_events(
+        self,
+        scope: set | None,
+        start: str | None = None,
+        end: str | None = None,
+        viewer_player_id: str | None = None,
+    ) -> list[dict]:
+        if start:
+            start = parse_event_date(start, "From")
+        if end:
+            end = parse_event_date(end, "To")
+        with self.lock:
+            events = [
+                self._event_view(event, viewer_player_id)
+                for event in self.data["events"]
+                if (scope is None or event.get("team_id") in scope)
+                and (not end or event.get("date", "") <= end)
+                and (not start or event.get("end_date", event.get("date", "")) >= start)
+            ]
+        events.sort(key=lambda e: (e.get("date", ""), e.get("all_day") is False, e.get("start_time", "")))
+        return events
+
+    def add_event(self, payload: object, scope: set | None) -> dict:
+        fields = parse_event(payload)
+        with self.lock:
+            team_id = self._team_id_for_unlocked(payload.get("team_id"))
+            if scope is not None and team_id not in scope:
+                raise PermissionError("You can only schedule events for your teams")
+            if len(self.data["events"]) >= MAX_EVENTS:
+                raise ValueError("The schedule is full; delete old events first")
+            event = {"id": new_id("event"), "team_id": team_id, **fields, "rsvps": {}, "created_at": utc_now()}
+            self.data["events"].append(event)
+            self._save()
+            return self._event_view(event, None)
+
+    def _event_unlocked(self, event_id: str) -> dict:
+        for event in self.data["events"]:
+            if event.get("id") == event_id:
+                return event
+        raise KeyError("Event not found")
+
+    def update_event(self, event_id: str, payload: object, scope: set | None) -> dict:
+        fields = parse_event(payload)
+        with self.lock:
+            event = self._event_unlocked(event_id)
+            if scope is not None and event.get("team_id") not in scope:
+                raise KeyError("Event not found")
+            if "team_id" in payload:
+                team_id = self._team_id_for_unlocked(payload.get("team_id"))
+                if scope is not None and team_id not in scope:
+                    raise PermissionError("You can only schedule events for your teams")
+                if team_id != event.get("team_id"):
+                    event["rsvps"] = {}
+                event["team_id"] = team_id
+            event.update(fields)
+            self._save()
+            return self._event_view(event, None)
+
+    def delete_event(self, event_id: str, scope: set | None) -> None:
+        with self.lock:
+            event = self._event_unlocked(event_id)
+            if scope is not None and event.get("team_id") not in scope:
+                raise KeyError("Event not found")
+            self.data["events"] = [e for e in self.data["events"] if e.get("id") != event_id]
+            self._save()
+
+    def set_rsvp(self, event_id: str, player_id: str, status: object) -> dict:
+        choice = str(status or "").strip().casefold()
+        if choice not in EVENT_RSVP and choice != "":
+            raise ValueError("Answer yes or no")
+        with self.lock:
+            event = self._event_unlocked(event_id)
+            player = self._player_unlocked(player_id)
+            if player.get("team_id") != event.get("team_id"):
+                raise KeyError("Event not found")
+            rsvps = event.setdefault("rsvps", {})
+            if choice:
+                rsvps[player_id] = choice
+            else:
+                rsvps.pop(player_id, None)
+            self._save()
+            return self._event_view(event, player_id)
 
     def list_skills(self) -> list[dict]:
         with self.lock:
@@ -1696,6 +2073,7 @@ class Store:
             if clean_username.casefold() == ADMIN_USERNAME.casefold():
                 raise ValueError("That username is reserved")
         with self.lock:
+            player["team_id"] = self._team_id_for_unlocked(payload.get("team_id"))
             if want_login:
                 if self._login_username_taken(clean_username.casefold()):
                     raise ValueError("That username is already taken")
@@ -1733,9 +2111,11 @@ class Store:
             imported = []
             if not preview:
                 now = utc_now()
+                team_id = self._team_id_for_unlocked(payload.get("team_id"))
                 for candidate in unique:
                     player = {
                         "id": new_id("player"),
+                        "team_id": team_id,
                         "name": candidate["name"],
                         "position": candidate["position"],
                         "secondary_position": candidate.get("secondary_position", ""),
@@ -1859,6 +2239,8 @@ class Store:
     def update_player(self, player_id: str, payload: dict) -> dict:
         with self.lock:
             player = self._player_unlocked(player_id)
+            if "team_id" in payload:
+                player["team_id"] = self._team_id_for_unlocked(payload.get("team_id"))
             if "name" in payload:
                 player["name"] = clean_text(payload.get("name"), "Player name", MAX_NAME_LEN)
             if "position" in payload:
@@ -2074,14 +2456,22 @@ class Store:
 
     # -- staff -------------------------------------------------------------
     # -- team information --------------------------------------------------
+    # The single-team endpoints read and edit the first team, which is what the
+    # header shows when there is only one.
     def get_team(self) -> dict:
         with self.lock:
-            return dict(self.data.get("team", {}))
+            self._ensure_teams_unlocked()
+            team = self.data["teams"][0]
+            return {key: team.get(key, "") for key in ("name", "year", "season", "age_bracket", "play_year", "sport")}
 
     def set_team(self, payload: dict) -> dict:
         fields = parse_team(payload)
         with self.lock:
-            self.data["team"] = fields
+            self._ensure_teams_unlocked()
+            if not fields["name"]:
+                fields["name"] = self.data["teams"][0].get("name") or "My team"
+            self.data["teams"][0].update(fields)
+            self.data["team"] = dict(fields)
             self._save()
             return dict(fields)
 
@@ -2113,6 +2503,9 @@ class Store:
                 if clean_username.casefold() == ADMIN_USERNAME.casefold():
                     raise ValueError("That username is reserved")
         with self.lock:
+            member["team_ids"] = self._team_ids_for_unlocked(
+                payload.get("team_ids") if isinstance(payload, dict) else None
+            )
             if has_username:
                 if self._login_username_taken(clean_username.casefold()):
                     raise ValueError("That username is already taken")
@@ -2164,6 +2557,8 @@ class Store:
                     raise ValueError("That username is reserved")
         with self.lock:
             member = self._staff_unlocked(staff_id)
+            if "team_ids" in payload:
+                updates["team_ids"] = self._team_ids_for_unlocked(payload.get("team_ids"))
             if change_username and new_username:
                 if self._login_username_taken(
                     new_username.casefold(), exclude_staff=staff_id
@@ -2811,7 +3206,22 @@ class IdevHandler(BaseHTTPRequestHandler):
         return payload
 
     def _guard(self):
-        """Enforce deny-by-default access control. Returns (session, perm, ok)."""
+        """Enforce deny-by-default access control. Returns (session, perm, ok).
+
+        On top of the role check, staff limited to some teams cannot reach a
+        player on another team through any /api/players/<id> route."""
+        session, perm, ok = self._guard_role()
+        if not ok or not session:
+            return session, perm, ok
+        match = re.match(rf"/api/players/({ID_RE})(?:/|$)", urlparse(self.path).path)
+        if match and session.get("role") == "staff":
+            scope = self.store.team_scope(session)
+            if scope is not None and self.store.player_team_id(match.group(1)) not in scope:
+                self._reject(403, "Not allowed")
+                return session, perm, False
+        return session, perm, ok
+
+    def _guard_role(self):
         session = self._load_session()
         perm = required_permission(self.command, urlparse(self.path).path)
         if perm == PERM_PUBLIC:
@@ -2944,7 +3354,25 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 200, {"skills": self.store.list_skills()})
                 return
             if path == "/api/players":
-                send_json(self, 200, {"players": self.store.list_players()})
+                scope = self.store.team_scope(session)
+                players = self.store.list_players()
+                if scope is not None:
+                    players = [p for p in players if p.get("team_id") in scope]
+                send_json(self, 200, {"players": players})
+                return
+            if path == "/api/teams":
+                send_json(self, 200, {"teams": self.store.list_teams(self.store.team_scope(session))})
+                return
+            if path == "/api/events":
+                query = parse_qs(parsed.query)
+                viewer = session.get("player_id") if session.get("role") == "player" else None
+                events = self.store.list_events(
+                    self.store.team_scope(session),
+                    (query.get("from") or [None])[0],
+                    (query.get("to") or [None])[0],
+                    viewer,
+                )
+                send_json(self, 200, {"events": events})
                 return
             if path == "/api/staff":
                 send_json(self, 200, {"staff": self.store.list_staff()})
@@ -2976,6 +3404,8 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_bytes(self, 200, static_path.read_bytes(), content_type)
                 return
             send_json(self, 404, {"error": "Not found"})
+        except PermissionError as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:
@@ -3009,6 +3439,23 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/staff":
                 send_json(self, 201, self.store.add_staff(payload))
+                return
+            if path == "/api/teams":
+                send_json(self, 201, self.store.add_team(payload))
+                return
+            if path == "/api/events":
+                send_json(self, 201, self.store.add_event(payload, self.store.team_scope(session)))
+                return
+            rsvp_match = re.fullmatch(rf"/api/events/({ID_RE})/rsvp", path)
+            if rsvp_match:
+                if session.get("role") != "player":
+                    send_json(self, 403, {"error": "Only players answer for themselves"})
+                    return
+                send_json(
+                    self,
+                    200,
+                    self.store.set_rsvp(rsvp_match.group(1), session.get("player_id", ""), payload.get("status")),
+                )
                 return
             if path == "/api/skills":
                 send_json(self, 201, self.store.add_skill(payload.get("name")))
@@ -3074,6 +3521,8 @@ class IdevHandler(BaseHTTPRequestHandler):
                 send_json(self, 200, {"ok": True})
                 return
             send_json(self, 404, {"error": "Not found"})
+        except PermissionError as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:
@@ -3123,7 +3572,21 @@ class IdevHandler(BaseHTTPRequestHandler):
             if path == "/api/team":
                 send_json(self, 200, {"team": self.store.set_team(payload)})
                 return
+            team_match = re.fullmatch(rf"/api/teams/({ID_RE})", path)
+            if team_match:
+                send_json(self, 200, self.store.update_team(team_match.group(1), payload))
+                return
+            event_match = re.fullmatch(rf"/api/events/({ID_RE})", path)
+            if event_match:
+                send_json(
+                    self,
+                    200,
+                    self.store.update_event(event_match.group(1), payload, self.store.team_scope(session)),
+                )
+                return
             send_json(self, 404, {"error": "Not found"})
+        except PermissionError as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:
@@ -3184,7 +3647,19 @@ class IdevHandler(BaseHTTPRequestHandler):
                 self.store.delete_message(message_match.group(1))
                 send_json(self, 200, {"ok": True})
                 return
+            team_match = re.fullmatch(rf"/api/teams/({ID_RE})", path)
+            if team_match:
+                self.store.delete_team(team_match.group(1))
+                send_json(self, 200, {"ok": True})
+                return
+            event_match = re.fullmatch(rf"/api/events/({ID_RE})", path)
+            if event_match:
+                self.store.delete_event(event_match.group(1), self.store.team_scope(session))
+                send_json(self, 200, {"ok": True})
+                return
             send_json(self, 404, {"error": "Not found"})
+        except PermissionError as exc:
+            send_json(self, 403, {"error": str(exc)})
         except KeyError as exc:
             send_json(self, 404, {"error": str(exc)})
         except ValueError as exc:
