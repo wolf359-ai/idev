@@ -10,17 +10,41 @@ A "repo" is just the project folder stored on GitHub. You do not need to know Gi
 
 1. Install Python 3 from [python.org/downloads](https://www.python.org/downloads/).
    - On Windows, check the box **Add python.exe to PATH** before you click Install.
-2. Open this page: [github.com/wolf359-ai/idev](https://github.com/wolf359-ai/idev)
-3. If GitHub asks you to sign in, sign in.
-4. Near the top left, click the branch menu (it may say `main`). Choose `cursor/idev-softball-tracker-2082`.
-5. Click the green **Code** button, then **Download ZIP**.
-6. Unzip the file. You should get a folder that contains `app.py`.
+2. Download the zip: https://github.com/wolf359-ai/idev/archive/refs/heads/main.zip
+3. Unzip the file. You should get a folder that contains `app.py`.
 
-Direct zip link for the current app branch:
+You only download the zip once. After that, idev updates itself (see below).
 
-https://github.com/wolf359-ai/idev/archive/refs/heads/cursor/idev-softball-tracker-2082.zip
+## Run it (and get updates automatically)
 
-## Run it
+Double-click the launcher in the idev folder:
+
+- **Mac:** `Start idev.command`
+- **Windows:** `Start idev.bat`
+
+Each time you start idev this way, it checks GitHub for a newer version,
+downloads it if there is one, and then opens idev in your browser. Your
+roster and ratings in `data.json` are never replaced; a copy is saved in
+`data_backups/` before every update. If the computer is offline, idev just
+starts with the version you already have.
+
+Leave the window that opens running while you use idev. Close it (or press
+`Ctrl+C`) to stop. To pick up an update, close idev and start it again.
+
+The first time on a Mac, macOS may say the file "cannot be opened because it
+is from an unidentified developer". Right-click (or Control-click)
+`Start idev.command`, choose **Open**, then click **Open** again. You only have
+to do this once.
+
+**Moving from an older copy:** if you already have an idev folder with your
+players in it, copy `data.json` (and the `data_backups` folder) from the old
+folder into the new one before you start it. Then you can delete the old
+folder.
+
+## Run it from a terminal (optional)
+
+`python3 start.py` does the same as the launcher. To start without checking
+for updates:
 
 1. Open a terminal in that unzipped folder:
    - **Mac:** open Terminal, type `cd ` (with a space), drag the unzipped folder onto the Terminal window, then press Return.
