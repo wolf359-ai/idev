@@ -369,6 +369,80 @@ class StoreTests(unittest.TestCase):
         detail = self.store.get_player(pid)
         self.assertEqual(len(detail["records"]), 1)
 
+    def test_promote_team_to_new_season(self) -> None:
+        fall = self.store.add_team(
+            {"name": "Caps Fall 2026", "season": "Fall", "year": "2026", "age_bracket": "12u"}
+        )
+        other = self.store.add_team({"name": "Other Team"})
+        ava = self.store.add_player({"name": "Ava", "position": "Pitcher", "team_id": fall["id"]})
+        bea = self.store.add_player({"name": "Bea", "position": "Catcher", "team_id": fall["id"]})
+        cleo = self.store.add_player({"name": "Cleo", "position": "Utility", "team_id": other["id"]})
+        self.store.update_stats(ava["id"], {"ab": 10, "h": 4})
+        self.store.add_note(ava["id"], {"text": "Strong arm.", "category": "top"})
+        coach = self.store.add_staff(
+            {"name": "Jo", "role": "Assistant Coach", "access_level": "Manager", "team_ids": [fall["id"]]}
+        )
+        everyone = self.store.add_staff(
+            {"name": "Max", "role": "Trainer", "access_level": "Full", "team_ids": []}
+        )
+
+        spring = self.store.promote_team(
+            fall["id"],
+            {"name": "Caps Spring 2027", "season": "Spring", "year": "2027", "age_bracket": "12u"},
+        )
+        self.assertEqual(spring["season"], "Spring")
+        self.assertEqual(spring["year"], "2027")
+        self.assertEqual(spring["promoted_from"], fall["id"])
+        self.assertEqual(spring["player_count"], 2)
+
+        moved = self.store.get_player(ava["id"])
+        self.assertEqual(moved["team_id"], spring["id"])
+        self.assertEqual(moved["stats"]["counts"]["ab"], 0)
+        self.assertEqual(len(moved["notes"]), 1)
+        self.assertEqual(moved["stats_history"][0]["team_name"], "Caps Fall 2026")
+        self.assertEqual(moved["stats_history"][0]["stats"]["h"], 4)
+        # A player with no game stats gets no empty history entry.
+        self.assertNotIn("stats_history", self.store.get_player(bea["id"]))
+        self.assertEqual(self.store.get_player(cleo["id"])["team_id"], other["id"])
+
+        teams = {t["id"]: t for t in self.store.list_teams()}
+        old = teams[fall["id"]]
+        self.assertTrue(old["archived"])
+        self.assertEqual(old["promoted_to"], spring["id"])
+        self.assertEqual(old["player_count"], 0)
+        self.assertEqual(sorted(p["name"] for p in old["roster_snapshot"]), ["Ava", "Bea"])
+
+        staff = {m["id"]: m for m in self.store.list_staff()}
+        self.assertEqual(staff[coach["id"]]["team_ids"], [fall["id"], spring["id"]])
+        self.assertEqual(staff[everyone["id"]]["team_ids"], [])
+
+    def test_promote_team_options_and_validation(self) -> None:
+        fall = self.store.add_team({"name": "Fall Team"})
+        ava = self.store.add_player({"name": "Ava", "position": "Pitcher", "team_id": fall["id"]})
+        bea = self.store.add_player({"name": "Bea", "position": "Catcher", "team_id": fall["id"]})
+        self.store.update_stats(ava["id"], {"ab": 10, "h": 4})
+        outsider = self.store.add_player({"name": "Zed", "position": "Utility"})
+
+        with self.assertRaises(ValueError):
+            self.store.promote_team(fall["id"], {"name": "Fall Team"})
+        with self.assertRaises(ValueError):
+            self.store.promote_team(fall["id"], {"name": ""})
+        with self.assertRaises(ValueError):
+            self.store.promote_team(fall["id"], {"name": "Spring", "player_ids": [outsider["id"]]})
+        with self.assertRaises(KeyError):
+            self.store.promote_team("team-does-not-exist", {"name": "Spring"})
+
+        spring = self.store.promote_team(
+            fall["id"], {"name": "Spring Team", "player_ids": [ava["id"]], "reset_stats": False}
+        )
+        self.assertEqual(spring["player_count"], 1)
+        kept = self.store.get_player(ava["id"])
+        self.assertEqual(kept["team_id"], spring["id"])
+        self.assertEqual(kept["stats"]["counts"]["h"], 4)
+        self.assertEqual(self.store.get_player(bea["id"])["team_id"], fall["id"])
+        with self.assertRaises(ValueError):
+            self.store.promote_team(fall["id"], {"name": "Another Spring"})
+
     def test_staff_add_list_delete(self) -> None:
         created = self.store.add_staff(
             {
@@ -1439,6 +1513,7 @@ class HttpTests(unittest.TestCase):
         self.assertNotIn('id="admin-tools"', html)
         self.assertIn('id="stats-modal"', html)
         self.assertIn('id="kpi-modal"', html)
+        self.assertIn('id="promote-modal"', html)
         status, script = self.call("GET", "/static/app.js")
         self.assertEqual(status, 200)
         self.assertIn("GameChanger stats", script)
@@ -1695,6 +1770,30 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertFalse(cleared["has_password"])
+
+    def test_promote_team_is_coach_only(self) -> None:
+        status, team = self.call("POST", "/api/teams", {"name": "Fall Caps", "season": "Fall"})
+        self.assertEqual(status, 201)
+        status, player = self.call(
+            "POST", "/api/players", {"name": "Pat Lane", "position": "Utility", "team_id": team["id"]}
+        )
+        self.assertEqual(status, 201)
+        self.give_player_login(player["id"], "patlane", "player-pass")
+
+        status, spring = self.call(
+            "POST", f"/api/teams/{team['id']}/promote", {"name": "Spring Caps", "season": "Spring"}
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(spring["player_count"], 1)
+        status, _payload = self.call("POST", f"/api/teams/{team['id']}/promote", {"name": "Spring Caps"})
+        self.assertEqual(status, 400)
+
+        self.sign_out()
+        self.login_player("patlane", "player-pass")
+        status, _payload = self.call(
+            "POST", f"/api/teams/{spring['id']}/promote", {"name": "Summer Caps"}
+        )
+        self.assertEqual(status, 403)
 
     def test_team_information_is_coach_only(self) -> None:
         status, payload = self.call(

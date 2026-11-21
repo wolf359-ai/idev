@@ -1198,6 +1198,7 @@ PUBLIC_PLAYER_FIELDS = (
     "distance",
     "created_at",
     "stats",
+    "stats_history",
 )
 
 
@@ -1809,6 +1810,78 @@ class Store:
             self._save()
             count = sum(1 for p in self.data["players"] if p.get("team_id") == team_id)
             return {**dict(team), "player_count": count}
+
+    def promote_team(self, team_id: str, payload: object) -> dict:
+        """Start a new season: create a new team from `payload` and move the
+        chosen players onto it. Players keep their history, notes and logins;
+        the old team stays as a past season with a snapshot of its roster."""
+        if not isinstance(payload, dict):
+            raise ValueError("Send the new season's details in the request body")
+        fields = parse_team_record(payload)
+        player_ids = payload.get("player_ids")
+        if player_ids is not None and (
+            not isinstance(player_ids, list) or not all(isinstance(pid, str) for pid in player_ids)
+        ):
+            raise ValueError("Players must be a list")
+        reset_stats = payload.get("reset_stats", True) is not False
+        copy_staff = payload.get("copy_staff", True) is not False
+        with self.lock:
+            self._ensure_teams_unlocked()
+            source = self._team_unlocked(team_id)
+            if source.get("archived"):
+                raise ValueError("This team has already moved to a new season")
+            if len(self.data["teams"]) >= MAX_TEAMS:
+                raise ValueError(f"You can have at most {MAX_TEAMS} teams")
+            folded = fields["name"].casefold()
+            if any(str(t.get("name", "")).casefold() == folded for t in self.data["teams"]):
+                raise ValueError("A team with that name already exists")
+            roster = [p for p in self.data["players"] if p.get("team_id") == team_id]
+            on_roster = {p.get("id") for p in roster}
+            chosen = on_roster if player_ids is None else set(player_ids)
+            if not chosen <= on_roster:
+                raise ValueError("Choose players from this team's roster")
+            now = utc_now()
+            team = {"id": new_id("team"), **fields, "created_at": now, "promoted_from": team_id}
+            self.data["teams"].append(team)
+            source["roster_snapshot"] = [
+                {
+                    "player_id": p.get("id"),
+                    "name": p.get("name", ""),
+                    "number": p.get("number"),
+                    "position": p.get("position", ""),
+                }
+                for p in roster
+            ]
+            source["archived"] = True
+            source["promoted_to"] = team["id"]
+            source["promoted_at"] = now
+            moved = 0
+            for player in roster:
+                if player.get("id") not in chosen:
+                    continue
+                if reset_stats:
+                    counts = normalize_stat_counts(player.get("stats"))
+                    if any(counts.values()):
+                        player.setdefault("stats_history", []).append(
+                            {
+                                "team_id": team_id,
+                                "team_name": source.get("name", ""),
+                                "season": source.get("season", ""),
+                                "year": source.get("year", ""),
+                                "stats": counts,
+                                "archived_at": now,
+                            }
+                        )
+                    player["stats"] = empty_stat_counts()
+                player["team_id"] = team["id"]
+                moved += 1
+            if copy_staff:
+                for member in self.data["staff"]:
+                    ids = member.get("team_ids")
+                    if isinstance(ids, list) and team_id in ids and team["id"] not in ids:
+                        ids.append(team["id"])
+            self._save()
+            return {**dict(team), "player_count": moved}
 
     def delete_team(self, team_id: str) -> None:
         with self.lock:
@@ -3442,6 +3515,10 @@ class IdevHandler(BaseHTTPRequestHandler):
                 return
             if path == "/api/teams":
                 send_json(self, 201, self.store.add_team(payload))
+                return
+            promote_match = re.fullmatch(rf"/api/teams/({ID_RE})/promote", path)
+            if promote_match:
+                send_json(self, 201, self.store.promote_team(promote_match.group(1), payload))
                 return
             if path == "/api/events":
                 send_json(self, 201, self.store.add_event(payload, self.store.team_scope(session)))

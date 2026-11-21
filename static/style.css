@@ -5120,3 +5120,90 @@ html {
   text-align: right;
   font-weight: 700;
 }
+
+/* ---------- New season (promote a team) ---------- */
+.modal-promote {
+  width: min(620px, 94vw);
+}
+
+.promote-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 0.75rem;
+}
+
+.promote-grid .promote-wide {
+  grid-column: 1 / -1;
+}
+
+.promote-check-tools {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+
+.promote-players {
+  max-height: 11rem;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+}
+
+.check-row {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  font-size: 0.86rem;
+}
+
+.check-row input {
+  width: auto;
+}
+
+.past-tag {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.team-row.past {
+  opacity: 0.85;
+  border-style: dashed;
+}
+
+.roster-snapshot {
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.roster-snapshot summary {
+  cursor: pointer;
+  color: var(--cyan);
+}
+
+.roster-snapshot ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+  columns: 2;
+}
+
+.team-menu-label {
+  padding: 0.45rem 0.75rem 0.2rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+@media (max-width: 560px) {
+  .promote-grid {
+    grid-template-columns: 1fr;
+  }
+}
