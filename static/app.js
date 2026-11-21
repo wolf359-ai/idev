@@ -24,6 +24,9 @@
   const statsModalTitle = document.getElementById("stats-modal-title");
   const statsModalBody = document.getElementById("stats-modal-body");
   const closeStatsBtn = document.getElementById("close-stats");
+  const kpiModal = document.getElementById("kpi-modal");
+  const kpiModalTitle = document.getElementById("kpi-modal-title");
+  const kpiModalBody = document.getElementById("kpi-modal-body");
   const adminTabs = Array.from(document.querySelectorAll(".admin-tab"));
   const playerLoginList = document.getElementById("player-login-list");
   const managePlayerList = document.getElementById("manage-player-list");
@@ -2505,24 +2508,226 @@
       drillsTile(player),
     );
 
-    return el("div", { className: "hero" }, idPanel, tiles, gameStatTiles(m));
+    return el("div", { className: "hero" }, idPanel, tiles, gameStatTiles(player, m));
   }
 
-  function gameStatTiles(m) {
-    const specs = [
-      { abbr: "AVG", label: "Batting Avg", accent: "yellow" },
-      { abbr: "OBP", label: "On-Base %", accent: "cyan" },
-      { abbr: "SLG", label: "Slugging", accent: "orange" },
-      { abbr: "OPS", label: "OPS", accent: "lime" },
-      { abbr: "FLD%", label: "Fielding %", accent: "green" },
-    ];
+  const statNum = (v) => Number(v) || 0;
+
+  function formatRate(value) {
+    if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+    const text = value.toFixed(3);
+    return text.startsWith("0") ? text.slice(1) : text;
+  }
+
+  function totalBases(c) {
+    const singles = Math.max(statNum(c.h) - statNum(c.doubles) - statNum(c.triples) - statNum(c.hr), 0);
+    return singles + 2 * statNum(c.doubles) + 3 * statNum(c.triples) + 4 * statNum(c.hr);
+  }
+
+  // How each GameChanger KPI is built from the raw counts, for the drill-down.
+  const GAME_KPIS = [
+    {
+      abbr: "AVG",
+      label: "Batting Avg",
+      accent: "yellow",
+      formula: "Hits ÷ At bats",
+      compute: (c) => (statNum(c.ab) ? statNum(c.h) / statNum(c.ab) : null),
+      math: (c) => `${statNum(c.h)} ÷ ${statNum(c.ab)}`,
+      inputs: [["H", "Hits", "h"], ["AB", "At bats", "ab"]],
+    },
+    {
+      abbr: "OBP",
+      label: "On-Base %",
+      accent: "cyan",
+      formula: "(Hits + Walks + Hit by pitch) ÷ (At bats + Walks + Hit by pitch + Sacrifice flies)",
+      compute: (c) => {
+        const chances = statNum(c.ab) + statNum(c.bb) + statNum(c.hbp) + statNum(c.sf);
+        return chances ? (statNum(c.h) + statNum(c.bb) + statNum(c.hbp)) / chances : null;
+      },
+      math: (c) =>
+        `(${statNum(c.h)} + ${statNum(c.bb)} + ${statNum(c.hbp)}) ÷ (${statNum(c.ab)} + ${statNum(c.bb)} + ${statNum(c.hbp)} + ${statNum(c.sf)})`,
+      inputs: [["H", "Hits", "h"], ["BB", "Walks", "bb"], ["HBP", "Hit by pitch", "hbp"], ["AB", "At bats", "ab"], ["SF", "Sacrifice flies", "sf"]],
+    },
+    {
+      abbr: "SLG",
+      label: "Slugging",
+      accent: "orange",
+      formula: "Total bases ÷ At bats (single = 1, double = 2, triple = 3, home run = 4)",
+      compute: (c) => (statNum(c.ab) ? totalBases(c) / statNum(c.ab) : null),
+      math: (c) => `${totalBases(c)} total bases ÷ ${statNum(c.ab)}`,
+      inputs: [["H", "Hits", "h"], ["2B", "Doubles", "doubles"], ["3B", "Triples", "triples"], ["HR", "Home runs", "hr"], ["AB", "At bats", "ab"]],
+    },
+    {
+      abbr: "OPS",
+      label: "OPS",
+      accent: "lime",
+      formula: "On-base % + Slugging",
+      compute: (c) => {
+        const obp = GAME_KPIS[1].compute(c);
+        const slg = GAME_KPIS[2].compute(c);
+        return obp === null || slg === null ? null : obp + slg;
+      },
+      math: (c) => `${formatRate(GAME_KPIS[1].compute(c))} + ${formatRate(GAME_KPIS[2].compute(c))}`,
+      inputs: [["H", "Hits", "h"], ["BB", "Walks", "bb"], ["HBP", "Hit by pitch", "hbp"], ["AB", "At bats", "ab"], ["SF", "Sacrifice flies", "sf"]],
+    },
+    {
+      abbr: "FLD%",
+      label: "Fielding %",
+      accent: "green",
+      formula: "(Putouts + Assists) ÷ (Putouts + Assists + Errors)",
+      compute: (c) => {
+        const chances = statNum(c.po) + statNum(c.a) + statNum(c.e);
+        return chances ? (statNum(c.po) + statNum(c.a)) / chances : null;
+      },
+      math: (c) => `(${statNum(c.po)} + ${statNum(c.a)}) ÷ (${statNum(c.po)} + ${statNum(c.a)} + ${statNum(c.e)})`,
+      inputs: [["PO", "Putouts", "po"], ["A", "Assists", "a"], ["E", "Errors", "e"]],
+    },
+  ];
+
+  function gameStatTiles(player, m) {
     return el(
       "div",
       { className: "game-kpis", "aria-label": "GameChanger stats" },
-      specs.map((spec) =>
-        metricTile({ label: spec.label, value: m.findStat(spec.abbr) ?? "—", accent: spec.accent, foot: "GameChanger" }),
+      GAME_KPIS.map((kpi) => {
+        const tile = metricTile({ label: kpi.label, value: m.findStat(kpi.abbr) ?? "—", accent: kpi.accent, foot: "GameChanger" });
+        tile.classList.add("kpi-drill");
+        tile.tabIndex = 0;
+        tile.title = "Right-click (or tap) for details";
+        tile.setAttribute("aria-haspopup", "menu");
+        const open = (x, y) => openKpiMenu(player, kpi, tile, x, y);
+        tile.addEventListener("contextmenu", (event) => {
+          event.preventDefault();
+          open(event.clientX, event.clientY);
+        });
+        tile.addEventListener("click", (event) => open(event.clientX, event.clientY));
+        tile.addEventListener("keydown", (event) => {
+          if (event.key === "Enter" || event.key === " " || event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+            event.preventDefault();
+            const box = tile.getBoundingClientRect();
+            open(box.left + 12, box.bottom - 8);
+          }
+        });
+        return tile;
+      }),
+    );
+  }
+
+  function openKpiMenu(player, kpi, tile, x, y) {
+    const counts = (player.stats && player.stats.counts) || {};
+    const value = formatRate(kpi.compute(counts));
+    const items = [
+      { label: "How it's calculated", icon: "formula", action: () => openKpiDetail(player, kpi, "calc") },
+    ];
+    if (state.can.view_all) {
+      items.push({ label: "Team ranking", icon: "ranking", action: () => openKpiDetail(player, kpi, "rank") });
+    }
+    showContextMenu({
+      title: kpi.label,
+      sub: `${player.name} · ${value}`,
+      groups: [
+        { label: "Drill down", items },
+        { label: "GameChanger", items: [{ label: "All game stats", icon: "view", action: openStatsModal }] },
+      ],
+      row: tile,
+      x,
+      y,
+    });
+  }
+
+  function kpiRanking(player, kpi) {
+    const pool = state.players.filter((p) => !player.team_id || p.team_id === player.team_id);
+    const rows = pool.map((p) => {
+      const raw = p.id === player.id && player.stats && player.stats.counts ? player.stats.counts : p.stats || {};
+      return { player: p, value: kpi.compute(raw) };
+    });
+    const ranked = rows.filter((r) => r.value !== null).sort((a, b) => b.value - a.value);
+    const noData = rows.filter((r) => r.value === null);
+    const avg = ranked.length ? ranked.reduce((sum, r) => sum + r.value, 0) / ranked.length : null;
+    return { ranked, noData, avg };
+  }
+
+  function ordinal(n) {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  }
+
+  function openKpiDetail(player, kpi, focus) {
+    const counts = (player.stats && player.stats.counts) || {};
+    const value = kpi.compute(counts);
+    kpiModalTitle.textContent = `${kpi.label} — ${player.name}`;
+
+    const calc = el(
+      "section",
+      { className: "kpi-section", id: "kpi-calc" },
+      el("h4", {}, "How it's calculated"),
+      el("p", { className: "kpi-formula" }, kpi.formula),
+      el(
+        "p",
+        { className: "kpi-math" },
+        value === null ? "Not enough game data yet." : `${kpi.math(counts)} = `,
+        value === null ? null : el("strong", { className: `kpi-result ${kpi.accent}` }, formatRate(value)),
+      ),
+      el(
+        "table",
+        { className: "kpi-inputs" },
+        el("thead", {}, el("tr", {}, el("th", {}, "Stat"), el("th", {}, ""), el("th", {}, "Total"))),
+        el(
+          "tbody",
+          {},
+          kpi.inputs.map(([abbr, name, key]) =>
+            el("tr", {}, el("td", { className: "mono" }, abbr), el("td", {}, name), el("td", { className: "num" }, String(statNum(counts[key])))),
+          ),
+        ),
       ),
     );
+
+    const sections = [calc];
+    if (state.can.view_all) {
+      const { ranked, noData, avg } = kpiRanking(player, kpi);
+      const place = ranked.findIndex((r) => r.player.id === player.id);
+      const team = teamById(player.team_id);
+      const best = ranked.length ? ranked[0].value : 0;
+      sections.push(
+        el(
+          "section",
+          { className: "kpi-section", id: "kpi-rank" },
+          el("h4", {}, "Team ranking"),
+          el(
+            "p",
+            { className: "meta" },
+            place >= 0 ? `${ordinal(place + 1)} of ${ranked.length}` : "Not ranked yet",
+            team ? ` on ${team.name}` : "",
+            avg !== null ? ` · Team average ${formatRate(avg)}` : "",
+          ),
+          el(
+            "ol",
+            { className: "kpi-rank-list" },
+            ranked.map((r, i) =>
+              el(
+                "li",
+                { className: "kpi-rank-row" + (r.player.id === player.id ? " me" : "") },
+                el("span", { className: "kpi-rank-pos" }, String(i + 1)),
+                el("span", { className: "kpi-rank-name" }, r.player.name),
+                el(
+                  "span",
+                  { className: "kpi-rank-bar" },
+                  el("i", { className: kpi.accent, style: `width:${best ? Math.max(4, Math.round((r.value / best) * 100)) : 0}%` }),
+                ),
+                el("span", { className: "kpi-rank-val" }, formatRate(r.value)),
+              ),
+            ),
+          ),
+          noData.length
+            ? el("p", { className: "meta" }, `No data yet: ${noData.map((r) => r.player.name).join(", ")}`)
+            : null,
+        ),
+      );
+    }
+    kpiModalBody.replaceChildren(...sections);
+    showDialog(kpiModal);
+    const target = kpiModalBody.querySelector(focus === "rank" ? "#kpi-rank" : "#kpi-calc");
+    if (target) target.scrollIntoView({ block: "start" });
   }
 
   // Only http(s) links may become clickable anchors (blocks javascript:/data:).
@@ -3130,6 +3335,8 @@
     history: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
     filter: '<polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>',
     clear: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    formula: '<path d="M4 7h16"/><path d="M4 17h16"/><path d="m9 10 6 4"/><path d="m15 10-6 4"/>',
+    ranking: '<path d="M6 20v-6"/><path d="M12 20V8"/><path d="M18 20v-10"/>',
     rate: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
     delete: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/>',
   };
@@ -3712,6 +3919,10 @@
   }
 
   closeStatsBtn.addEventListener("click", closeStatsModal);
+  document.getElementById("close-kpi").addEventListener("click", () => hideDialog(kpiModal));
+  kpiModal.addEventListener("click", (event) => {
+    if (event.target === kpiModal) hideDialog(kpiModal);
+  });
   statsModal.addEventListener("click", (event) => {
     if (event.target === statsModal) {
       closeStatsModal();
