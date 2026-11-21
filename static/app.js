@@ -1620,6 +1620,24 @@
     main.replaceChildren(hero, dash);
   }
 
+  function expandIcon() {
+    return svgEl(
+      "svg",
+      { viewBox: "0 0 24 24", width: "16", height: "16", "aria-hidden": "true", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+      svgEl("path", { d: "M15 3h6v6" }),
+      svgEl("path", { d: "M9 21H3v-6" }),
+      svgEl("path", { d: "M21 3l-7 7" }),
+      svgEl("path", { d: "M3 21l7-7" }),
+    );
+  }
+
+  function openRadarModal(player) {
+    const modal = document.getElementById("radar-modal");
+    document.getElementById("radar-modal-title").textContent = `Performance Profile — ${player.name}`;
+    fill(document.getElementById("radar-modal-body"), renderRadar(player.progress || []));
+    showDialog(modal);
+  }
+
   // Performance Profile radar with the skill ratings beside it as a legend list.
   function renderProfileCard(player, skillTile, readOnly) {
     const items = player.progress || [];
@@ -1638,7 +1656,29 @@
         "div",
         { className: "profile-body" },
         el("div", { className: "skills" }, items.map(skillTile)),
-        el("div", { className: "radar-wrap" }, renderRadar(items)),
+        el(
+          "div",
+          {
+            className: "radar-wrap radar-zoomable",
+            title: "Click to enlarge",
+            onClick: () => openRadarModal(player),
+          },
+          renderRadar(items),
+          el(
+            "button",
+            {
+              type: "button",
+              className: "icon-btn radar-expand",
+              "aria-label": "Enlarge performance profile",
+              title: "Enlarge",
+              onClick: (event) => {
+                event.stopPropagation();
+                openRadarModal(player);
+              },
+            },
+            expandIcon(),
+          ),
+        ),
         el(
           "div",
           { className: "profile-notes" },
@@ -4092,6 +4132,11 @@
 
   closeStatsBtn.addEventListener("click", closeStatsModal);
   document.getElementById("close-kpi").addEventListener("click", () => hideDialog(kpiModal));
+  const radarModal = document.getElementById("radar-modal");
+  document.getElementById("close-radar").addEventListener("click", () => hideDialog(radarModal));
+  radarModal.addEventListener("click", (event) => {
+    if (event.target === radarModal) hideDialog(radarModal);
+  });
   kpiModal.addEventListener("click", (event) => {
     if (event.target === kpiModal) hideDialog(kpiModal);
   });
