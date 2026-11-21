@@ -1740,12 +1740,28 @@ h1, h2, h3, p {
   margin-bottom: 0.8rem;
 }
 
-/* Radar on the left, one slim row per skill on the right, like a chart legend. */
+/* Skills list on the left, the radar right beside it, then a notes column. */
 .profile-body {
   display: grid;
-  grid-template-columns: minmax(240px, 1fr) minmax(0, 27rem);
+  grid-template-columns: minmax(0, 27rem) minmax(240px, 360px) minmax(14rem, 1fr);
   gap: 1.25rem;
   align-items: center;
+}
+
+.profile-notes {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.profile-notes .note-block {
+  flex: 1;
+  margin-top: 0;
 }
 
 .profile-card .radar-wrap {
@@ -1858,7 +1874,18 @@ h1, h2, h3, p {
   }
 }
 
-/* Not enough room beside the radar: stack it above the list. */
+/* Medium widths: list and radar side by side, notes underneath. */
+@container (max-width: 62rem) {
+  .profile-card .profile-body {
+    grid-template-columns: minmax(0, 27rem) minmax(220px, 1fr);
+  }
+
+  .profile-notes {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Not enough room beside the list: stack everything. */
 @container (max-width: 40rem) {
   .profile-card .profile-body {
     grid-template-columns: 1fr;
