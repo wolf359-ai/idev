@@ -1445,73 +1445,26 @@
     main.replaceChildren(hero, dash);
   }
 
-  // Prototype: three ways to show the radar and skill ratings in one card.
-  const PROFILE_LAYOUTS = [
-    { id: "side", label: "A · Side by side" },
-    { id: "wings", label: "B · Wings" },
-    { id: "legend", label: "C · Legend list" },
-  ];
-
-  function profileLayout() {
-    const stored = readStored("idev.profileLayout", "side");
-    return PROFILE_LAYOUTS.some((l) => l.id === stored) ? stored : "side";
-  }
-
+  // Performance Profile radar with the skill ratings beside it as a legend list.
   function renderProfileCard(player, skillTile, readOnly) {
-    const layout = profileLayout();
     const items = player.progress || [];
-    const radar = el("div", { className: "radar-wrap" }, renderRadar(items));
-    let body;
-    if (layout === "wings") {
-      const half = Math.ceil(items.length / 2);
-      body = [
-        el("div", { className: "skills skills-wing" }, items.slice(0, half).map(skillTile)),
-        radar,
-        el("div", { className: "skills skills-wing" }, items.slice(half).map(skillTile)),
-      ];
-    } else {
-      body = [radar, el("div", { className: "skills" }, items.map(skillTile))];
-    }
-    const switcher = el(
-      "div",
-      { className: "seg", role: "group", "aria-label": "Profile layout" },
-      PROFILE_LAYOUTS.map((l) =>
-        el(
-          "button",
-          {
-            type: "button",
-            className: "seg-btn" + (layout === l.id ? " on" : ""),
-            "aria-pressed": String(layout === l.id),
-            onClick: () => {
-              writeStored("idev.profileLayout", l.id);
-              renderDetail();
-            },
-          },
-          l.label,
-        ),
-      ),
-    );
     return el(
       "section",
-      { className: `card skills-card profile-card layout-${layout}` },
+      { className: "card skills-card profile-card" },
+      el("h2", {}, "Performance Profile"),
+      el(
+        "p",
+        { className: "meta" },
+        readOnly
+          ? "Strengths and weaknesses across every skill, with your latest rating (1–5) for each."
+          : "Strengths and weaknesses at a glance. Click a circle to rate (1–5); click its left half for a half point.",
+      ),
       el(
         "div",
-        { className: "profile-head" },
-        el(
-          "div",
-          {},
-          el("h2", {}, "Performance Profile"),
-          el(
-            "p",
-            { className: "meta" },
-            readOnly
-              ? "Strengths and weaknesses across every skill, with your latest rating (1–5) for each."
-              : "Strengths and weaknesses at a glance. Click a circle to rate (1–5); click its left half for a half point.",
-          ),
-        ),
-        switcher,
+        { className: "profile-body" },
+        el("div", { className: "radar-wrap" }, renderRadar(items)),
+        el("div", { className: "skills" }, items.map(skillTile)),
       ),
-      el("div", { className: "profile-body" }, body),
     );
   }
 
