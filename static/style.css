@@ -1725,6 +1725,146 @@ h1, h2, h3, p {
   }
 }
 
+/* ---------- Performance Profile: radar + skills legend in one card ---------- */
+.profile-card {
+  grid-column: 1 / -1;
+}
+
+.profile-card h2 {
+  font-size: 0.98rem;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.3rem;
+}
+
+.profile-card > .meta {
+  margin-bottom: 0.8rem;
+}
+
+/* Radar on the left, one slim row per skill on the right, like a chart legend. */
+.profile-body {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 27rem);
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.profile-card .radar-wrap {
+  padding: 0;
+}
+
+.profile-card .radar {
+  max-width: 360px;
+}
+
+.profile-card .profile-body .skills {
+  grid-template-columns: 1fr;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.profile-card .skills .skill {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  min-height: 0;
+  padding: 0.22rem 0.6rem;
+}
+
+.profile-card .skills .skill:last-child {
+  border-bottom: none;
+}
+
+.profile-card .skills .skill:nth-child(odd) {
+  background: var(--panel-2);
+}
+
+.profile-card .skills .skill-main {
+  flex: none;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.profile-card .skills .skill-main h3 {
+  flex: none;
+  width: 6.25rem;
+  margin: 0;
+  font-size: 0.76rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.profile-card .skills .skill-main .meta {
+  min-width: 3.9rem;
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.profile-card .skills .skill-metric {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 0.3rem;
+  margin-left: auto;
+  text-align: right;
+}
+
+.profile-card .skills .skill-metric h3 {
+  margin: 0;
+  font-size: 0.64rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.profile-card .skills .skill-metric-value,
+.profile-card .skills .skill-metric-input {
+  width: 2.4rem;
+  font-size: 0.86rem;
+  text-align: right;
+}
+
+.profile-card .skills .skill-metric-value {
+  width: auto;
+}
+
+.profile-card .skills .skill-metric-unit {
+  margin: 0;
+  font-size: 0.64rem;
+}
+
+@media (min-width: 761px) {
+  .profile-card .skills .dots {
+    gap: 0.18rem;
+  }
+
+  .profile-card .skills .dot {
+    flex: none;
+    width: 0.8rem;
+    height: 0.8rem;
+  }
+}
+
+@container skill (max-width: 24rem) {
+  .profile-card .skills .skill-metric h3 {
+    display: none;
+  }
+}
+
+/* Not enough room beside the radar: stack it above the list. */
+@container (max-width: 40rem) {
+  .profile-card .profile-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Ten skills as two rows of five whenever the card is wide enough for the dots. */
 @container (min-width: 44rem) {
   .skills-card .skills {
