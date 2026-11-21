@@ -5126,6 +5126,82 @@ html {
   width: min(620px, 94vw);
 }
 
+.modal-gc-schedule {
+  width: min(560px, 94vw);
+}
+
+.modal-gc-schedule .modal-actions {
+  flex-wrap: wrap;
+}
+
+.gc-help {
+  margin-top: -0.35rem;
+}
+
+.gc-status {
+  margin: 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 0.85rem;
+}
+
+.gc-status.is-error,
+.gc-error {
+  color: var(--red);
+}
+
+.gc-status.is-error {
+  border-color: color-mix(in srgb, var(--red) 45%, transparent);
+}
+
+.gc-upload {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.4rem 0.8rem 0.8rem;
+}
+
+.gc-upload legend {
+  padding: 0 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.gc-upload .row {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gc-upload input[type="file"] {
+  flex: 1 1 14rem;
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.cancelled-pill {
+  --tc: var(--red);
+}
+
+.cal-ev.cancelled,
+.ev-row.cancelled {
+  --tc: var(--muted-2);
+}
+
+.cal-ev.cancelled .cal-ev-title,
+.ev-row.cancelled .ev-title,
+.pop-title.cancelled {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+
+.pop-pills {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
 .promote-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -164,6 +164,7 @@ marked `Secure`.
 - **Roster import** — preview and import players from a GameChanger Stats CSV or pasted list
 - **Skills** — hitting, fielding, throwing, and other softball skills
 - **Ratings** — click 1–5 on a skill; click the left half of a circle for a half point (e.g. 3.5). Each click is saved as a new rating
+- **GameChanger schedule** — paste a team's GameChanger calendar link and its games, times, and fields stay in sync on the Schedule
 - **GameChanger stats** — common offense and defense totals (AVG, OBP, SLG, OPS, and FLD% are calculated)
 - **Skill radar** — a spider chart of every skill's current rating, so strengths and weaknesses stand out at a glance
 - **Notes** — short coaching notes for a player
@@ -211,6 +212,30 @@ lists a player twice (two team profiles), both rows are added together, just as
 its Totals row does. Stats the file doesn't include keep their current values.
 Each import replaces the imported totals, so import the full-season export
 rather than a single game.
+
+## Sync the GameChanger schedule
+
+GameChanger has no API, but it can share a team's schedule as a calendar
+subscription link (the kind phone calendars subscribe to). idev reads that link:
+
+1. In the GameChanger app, open the team's **Schedule**, choose the option to
+   sync or subscribe to your calendar, and copy the link (it usually starts with
+   `webcal://`).
+2. In idev, click **Admin**, open the **Team** tab, and click **Schedule** on the team.
+3. Paste the link and click **Save and sync**.
+
+idev checks the link again every 3 hours while it's running (set
+`IDEV_CALENDAR_SYNC_HOURS` to change that, or `0` to turn it off), and coaches
+can click **Sync GameChanger** on the Schedule page at any time. Games are
+matched by GameChanger's own ID, so changed times or fields update in place
+instead of being duplicated. Synced games are read-only in idev; change them in
+GameChanger. A future game that disappears from GameChanger stays on the
+Schedule marked **Cancelled** (and can then be deleted). **Remove link** stops
+syncing and turns the games already brought in into ordinary, editable events.
+
+You can also upload a downloaded `.ics` calendar file from the same window. That
+is a one-time copy: it adds and updates games but never marks missing ones
+cancelled, so upload again if the schedule changes.
 
 ## Tests
 

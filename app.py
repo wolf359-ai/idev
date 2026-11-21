@@ -14,11 +14,13 @@ import csv
 import hashlib
 import hmac
 import io
+import ipaddress
 import json
 import os
 import re
 import secrets
 import shutil
+import socket
 import threading
 import time
 import uuid
@@ -27,6 +29,8 @@ from http.cookies import CookieError, SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+import urllib.error
+import urllib.request
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = (ROOT / "static").resolve()
@@ -65,6 +69,16 @@ MAX_EVENT_DAYS = 14
 MAX_EVENT_TITLE_LEN = 100
 MAX_EVENT_LOCATION_LEN = 120
 MAX_EVENT_NOTES_LEN = 1000
+# GameChanger has no API, but every team schedule can be shared as a calendar
+# subscription link (iCalendar). Games pulled from it are owned by GameChanger:
+# read-only here, refreshed on sync, and marked cancelled when they disappear.
+CALENDAR_SOURCE = "gamechanger"
+MAX_CALENDAR_URL_LEN = 2000
+MAX_CALENDAR_BYTES = 2 * 1024 * 1024
+MAX_CALENDAR_EVENTS = 1000
+CALENDAR_FETCH_TIMEOUT = 20
+CALENDAR_SYNC_HOURS = float(os.environ.get("IDEV_CALENDAR_SYNC_HOURS", "3"))
+CALENDAR_ALLOW_PRIVATE = os.environ.get("IDEV_CALENDAR_ALLOW_PRIVATE") == "1"
 # Numeric performance metrics that track a personal record (PR). "higher_better"
 # marks speed/velocity (a new max is a PR); time metrics improve as they drop.
 PR_METRICS = {
@@ -676,6 +690,216 @@ def parse_event(payload: object) -> dict:
         "location": parse_optional_name(payload.get("location"), "Location", MAX_EVENT_LOCATION_LEN),
         "notes": parse_optional_notes(payload.get("notes")),
     }
+
+
+def parse_calendar_url(value: object) -> str:
+    """A calendar subscription link; webcal:// (what GameChanger hands out) is
+    the same feed over https."""
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    if len(text) > MAX_CALENDAR_URL_LEN:
+        raise ValueError("That link is too long")
+    if text.lower().startswith("webcal://"):
+        text = "https://" + text[len("webcal://"):]
+    parsed = urlparse(text)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc:
+        raise ValueError("Paste the calendar link from GameChanger (it starts with webcal:// or https://)")
+    return text
+
+
+def _ics_unescape(value: str) -> str:
+    out = []
+    i = 0
+    while i < len(value):
+        ch = value[i]
+        if ch == "\\" and i + 1 < len(value):
+            nxt = value[i + 1]
+            out.append("\n" if nxt in "nN" else nxt)
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _ics_lines(text: str):
+    """Yield (name, params, value) for each unfolded content line."""
+    unfolded: list[str] = []
+    for raw in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
+        if raw[:1] in (" ", "\t") and unfolded:
+            unfolded[-1] += raw[1:]
+        elif raw:
+            unfolded.append(raw)
+    for line in unfolded:
+        in_quotes = False
+        split_at = -1
+        for index, ch in enumerate(line):
+            if ch == '"':
+                in_quotes = not in_quotes
+            elif ch == ":" and not in_quotes:
+                split_at = index
+                break
+        if split_at < 0:
+            continue
+        head, value = line[:split_at], line[split_at + 1:]
+        parts = head.split(";")
+        params = {}
+        for part in parts[1:]:
+            key, _, val = part.partition("=")
+            params[key.strip().upper()] = val.strip().strip('"')
+        yield parts[0].strip().upper(), params, value
+
+
+def _local_zone(name: str | None):
+    if name:
+        try:
+            from zoneinfo import ZoneInfo
+
+            return ZoneInfo(name)
+        except Exception:
+            pass
+    return datetime.now().astimezone().tzinfo
+
+
+def _ics_datetime(value: str, params: dict, zone) -> tuple[str, str]:
+    """Return (YYYY-MM-DD, HH:MM or "" for a date-only value). UTC times are
+    shown in the calendar's own time zone; TZID times keep their wall clock."""
+    value = value.strip()
+    if params.get("VALUE", "").upper() == "DATE" or re.fullmatch(r"\d{8}", value):
+        day = datetime.strptime(value[:8], "%Y%m%d")
+        return day.strftime("%Y-%m-%d"), ""
+    match = re.fullmatch(r"(\d{8})T(\d{4})(\d{2})?(Z?)", value)
+    if not match:
+        raise ValueError("bad date")
+    moment = datetime.strptime(match.group(1) + match.group(2), "%Y%m%d%H%M")
+    if match.group(4):
+        moment = moment.replace(tzinfo=timezone.utc).astimezone(zone)
+    return moment.strftime("%Y-%m-%d"), moment.strftime("%H:%M")
+
+
+def guess_event_type(title: str) -> str:
+    folded = title.casefold()
+    for kind in ("practice", "tournament", "scrimmage", "training"):
+        if kind in folded:
+            return kind
+    if "clinic" in folded or "lesson" in folded or "workout" in folded:
+        return "training"
+    return "game"
+
+
+def parse_calendar(text: object) -> list[dict]:
+    """Turn an iCalendar (.ics) feed into schedule-event fields keyed by UID.
+    Recurring rules are not expanded; GameChanger lists each game on its own."""
+    if not isinstance(text, str) or "BEGIN:VCALENDAR" not in text.upper():
+        raise ValueError("That isn't a calendar file (.ics)")
+    calendar_zone = None
+    events: list[dict] = []
+    current: dict | None = None
+    depth = 0
+    for name, params, value in _ics_lines(text):
+        if name == "X-WR-TIMEZONE" and current is None:
+            calendar_zone = value.strip()
+        elif name == "BEGIN":
+            if value.strip().upper() == "VEVENT" and current is None:
+                current = {}
+                depth = 0
+            elif current is not None:
+                depth += 1
+        elif name == "END":
+            if current is not None and depth:
+                depth -= 1
+            elif current is not None and value.strip().upper() == "VEVENT":
+                events.append(current)
+                current = None
+                if len(events) > MAX_CALENDAR_EVENTS:
+                    raise ValueError(f"That calendar has more than {MAX_CALENDAR_EVENTS} events")
+        elif current is not None and not depth and name not in current:
+            current[name] = (params, value)
+    zone = _local_zone(calendar_zone)
+    out = []
+    for raw in events:
+        if "DTSTART" not in raw:
+            continue
+        try:
+            date, start_time = _ics_datetime(raw["DTSTART"][1], raw["DTSTART"][0], zone)
+            end_date, end_time = date, ""
+            if "DTEND" in raw:
+                end_date, end_time = _ics_datetime(raw["DTEND"][1], raw["DTEND"][0], zone)
+        except ValueError:
+            continue
+        all_day = not start_time
+        if all_day and end_date > date:
+            # An all-day DTEND is the day after the last day.
+            end_date = (datetime.strptime(end_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+        if end_date < date:
+            end_date = date
+        last_allowed = (datetime.strptime(date, "%Y-%m-%d") + timedelta(days=MAX_EVENT_DAYS - 1)).strftime("%Y-%m-%d")
+        end_date = min(end_date, last_allowed)
+        if not all_day and end_date == date and end_time and end_time < start_time:
+            end_time = ""
+        title = _ics_unescape(raw.get("SUMMARY", ({}, ""))[1]).strip() or "Game"
+        uid = raw.get("UID", ({}, ""))[1].strip()
+        if not uid:
+            uid = hashlib.sha256(f"{title}|{date}|{start_time}".encode()).hexdigest()[:32]
+        out.append(
+            {
+                "external_uid": uid[:200],
+                "type": guess_event_type(title),
+                "title": " ".join(title.split())[:MAX_EVENT_TITLE_LEN],
+                "date": date,
+                "end_date": end_date,
+                "all_day": all_day,
+                "start_time": start_time,
+                "end_time": "" if all_day else end_time,
+                "location": " ".join(_ics_unescape(raw.get("LOCATION", ({}, ""))[1]).split())[:MAX_EVENT_LOCATION_LEN],
+                "notes": _ics_unescape(raw.get("DESCRIPTION", ({}, ""))[1]).strip()[:MAX_EVENT_NOTES_LEN],
+                "cancelled": raw.get("STATUS", ({}, ""))[1].strip().upper() == "CANCELLED",
+            }
+        )
+    return out
+
+
+def _check_public_host(url: str) -> None:
+    """Calendar links must point at the internet, not this computer or the home
+    network (stops the sync from being used to probe local devices)."""
+    if CALENDAR_ALLOW_PRIVATE:
+        return
+    host = urlparse(url).hostname or ""
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        raise ValueError("Couldn't reach that calendar link. Check the address and your internet connection.") from None
+    for info in infos:
+        address = ipaddress.ip_address(info[4][0].split("%")[0])
+        if not address.is_global:
+            raise ValueError("That calendar link points to a private network address")
+
+
+class _CheckedRedirects(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if urlparse(newurl).scheme.lower() not in ("http", "https"):
+            raise ValueError("That calendar link redirects somewhere unsupported")
+        _check_public_host(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def fetch_calendar(url: str) -> str:
+    _check_public_host(url)
+    opener = urllib.request.build_opener(_CheckedRedirects)
+    req = urllib.request.Request(url, headers={"User-Agent": "idev-schedule-sync/1.0", "Accept": "text/calendar, */*"})
+    try:
+        with opener.open(req, timeout=CALENDAR_FETCH_TIMEOUT) as response:
+            body = response.read(MAX_CALENDAR_BYTES + 1)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (401, 403, 404, 410):
+            raise ValueError("GameChanger didn't accept that link. Copy a fresh calendar link from the team's schedule.") from None
+        raise ValueError(f"GameChanger returned an error ({exc.code}). Try again later.") from None
+    except (urllib.error.URLError, OSError):
+        raise ValueError("Couldn't reach that calendar link. Check the address and your internet connection.") from None
+    if len(body) > MAX_CALENDAR_BYTES:
+        raise ValueError("That calendar is too large to import")
+    return body.decode("utf-8", errors="replace")
 
 
 def parse_optional_notes(value: object) -> str:
@@ -1992,6 +2216,8 @@ class Store:
             event = self._event_unlocked(event_id)
             if scope is not None and event.get("team_id") not in scope:
                 raise KeyError("Event not found")
+            if event.get("source") == CALENDAR_SOURCE:
+                raise ValueError("This game comes from GameChanger. Change it in GameChanger and it will update here.")
             if "team_id" in payload:
                 team_id = self._team_id_for_unlocked(payload.get("team_id"))
                 if scope is not None and team_id not in scope:
@@ -2010,6 +2236,126 @@ class Store:
                 raise KeyError("Event not found")
             self.data["events"] = [e for e in self.data["events"] if e.get("id") != event_id]
             self._save()
+
+    # -- GameChanger schedule sync ------------------------------------------
+    def set_team_calendar(self, team_id: str, payload: object) -> dict:
+        """Save (or clear) a team's GameChanger calendar link. Clearing it turns
+        the games already pulled in into ordinary, editable events."""
+        if not isinstance(payload, dict):
+            raise ValueError("Send the calendar link in the request body")
+        url = parse_calendar_url(payload.get("url"))
+        with self.lock:
+            team = self._team_unlocked(team_id)
+            team["gc_calendar_url"] = url
+            team["gc_sync_error"] = ""
+            if not url:
+                team["gc_synced_at"] = ""
+                for event in self.data["events"]:
+                    if event.get("team_id") == team_id and event.get("source") == CALENDAR_SOURCE:
+                        event.pop("source", None)
+                        event.pop("external_uid", None)
+            self._save()
+            return dict(team)
+
+    def sync_team_calendar(self, team_id: str, fetcher=None) -> dict:
+        with self.lock:
+            team = self._team_unlocked(team_id)
+            url = team.get("gc_calendar_url") or ""
+        if not url:
+            raise ValueError("Add this team's GameChanger calendar link first")
+        try:
+            items = parse_calendar((fetcher or fetch_calendar)(url))
+        except ValueError as exc:
+            with self.lock:
+                team = self._team_unlocked(team_id)
+                team["gc_sync_error"] = str(exc)
+                self._save()
+            raise
+        with self.lock:
+            team = self._team_unlocked(team_id)
+            if team.get("gc_calendar_url") != url:
+                raise ValueError("The calendar link changed during the sync; try again")
+            result = self._apply_calendar_unlocked(team_id, items, mark_missing=True)
+            team["gc_synced_at"] = utc_now()
+            team["gc_sync_error"] = ""
+            self._save()
+            return {**result, "team": dict(team)}
+
+    def import_team_calendar(self, team_id: str, payload: object) -> dict:
+        """One-time import of a downloaded .ics file. Unlike the link sync it
+        can't tell a deleted game from one left out of the file, so it never
+        marks missing games cancelled."""
+        if not isinstance(payload, dict):
+            raise ValueError("Send the calendar file in the request body")
+        items = parse_calendar(payload.get("ics"))
+        with self.lock:
+            team = self._team_unlocked(team_id)
+            result = self._apply_calendar_unlocked(team_id, items, mark_missing=False)
+            self._save()
+            return {**result, "team": dict(team)}
+
+    def _apply_calendar_unlocked(self, team_id: str, items: list[dict], mark_missing: bool) -> dict:
+        existing = {
+            event.get("external_uid"): event
+            for event in self.data["events"]
+            if event.get("team_id") == team_id and event.get("source") == CALENDAR_SOURCE
+        }
+        counts = {"added": 0, "updated": 0, "cancelled": 0, "unchanged": 0}
+        seen = set()
+        now = utc_now()
+        for item in items:
+            uid = item["external_uid"]
+            if uid in seen:
+                continue
+            seen.add(uid)
+            event = existing.get(uid)
+            if event is None:
+                if len(self.data["events"]) >= MAX_EVENTS:
+                    raise ValueError("The schedule is full; delete old events first")
+                event = {
+                    "id": new_id("event"),
+                    "team_id": team_id,
+                    "source": CALENDAR_SOURCE,
+                    **item,
+                    "rsvps": {},
+                    "created_at": now,
+                }
+                self.data["events"].append(event)
+                counts["cancelled" if item["cancelled"] else "added"] += 1
+                continue
+            changed = any(event.get(key) != value for key, value in item.items())
+            if changed:
+                if item["cancelled"] and not event.get("cancelled"):
+                    counts["cancelled"] += 1
+                else:
+                    counts["updated"] += 1
+                event.update(item)
+                event["synced_at"] = now
+            else:
+                counts["unchanged"] += 1
+        if mark_missing:
+            # Past games often drop off a feed; only future ones count as cancelled.
+            today = datetime.now().strftime("%Y-%m-%d")
+            for uid, event in existing.items():
+                if uid in seen or event.get("cancelled"):
+                    continue
+                if event.get("end_date", event.get("date", "")) >= today:
+                    event["cancelled"] = True
+                    event["synced_at"] = now
+                    counts["cancelled"] += 1
+        counts["total"] = len(seen)
+        return counts
+
+    def sync_all_calendars(self) -> None:
+        with self.lock:
+            team_ids = [
+                t.get("id") for t in self.data["teams"] if t.get("gc_calendar_url") and not t.get("archived")
+            ]
+        for team_id in team_ids:
+            try:
+                self.sync_team_calendar(team_id)
+            except (ValueError, KeyError) as exc:
+                print(f"GameChanger schedule sync skipped for a team: {exc}", flush=True)
 
     def set_rsvp(self, event_id: str, player_id: str, status: object) -> dict:
         choice = str(status or "").strip().casefold()
@@ -3572,6 +3918,13 @@ class IdevHandler(BaseHTTPRequestHandler):
             if promote_match:
                 send_json(self, 201, self.store.promote_team(promote_match.group(1), payload))
                 return
+            cal_match = re.fullmatch(rf"/api/teams/({ID_RE})/calendar/(sync|import)", path)
+            if cal_match:
+                if cal_match.group(2) == "sync":
+                    send_json(self, 200, self.store.sync_team_calendar(cal_match.group(1)))
+                else:
+                    send_json(self, 200, self.store.import_team_calendar(cal_match.group(1), payload))
+                return
             if path == "/api/events":
                 send_json(self, 201, self.store.add_event(payload, self.store.team_scope(session)))
                 return
@@ -3709,6 +4062,10 @@ class IdevHandler(BaseHTTPRequestHandler):
             if team_match:
                 send_json(self, 200, self.store.update_team(team_match.group(1), payload))
                 return
+            cal_match = re.fullmatch(rf"/api/teams/({ID_RE})/calendar", path)
+            if cal_match:
+                send_json(self, 200, self.store.set_team_calendar(cal_match.group(1), payload))
+                return
             event_match = re.fullmatch(rf"/api/events/({ID_RE})", path)
             if event_match:
                 send_json(
@@ -3813,6 +4170,21 @@ def make_server(
     return ThreadingHTTPServer((host, port), IdevHandler)
 
 
+def start_calendar_sync(store: Store, hours: float = CALENDAR_SYNC_HOURS) -> threading.Thread | None:
+    """Refresh every team's GameChanger schedule in the background."""
+    if hours <= 0:
+        return None
+
+    def loop() -> None:
+        while True:
+            store.sync_all_calendars()
+            time.sleep(hours * 3600)
+
+    thread = threading.Thread(target=loop, name="calendar-sync", daemon=True)
+    thread.start()
+    return thread
+
+
 def main() -> None:
     if not DATA_FROM_ENV and migrate_legacy_data(DATA_PATH):
         print(f"Moved your data to {DATA_PATH.parent}", flush=True)
@@ -3825,6 +4197,7 @@ def main() -> None:
     store.seed_demo_if_empty()
     generated_password = store.ensure_admin_password(ADMIN_PASSWORD_ENV)
     server = make_server(store, HOST, PORT)
+    start_calendar_sync(store)
     print(f"idev is running at http://127.0.0.1:{PORT}", flush=True)
     print(f"Your data is saved in {DATA_PATH}", flush=True)
     if generated_password:
