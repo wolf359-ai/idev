@@ -1,0 +1,26 @@
+{
+  "time": 1759850380,
+  "host": "door-body-north",
+  "source": "access-control",
+  "sourcetype": "factory:personnel:presence",
+  "index": "factory_workforce",
+  "event": {
+    "event_family": "presence",
+    "worker_id": "WKR-7f3a9c2e",
+    "person_id": "WKR-7f3a9c2e",
+    "person_type": "employee",
+    "credential_type": "badge",
+    "access_point": "door-body-north",
+    "access_direction": "entry",
+    "access_result": "granted",
+    "enterprise": "acme",
+    "site": "PLT-AUS-01",
+    "area": "body_shop",
+    "line_id": "line-3",
+    "shift_id": "PLT-AUS-01:2026-10-07:B",
+    "vertical": "manufacturing",
+    "system": "Security",
+    "device_id": "door-body-north",
+    "device_type": "access_reader"
+  }
+}

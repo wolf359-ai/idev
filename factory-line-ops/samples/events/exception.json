@@ -1,0 +1,22 @@
+{
+  "time": 1759851300,
+  "host": "flo-rules",
+  "source": "factory_line_ops",
+  "sourcetype": "factory:personnel:exception",
+  "index": "factory_workforce",
+  "event": {
+    "event_family": "exception",
+    "action": "late",
+    "worker_id": "WKR-aa12bb34",
+    "shift_id": "PLT-AUS-01:2026-10-07:B",
+    "enterprise": "acme",
+    "site": "PLT-AUS-01",
+    "line_id": "line-3",
+    "station_id": "st-08",
+    "event_message": "Clock-in 18 minutes after planned start",
+    "vertical": "manufacturing",
+    "system": "Workforce",
+    "device_id": "flo-rules",
+    "device_type": "kiosk"
+  }
+}

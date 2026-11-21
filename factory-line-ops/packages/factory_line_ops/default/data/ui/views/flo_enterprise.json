@@ -1,0 +1,160 @@
+{
+  "title": "Enterprise operations",
+  "description": "Business-layer rollup of every factory on the current shift. Reads the summary index, not raw workforce events.",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "-8h",
+            "latest": "now"
+          }
+        }
+      }
+    }
+  },
+  "inputs": {
+    "input_site": {
+      "type": "input.dropdown",
+      "title": "Factory",
+      "options": {
+        "defaultValue": "*",
+        "token": "tok_site",
+        "items": [
+          {
+            "label": "All factories",
+            "value": "*"
+          }
+        ]
+      },
+      "dataSources": {
+        "primary": "ds_sites"
+      }
+    }
+  },
+  "dataSources": {
+    "ds_sites": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup flo_kv_sites | table site_id, site_name | rename site_id as value, site_name as label"
+      }
+    },
+    "ds_kpis": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_summary_index`\n| search site=$tok_site$\n| stats dc(site) as factories, sum(eval(state_value=\"down\")) as lines_down, avg(fill_pct) as fill_pct, sum(good_count_shift) as good_count"
+      }
+    },
+    "ds_by_site": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_summary_index`\n| search site=$tok_site$\n| stats latest(fill_pct) as fill_pct, latest(state_value) as state_value, latest(good_count_shift) as good_count_shift, latest(headcount_actual) as headcount_actual, latest(headcount_plan) as headcount_plan by site, line_id\n| stats avg(fill_pct) as fill_pct, sum(eval(state_value=\"down\")) as lines_down, sum(good_count_shift) as good_count by site\n| sort site"
+      }
+    },
+    "ds_fill_trend": {
+      "type": "ds.search",
+      "options": {
+        "query": "`factory_summary_index`\n| search site=$tok_site$\n| timechart span=5m avg(fill_pct) by site"
+      }
+    }
+  },
+  "visualizations": {
+    "viz_factories": {
+      "type": "splunk.singlevalue",
+      "title": "Factories in view",
+      "dataSources": {
+        "primary": "ds_kpis"
+      },
+      "options": {
+        "majorValue": "factories"
+      }
+    },
+    "viz_down": {
+      "type": "splunk.singlevalue",
+      "title": "Lines down",
+      "dataSources": {
+        "primary": "ds_kpis"
+      },
+      "options": {
+        "majorValue": "lines_down"
+      }
+    },
+    "viz_fill": {
+      "type": "splunk.singlevalue",
+      "title": "Avg staffing fill %",
+      "dataSources": {
+        "primary": "ds_kpis"
+      },
+      "options": {
+        "majorValue": "fill_pct",
+        "unit": "%"
+      }
+    },
+    "viz_output": {
+      "type": "splunk.singlevalue",
+      "title": "Output this window",
+      "dataSources": {
+        "primary": "ds_kpis"
+      },
+      "options": {
+        "majorValue": "good_count"
+      }
+    },
+    "viz_table": {
+      "type": "splunk.table",
+      "title": "By factory — click a site to open plant operations",
+      "dataSources": {
+        "primary": "ds_by_site"
+      },
+      "eventHandlers": [
+        {
+          "type": "drilldown.setToken",
+          "options": {
+            "tokens": [
+              {
+                "token": "tok_site",
+                "key": "row.site.value"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "viz_trend": {
+      "type": "splunk.line",
+      "title": "Staffing fill % by factory",
+      "dataSources": {
+        "primary": "ds_fill_trend"
+      }
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "globalInputs": ["input_site"],
+    "layoutDefinitions": {
+      "layout_1": {
+        "type": "grid",
+        "structure": [
+          { "item": "viz_factories", "position": { "x": 0, "y": 0, "w": 3, "h": 2 } },
+          { "item": "viz_down", "position": { "x": 3, "y": 0, "w": 3, "h": 2 } },
+          { "item": "viz_fill", "position": { "x": 6, "y": 0, "w": 3, "h": 2 } },
+          { "item": "viz_output", "position": { "x": 9, "y": 0, "w": 3, "h": 2 } },
+          { "item": "viz_table", "position": { "x": 0, "y": 2, "w": 12, "h": 4 } },
+          { "item": "viz_trend", "position": { "x": 0, "y": 6, "w": 12, "h": 4 } }
+        ]
+      }
+    },
+    "tabs": {
+      "items": [
+        {
+          "layoutId": "layout_1",
+          "label": "All factories"
+        }
+      ]
+    },
+    "options": {
+      "submitButton": false,
+      "showTitleAndDescription": true
+    }
+  }
+}

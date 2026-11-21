@@ -1,0 +1,55 @@
+{
+  "schemaVersion": "2.0.0",
+  "info": {
+    "title": "Factory Line Operations",
+    "id": {
+      "group": null,
+      "name": "factory_line_ops",
+      "version": "0.1.0"
+    },
+    "author": [
+      {
+        "name": "wolf359-ai",
+        "email": null,
+        "company": null
+      }
+    ],
+    "releaseDate": null,
+    "description": "Real-time factory line shift and personnel monitoring with a multi-factory business dashboard.",
+    "classification": {
+      "intendedAudience": "Manufacturing Operations",
+      "categories": ["Manufacturing", "IT Operations"],
+      "developmentStatus": "Beta"
+    },
+    "commonInformationModels": null,
+    "license": {
+      "name": "Apache-2.0",
+      "text": null,
+      "uri": "https://www.apache.org/licenses/LICENSE-2.0"
+    },
+    "privacyPolicy": {
+      "name": null,
+      "text": null,
+      "uri": null
+    },
+    "releaseNotes": {
+      "name": "README",
+      "text": "./README.md",
+      "uri": null
+    }
+  },
+  "dependencies": {
+    "TA-factory_line": {
+      "version": ">=0.1.0",
+      "package": "TA-factory_line"
+    }
+  },
+  "tasks": null,
+  "inputGroups": null,
+  "incompatibleApps": null,
+  "platformRequirements": {
+    "splunk": {
+      "Enterprise": "*"
+    }
+  }
+}
