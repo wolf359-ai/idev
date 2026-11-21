@@ -438,6 +438,73 @@
       </form>
     </dialog>
 
+    <dialog id="promote-modal" class="modal modal-promote" aria-labelledby="promote-modal-title">
+      <form id="promote-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="promote-modal-title">Start a new season</h3>
+        <p class="meta" id="promote-intro"></p>
+        <div class="promote-grid">
+          <label class="promote-wide">
+            New team name
+            <input id="promote-name" name="name" maxlength="80" required>
+          </label>
+          <label>
+            Season
+            <select id="promote-season" name="season">
+              <option value="">Choose one</option>
+              <option>Spring</option>
+              <option>Summer</option>
+              <option>Fall</option>
+              <option>Winter</option>
+            </select>
+          </label>
+          <label>
+            Year
+            <input id="promote-year" name="year" maxlength="20" placeholder="2027">
+          </label>
+          <label>
+            Age bracket
+            <select id="promote-age-bracket" name="age_bracket">
+              <option value="">Choose one</option>
+              <option>10u</option>
+              <option>12u</option>
+              <option>14u</option>
+              <option>16u</option>
+              <option>18u</option>
+            </select>
+          </label>
+          <label>
+            Years of play
+            <select id="promote-play-year" name="play_year">
+              <option value="">Choose one</option>
+              <option>First year</option>
+              <option>Second year</option>
+            </select>
+          </label>
+        </div>
+        <fieldset class="team-checks">
+          <legend id="promote-players-legend">Players moving up</legend>
+          <div class="promote-check-tools">
+            <button type="button" class="btn btn-sm" id="promote-all">Select all</button>
+            <button type="button" class="btn btn-sm" id="promote-none">Select none</button>
+          </div>
+          <div id="promote-players" class="team-check-list promote-players"></div>
+        </fieldset>
+        <label class="check-row">
+          <input type="checkbox" id="promote-reset-stats" checked>
+          <span id="promote-reset-label">Start fresh GameChanger stats for the new season</span>
+        </label>
+        <label class="check-row">
+          <input type="checkbox" id="promote-copy-staff" checked>
+          <span>Give staff on this team the same access to the new team</span>
+        </label>
+        <p class="meta">Players keep their ratings, notes, drills and logins. The old team stays as a past season with a record of its roster.</p>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary" id="promote-submit">Create new season</button>
+          <button type="button" id="cancel-promote" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="drill-modal" class="modal" aria-labelledby="drill-modal-title">
       <form id="drill-form" class="form" autocomplete="off">
         <h3 class="modal-title" id="drill-modal-title">Add skill drill</h3>

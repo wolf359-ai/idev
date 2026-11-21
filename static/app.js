@@ -1152,27 +1152,67 @@
       fill(teamSummary, el("div", { className: "team-empty meta" }, "No teams yet."));
       return;
     }
+    const ordered = [...shell.teams.filter((t) => !t.archived), ...shell.teams.filter((t) => t.archived)];
     fill(
       teamSummary,
-      shell.teams.map((team) => {
+      ordered.map((team) => {
         const details = [
           [team.season, team.year].filter(Boolean).join(" "),
           team.age_bracket,
           team.play_year ? `Years of play: ${team.play_year}` : "",
           plural(team.player_count || 0, "player"),
         ].filter(Boolean);
+        const next = team.promoted_to ? teamById(team.promoted_to) : null;
+        const snapshot = Array.isArray(team.roster_snapshot) ? team.roster_snapshot : [];
         return el(
           "div",
-          { className: "team-row" },
+          { className: "team-row" + (team.archived ? " past" : "") },
           el(
             "div",
             {},
-            el("div", {}, el("span", { className: "team-row-name" }, team.name), el("span", { className: "sport-tag" }, team.sport)),
+            el(
+              "div",
+              {},
+              el("span", { className: "team-row-name" }, team.name),
+              el("span", { className: "sport-tag" }, team.sport),
+              team.archived ? el("span", { className: "past-tag" }, "Past season") : null,
+            ),
             el("div", { className: "meta" }, details.join(" \u00b7 ")),
+            team.archived
+              ? el(
+                  "div",
+                  { className: "meta" },
+                  next ? `Moved up to ${next.name}` : "Moved up to a new season",
+                  team.promoted_at ? ` on ${formatDay(team.promoted_at)}` : "",
+                )
+              : null,
+            snapshot.length
+              ? el(
+                  "details",
+                  { className: "roster-snapshot" },
+                  el("summary", {}, `Season roster (${snapshot.length})`),
+                  el(
+                    "ul",
+                    {},
+                    snapshot.map((p) =>
+                      el(
+                        "li",
+                        {},
+                        p.number !== null && p.number !== undefined && p.number !== "" ? `#${p.number} ` : "",
+                        p.name,
+                        p.position ? el("span", { className: "meta" }, ` · ${p.position}`) : null,
+                      ),
+                    ),
+                  ),
+                )
+              : null,
           ),
           el(
             "div",
             { className: "team-row-actions" },
+            !team.archived && team.player_count
+              ? el("button", { type: "button", className: "btn btn-sm", onClick: () => openPromoteModal(team) }, "New season")
+              : null,
             el("button", { type: "button", className: "btn btn-sm", onClick: () => openTeamModal(team) }, "Edit"),
             shell.teams.length > 1
               ? el("button", { type: "button", className: "btn btn-sm btn-danger", onClick: () => removeTeam(team) }, "Delete")
@@ -1182,6 +1222,138 @@
       }),
     );
   }
+
+  function formatDay(iso) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? ""
+      : date.toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  // Fall 2026 -> Spring 2027, Spring -> Summer -> Fall within the same year.
+  function nextSeason(season, year) {
+    const order = { Spring: ["Summer", 0], Summer: ["Fall", 0], Fall: ["Spring", 1], Winter: ["Spring", 1] };
+    const [nextName, bump] = order[season] || [season || "", 0];
+    const text = String(year || "").trim();
+    let nextYear = text;
+    if (bump && /^\d{4}$/.test(text)) {
+      nextYear = String(Number(text) + 1);
+    } else if (bump && /^\d{4}-\d{2}$/.test(text)) {
+      const start = Number(text.slice(0, 4)) + 1;
+      nextYear = `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+    }
+    return { season: nextName, year: nextYear };
+  }
+
+  function nextSeasonName(team, season, year) {
+    const name = team.name || "";
+    let out = name;
+    if (team.season && season && new RegExp(`\\b${team.season}\\b`, "i").test(out)) {
+      out = out.replace(new RegExp(`\\b${team.season}\\b`, "i"), season);
+    }
+    if (team.year && year && out.includes(team.year)) {
+      out = out.replace(team.year, year);
+    }
+    if (out === name) {
+      out = `${name} ${[season, year].filter(Boolean).join(" ")}`.trim();
+    }
+    return out;
+  }
+
+  const promoteModal = document.getElementById("promote-modal");
+  const promoteForm = document.getElementById("promote-form");
+  const promotePlayersBox = document.getElementById("promote-players");
+  let promoteSource = null;
+
+  function openPromoteModal(team) {
+    promoteSource = team;
+    const next = nextSeason(team.season, team.year);
+    const from = [team.season, team.year].filter(Boolean).join(" ");
+    document.getElementById("promote-modal-title").textContent = `Start a new season from ${team.name}`;
+    document.getElementById("promote-intro").textContent =
+      "Creates a new team for the next season and moves the players you pick onto it.";
+    document.getElementById("promote-name").value = nextSeasonName(team, next.season, next.year);
+    document.getElementById("promote-season").value = next.season;
+    document.getElementById("promote-year").value = next.year;
+    document.getElementById("promote-age-bracket").value = team.age_bracket || "";
+    document.getElementById("promote-play-year").value = team.play_year || "";
+    document.getElementById("promote-reset-stats").checked = true;
+    document.getElementById("promote-copy-staff").checked = true;
+    document.getElementById("promote-reset-label").textContent = from
+      ? `Start fresh GameChanger stats (${from} stats are saved with the old season)`
+      : "Start fresh GameChanger stats (current stats are saved with the old season)";
+    const roster = state.players
+      .filter((p) => p.team_id === team.id)
+      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+    fill(
+      promotePlayersBox,
+      roster.map((p) =>
+        el(
+          "label",
+          {},
+          el("input", { type: "checkbox", name: "player_ids", value: p.id, checked: true }),
+          p.number !== null && p.number !== undefined && p.number !== "" ? `#${p.number} ${p.name}` : p.name,
+        ),
+      ),
+    );
+    updatePromoteCount();
+    showDialog(promoteModal);
+    document.getElementById("promote-name").focus();
+  }
+
+  function updatePromoteCount() {
+    const boxes = [...promotePlayersBox.querySelectorAll("input[type=checkbox]")];
+    const picked = boxes.filter((b) => b.checked).length;
+    document.getElementById("promote-players-legend").textContent = `Players moving up (${picked} of ${boxes.length})`;
+  }
+
+  promotePlayersBox.addEventListener("change", updatePromoteCount);
+  document.getElementById("promote-all").addEventListener("click", () => {
+    promotePlayersBox.querySelectorAll("input[type=checkbox]").forEach((b) => {
+      b.checked = true;
+    });
+    updatePromoteCount();
+  });
+  document.getElementById("promote-none").addEventListener("click", () => {
+    promotePlayersBox.querySelectorAll("input[type=checkbox]").forEach((b) => {
+      b.checked = false;
+    });
+    updatePromoteCount();
+  });
+  document.getElementById("cancel-promote").addEventListener("click", () => hideDialog(promoteModal));
+  promoteForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!promoteSource) return;
+    const form = new FormData(promoteForm);
+    const body = {
+      name: form.get("name"),
+      sport: promoteSource.sport,
+      season: form.get("season"),
+      year: form.get("year"),
+      age_bracket: form.get("age_bracket"),
+      play_year: form.get("play_year"),
+      player_ids: form.getAll("player_ids"),
+      reset_stats: document.getElementById("promote-reset-stats").checked,
+      copy_staff: document.getElementById("promote-copy-staff").checked,
+    };
+    const submit = document.getElementById("promote-submit");
+    submit.disabled = true;
+    try {
+      const team = await request(`/api/teams/${encodeURIComponent(promoteSource.id)}/promote`, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      hideDialog(promoteModal);
+      await loadTeams();
+      await loadTeam();
+      setTeamSel([team.id]);
+      window.alert(`${team.name} is ready with ${plural(team.player_count || 0, "player")}.`);
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      submit.disabled = false;
+    }
+  });
 
   function openTeamModal(team) {
     const current = team || {};
@@ -4884,14 +5056,29 @@
       "div",
       { className: "team-menu", role: "menu", "aria-label": "Choose team" },
       option("All teams", plural(shell.teams.length, "team"), !shell.teamSel.size, () => setTeamSel([])),
-      shell.teams.map((team) =>
-        option(
-          team.name,
-          [team.sport, plural(team.player_count || 0, "player")].join(" · "),
-          shell.teamSel.size === 1 && shell.teamSel.has(team.id),
-          () => setTeamSel([team.id]),
+      shell.teams
+        .filter((team) => !team.archived)
+        .map((team) =>
+          option(
+            team.name,
+            [team.sport, plural(team.player_count || 0, "player")].join(" · "),
+            shell.teamSel.size === 1 && shell.teamSel.has(team.id),
+            () => setTeamSel([team.id]),
+          ),
         ),
-      ),
+      shell.teams.some((team) => team.archived)
+        ? el("div", { className: "team-menu-label", "aria-hidden": "true" }, "Past seasons")
+        : null,
+      shell.teams
+        .filter((team) => team.archived)
+        .map((team) =>
+          option(
+            team.name,
+            [team.sport, [team.season, team.year].filter(Boolean).join(" ") || "Past season"].join(" · "),
+            shell.teamSel.size === 1 && shell.teamSel.has(team.id),
+            () => setTeamSel([team.id]),
+          ),
+        ),
     );
     document.body.append(teamMenu);
     const box = teamSwitchBtn.getBoundingClientRect();
@@ -5778,7 +5965,11 @@
   function fillTeamSelects() {
     document.querySelectorAll(".team-select").forEach((select) => {
       const current = select.value;
-      fill(select, shell.teams.map((t) => el("option", { value: t.id }, `${t.name} (${t.sport})`)));
+      const ordered = [...shell.teams.filter((t) => !t.archived), ...shell.teams.filter((t) => t.archived)];
+      fill(
+        select,
+        ordered.map((t) => el("option", { value: t.id }, `${t.name} (${t.sport}${t.archived ? ", past season" : ""})`)),
+      );
       if (current && teamById(current)) select.value = current;
       const label = select.closest("label");
       if (label) label.classList.toggle("hidden", shell.teams.length < 2);
