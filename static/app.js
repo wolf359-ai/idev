@@ -1178,6 +1178,15 @@
               team.archived ? el("span", { className: "past-tag" }, "Past season") : null,
             ),
             el("div", { className: "meta" }, details.join(" \u00b7 ")),
+            team.gc_calendar_url && !team.archived
+              ? el(
+                  "div",
+                  { className: "meta" + (team.gc_sync_error ? " gc-error" : "") },
+                  team.gc_sync_error
+                    ? "GameChanger schedule: last sync failed"
+                    : `GameChanger schedule linked${team.gc_synced_at ? ` · synced ${formatSyncTime(team.gc_synced_at)}` : ""}`,
+                )
+              : null,
             team.archived
               ? el(
                   "div",
@@ -1210,6 +1219,9 @@
           el(
             "div",
             { className: "team-row-actions" },
+            !team.archived
+              ? el("button", { type: "button", className: "btn btn-sm", onClick: () => openGcScheduleModal(team) }, "Schedule")
+              : null,
             !team.archived && team.player_count
               ? el("button", { type: "button", className: "btn btn-sm", onClick: () => openPromoteModal(team) }, "New season")
               : null,
@@ -1354,6 +1366,165 @@
       submit.disabled = false;
     }
   });
+
+  const gcModal = document.getElementById("gc-schedule-modal");
+  const gcForm = document.getElementById("gc-schedule-form");
+  const gcUrl = document.getElementById("gc-schedule-url");
+  const gcStatus = document.getElementById("gc-schedule-status");
+  const gcFile = document.getElementById("gc-schedule-file");
+  let gcTeam = null;
+
+  function formatSyncTime(iso) {
+    const date = new Date(iso);
+    return Number.isNaN(date.getTime())
+      ? ""
+      : date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
+  function syncSummary(result) {
+    const parts = [];
+    if (result.added) parts.push(`${plural(result.added, "new event")}`);
+    if (result.updated) parts.push(`${result.updated} updated`);
+    if (result.cancelled) parts.push(`${result.cancelled} cancelled`);
+    return parts.length ? parts.join(", ") : "No changes";
+  }
+
+  function renderGcStatus(message, isError) {
+    const team = gcTeam || {};
+    let text = message || "";
+    let error = Boolean(isError);
+    if (!text) {
+      if (team.gc_sync_error) {
+        text = `Last sync failed: ${team.gc_sync_error}`;
+        error = true;
+      } else if (team.gc_calendar_url) {
+        text = team.gc_synced_at ? `Last synced ${formatSyncTime(team.gc_synced_at)}. Checks again every few hours.` : "Not synced yet.";
+      } else {
+        text = "No link yet.";
+      }
+    }
+    gcStatus.textContent = text;
+    gcStatus.classList.toggle("is-error", error);
+    const linked = Boolean(team.gc_calendar_url);
+    document.getElementById("gc-schedule-sync").classList.toggle("hidden", !linked);
+    document.getElementById("gc-schedule-unlink").classList.toggle("hidden", !linked);
+  }
+
+  function openGcScheduleModal(team) {
+    gcTeam = team;
+    document.getElementById("gc-schedule-title").textContent = `GameChanger schedule for ${team.name}`;
+    gcUrl.value = team.gc_calendar_url || "";
+    gcFile.value = "";
+    renderGcStatus();
+    showDialog(gcModal);
+    gcUrl.focus();
+  }
+
+  async function gcAfterChange(team) {
+    if (team) gcTeam = team;
+    await loadTeams();
+    const fresh = teamById(gcTeam.id);
+    if (fresh) gcTeam = fresh;
+    await loadEvents();
+  }
+
+  async function gcBusy(button, work) {
+    const buttons = [...gcForm.querySelectorAll("button")];
+    buttons.forEach((b) => {
+      b.disabled = true;
+    });
+    const label = button.textContent;
+    button.textContent = "Working…";
+    try {
+      await work();
+    } finally {
+      button.textContent = label;
+      buttons.forEach((b) => {
+        b.disabled = false;
+      });
+    }
+  }
+
+  async function gcSync() {
+    try {
+      const result = await request(`/api/teams/${encodeURIComponent(gcTeam.id)}/calendar/sync`, { method: "POST", body: "{}" });
+      await gcAfterChange(result.team);
+      renderGcStatus(`Synced ${plural(result.total, "event")} from GameChanger. ${syncSummary(result)}.`);
+    } catch (error) {
+      await gcAfterChange().catch(() => {});
+      renderGcStatus(error.message, true);
+    }
+  }
+
+  gcForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!gcTeam) return;
+    const url = gcUrl.value.trim();
+    if (!url) {
+      renderGcStatus("Paste the calendar link from GameChanger first.", true);
+      gcUrl.focus();
+      return;
+    }
+    await gcBusy(document.getElementById("gc-schedule-save"), async () => {
+      try {
+        const team = await request(`/api/teams/${encodeURIComponent(gcTeam.id)}/calendar`, {
+          method: "PUT",
+          body: JSON.stringify({ url }),
+        });
+        gcTeam = team;
+        gcUrl.value = team.gc_calendar_url;
+      } catch (error) {
+        renderGcStatus(error.message, true);
+        return;
+      }
+      await gcSync();
+    });
+  });
+  document.getElementById("gc-schedule-sync").addEventListener("click", (e) => gcBusy(e.currentTarget, gcSync));
+  document.getElementById("gc-schedule-unlink").addEventListener("click", async (e) => {
+    if (!gcTeam) return;
+    if (!window.confirm("Stop syncing from GameChanger? Games already brought in stay on the Schedule and become editable here.")) return;
+    await gcBusy(e.currentTarget, async () => {
+      try {
+        const team = await request(`/api/teams/${encodeURIComponent(gcTeam.id)}/calendar`, {
+          method: "PUT",
+          body: JSON.stringify({ url: "" }),
+        });
+        gcUrl.value = "";
+        await gcAfterChange(team);
+        renderGcStatus("Link removed. Existing games were kept.");
+      } catch (error) {
+        renderGcStatus(error.message, true);
+      }
+    });
+  });
+  document.getElementById("gc-schedule-import").addEventListener("click", async (e) => {
+    if (!gcTeam) return;
+    const file = gcFile.files && gcFile.files[0];
+    if (!file) {
+      renderGcStatus("Choose a calendar file (.ics) first.", true);
+      return;
+    }
+    if (file.size > 250 * 1024) {
+      renderGcStatus("That file is too large. Use the calendar link instead.", true);
+      return;
+    }
+    await gcBusy(e.currentTarget, async () => {
+      try {
+        const ics = await file.text();
+        const result = await request(`/api/teams/${encodeURIComponent(gcTeam.id)}/calendar/import`, {
+          method: "POST",
+          body: JSON.stringify({ ics }),
+        });
+        gcFile.value = "";
+        await gcAfterChange(result.team);
+        renderGcStatus(`Imported ${plural(result.total, "event")} from ${file.name}. ${syncSummary(result)}.`);
+      } catch (error) {
+        renderGcStatus(error.message, true);
+      }
+    });
+  });
+  document.getElementById("close-gc-schedule").addEventListener("click", () => hideDialog(gcModal));
 
   function openTeamModal(team) {
     const current = team || {};
@@ -4953,7 +5124,7 @@
     for (let i = 0; i < 45; i += 1) {
       const day = addDays(today, i);
       const list = eventsOn(day).filter(
-        (ev) => i > 0 || ev.all_day || (ev.end_time || ev.start_time) >= nowTime,
+        (ev) => !ev.cancelled && (i > 0 || ev.all_day || (ev.end_time || ev.start_time) >= nowTime),
       );
       if (list.length) return { day, ev: list[0] };
     }
@@ -5331,7 +5502,11 @@
     const dayIndex = Math.round((day - parseYmd(ev.date)) / 86400000) + 1;
     return el(
       "button",
-      { type: "button", className: `ev-row t-${ev.type}`, onClick: (e) => openEventPop(ev, e.currentTarget) },
+      {
+        type: "button",
+        className: `ev-row t-${ev.type}` + (ev.cancelled ? " cancelled" : ""),
+        onClick: (e) => openEventPop(ev, e.currentTarget),
+      },
       el("span", { className: "ev-time mono" }, ev.all_day ? "All day" : fmtTime(ev.start_time)),
       el(
         "span",
@@ -5345,7 +5520,9 @@
         ev.location ? el("span", { className: "ev-sub" }, shellIcon("pin", "ico ico-sm"), ev.location) : null,
       ),
       !isPlayerView() && shell.teams.length > 1 ? el("span", { className: "ev-team" }, teamShort(ev.team_id)) : el("span", {}),
-      el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
+      ev.cancelled
+        ? el("span", { className: "type-pill cancelled-pill" }, "Cancelled")
+        : el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
     );
   }
 
@@ -5634,6 +5811,43 @@
     const actions = canContent()
       ? [el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(null) }, shellIcon("plus"), "Add event")]
       : [];
+    const linkedTeams = canAdmin() ? shell.teams.filter((t) => t.gc_calendar_url && !t.archived && teamSelected(t.id)) : [];
+    if (linkedTeams.length) {
+      actions.unshift(
+        el(
+          "button",
+          {
+            type: "button",
+            className: "btn",
+            title: "Pull the latest games from GameChanger",
+            onClick: async (e) => {
+              const button = e.currentTarget;
+              button.disabled = true;
+              button.textContent = "Syncing…";
+              const problems = [];
+              let changes = 0;
+              for (const team of linkedTeams) {
+                try {
+                  const r = await request(`/api/teams/${encodeURIComponent(team.id)}/calendar/sync`, { method: "POST", body: "{}" });
+                  changes += r.added + r.updated + r.cancelled;
+                } catch (error) {
+                  problems.push(`${team.name}: ${error.message}`);
+                }
+              }
+              shell.gcSyncNote = problems.length
+                ? ""
+                : changes
+                  ? `Synced with GameChanger: ${plural(changes, "change")}.`
+                  : "Up to date with GameChanger.";
+              await loadTeams();
+              await loadEvents();
+              if (problems.length) showError(problems.join(" "));
+            },
+          },
+          "Sync GameChanger",
+        ),
+      );
+    }
 
     const toolbar = el(
       "div",
@@ -5690,6 +5904,7 @@
         (isPlayerView() || shell.teams.length < 2
           ? shell.teams[0] ? ` for ${shell.teams[0].name}` : ""
           : ` across ${shownTeams.length} of ${plural(shell.teams.length, "team")}`),
+      linkedTeams.length && shell.gcSyncNote ? el("span", { className: "gc-sync-note" }, ` · ${shell.gcSyncNote}`) : null,
     );
 
     let body;
@@ -5725,8 +5940,8 @@
                 "button",
                 {
                   type: "button",
-                  className: `cal-ev t-${ev.type}`,
-                  title: `${ev.title} · ${teamShort(ev.team_id)}`,
+                  className: `cal-ev t-${ev.type}` + (ev.cancelled ? " cancelled" : ""),
+                  title: `${ev.cancelled ? "Cancelled: " : ""}${ev.title} · ${teamShort(ev.team_id)}`,
                   onClick: (e) => openEventPop(ev, e.currentTarget),
                 },
                 el("span", { className: "cal-ev-time" }, ev.all_day ? "All day" : fmtTimeShort(ev.start_time)),
@@ -5809,25 +6024,42 @@
         );
       actions.push(answer("yes"), answer("no"));
     } else if (canContent()) {
-      actions.push(
-        el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(ev) }, "Edit"),
-        el("button", { type: "button", className: "btn btn-danger", onClick: () => removeEvent(ev) }, "Delete"),
-      );
+      const synced = ev.source === "gamechanger";
+      if (!synced) {
+        actions.push(el("button", { type: "button", className: "btn btn-primary", onClick: () => openEventModal(ev) }, "Edit"));
+      }
+      if (!synced || ev.cancelled) {
+        actions.push(el("button", { type: "button", className: "btn btn-danger", onClick: () => removeEvent(ev) }, "Delete"));
+      }
     }
     fill(
       eventPop,
       el(
         "div",
         { className: "pop-head" },
-        el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
+        el(
+          "span",
+          { className: "pop-pills" },
+          el("span", { className: `type-pill t-${ev.type}` }, typeLabel(ev.type)),
+          ev.cancelled ? el("span", { className: "type-pill cancelled-pill" }, "Cancelled") : null,
+        ),
         el("button", { type: "button", className: "icon-btn", "aria-label": "Close", onClick: closeEventPop }, shellIcon("x")),
       ),
-      el("h3", { id: "event-pop-title", className: "pop-title" }, ev.title),
+      el("h3", { id: "event-pop-title", className: "pop-title" + (ev.cancelled ? " cancelled" : "") }, ev.title),
       el("p", { className: "pop-line" }, shellIcon("calendar", "ico ico-sm"), dateLine),
       el("p", { className: "pop-line" }, shellIcon("clock", "ico ico-sm"), eventTimeLabel(ev)),
       ev.location ? el("p", { className: "pop-line" }, shellIcon("pin", "ico ico-sm"), ev.location) : null,
       team ? el("p", { className: "pop-line" }, shellIcon("users", "ico ico-sm"), `${team.name} · ${team.sport}`) : null,
       ev.notes ? el("p", { className: "pop-note" }, ev.notes) : null,
+      ev.source === "gamechanger" && !isPlayerView()
+        ? el(
+            "p",
+            { className: "meta pop-source" },
+            ev.cancelled
+              ? "Removed or cancelled in GameChanger."
+              : "From GameChanger. Change it there and it updates here.",
+          )
+        : null,
       ev.rsvp
         ? el(
             "p",

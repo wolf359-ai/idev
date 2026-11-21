@@ -532,6 +532,35 @@
       </form>
     </dialog>
 
+    <dialog id="gc-schedule-modal" class="modal modal-gc-schedule" aria-labelledby="gc-schedule-title">
+      <form id="gc-schedule-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="gc-schedule-title">GameChanger schedule</h3>
+        <p class="meta">Games, times and fields come in from GameChanger and stay up to date. Change a game in GameChanger and it updates here; games removed there are marked Cancelled.</p>
+        <label>
+          Calendar link
+          <input id="gc-schedule-url" name="url" type="url" inputmode="url" maxlength="2000" placeholder="webcal://…">
+        </label>
+        <p class="meta gc-help">In the GameChanger app, open the team's Schedule, choose the option to sync or subscribe to your calendar, and copy the link it gives you.</p>
+        <p class="gc-status" id="gc-schedule-status" role="status"></p>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary" id="gc-schedule-save">Save and sync</button>
+          <button type="button" class="btn" id="gc-schedule-sync">Sync now</button>
+          <button type="button" class="btn btn-danger" id="gc-schedule-unlink">Remove link</button>
+        </div>
+        <fieldset class="gc-upload">
+          <legend>Or upload a calendar file</legend>
+          <p class="meta">A one-time copy from a downloaded .ics file. Upload again if games change.</p>
+          <div class="row">
+            <input id="gc-schedule-file" type="file" accept=".ics,text/calendar">
+            <button type="button" class="btn" id="gc-schedule-import">Import file</button>
+          </div>
+        </fieldset>
+        <div class="row modal-actions">
+          <button type="button" id="close-gc-schedule" class="btn">Done</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="drill-modal" class="modal" aria-labelledby="drill-modal-title">
       <form id="drill-form" class="form" autocomplete="off">
         <h3 class="modal-title" id="drill-modal-title">Add skill drill</h3>
