@@ -615,12 +615,17 @@ class StoreTests(unittest.TestCase):
         focus = self.store.add_note(
             player["id"], {"text": "Work on plate discipline.", "category": "focus"}
         )
+        profile = self.store.add_note(
+            player["id"], {"text": "Bat speed is up.", "category": "profile"}
+        )
         self.assertEqual(top["category"], "top")
         self.assertEqual(focus["category"], "focus")
+        self.assertEqual(profile["category"], "profile")
         detail = self.store.get_player(player["id"])
         cats = {note["text"]: note["category"] for note in detail["notes"]}
         self.assertEqual(cats["Great glove work."], "top")
         self.assertEqual(cats["Work on plate discipline."], "focus")
+        self.assertEqual(cats["Bat speed is up."], "profile")
 
     def test_rejects_unknown_note_category(self) -> None:
         player = self.store.add_player({"name": "Robin", "position": "Utility"})

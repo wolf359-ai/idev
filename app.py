@@ -35,7 +35,7 @@ MAX_NAME_LEN = 80
 MAX_NOTE_LEN = 2000
 # Coach notes are grouped by the dashboard card they belong to. Legacy notes
 # without a category are treated as "focus" (where notes first lived).
-NOTE_CATEGORIES = ("focus", "top")
+NOTE_CATEGORIES = ("focus", "top", "profile")
 DEFAULT_NOTE_CATEGORY = "focus"
 MAX_ACTIVITY_LEN = 200
 MAX_ACTIVITY = 50

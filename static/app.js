@@ -1462,8 +1462,13 @@
       el(
         "div",
         { className: "profile-body" },
-        el("div", { className: "radar-wrap" }, renderRadar(items)),
         el("div", { className: "skills" }, items.map(skillTile)),
+        el("div", { className: "radar-wrap" }, renderRadar(items)),
+        el(
+          "div",
+          { className: "profile-notes" },
+          notesBlock({ items: notesForCategory(player, "profile"), canEdit: !isReadOnly(), category: "profile" }),
+        ),
       ),
     );
   }
@@ -2940,11 +2945,11 @@
     if (!state.selectedId || !noteModal) {
       return;
     }
-    noteTargetCategory = category === "top" ? "top" : "focus";
+    const titles = { top: "Add top skill note", focus: "Add focus area note", profile: "Add performance profile note" };
+    noteTargetCategory = titles[category] ? category : "focus";
     const title = document.getElementById("note-title");
     if (title) {
-      title.textContent =
-        noteTargetCategory === "top" ? "Add top skill note" : "Add focus area note";
+      title.textContent = titles[noteTargetCategory];
     }
     noteForm.reset();
     if (typeof noteModal.showModal === "function") {
