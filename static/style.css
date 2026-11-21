@@ -1810,7 +1810,7 @@ h1, h2, h3, p {
 
 .profile-card .skills .skill-main h3 {
   flex: none;
-  width: 6.25rem;
+  width: 5.75rem;
   margin: 0;
   font-size: 0.76rem;
   white-space: nowrap;
@@ -1824,13 +1824,14 @@ h1, h2, h3, p {
   white-space: nowrap;
 }
 
+/* Label | value | unit in fixed columns so every label ends at the same edge. */
 .profile-card .skills .skill-metric {
-  display: flex;
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: auto 2.3rem 1.9rem;
   align-items: baseline;
-  gap: 0.3rem;
+  column-gap: 0.3rem;
+  flex: none;
   margin-left: auto;
-  text-align: right;
 }
 
 .profile-card .skills .skill-metric h3 {
@@ -1838,22 +1839,21 @@ h1, h2, h3, p {
   font-size: 0.64rem;
   color: var(--muted);
   white-space: nowrap;
+  text-align: right;
 }
 
 .profile-card .skills .skill-metric-value,
 .profile-card .skills .skill-metric-input {
-  width: 2.4rem;
+  width: 100%;
   font-size: 0.86rem;
   text-align: right;
-}
-
-.profile-card .skills .skill-metric-value {
-  width: auto;
 }
 
 .profile-card .skills .skill-metric-unit {
   margin: 0;
   font-size: 0.64rem;
+  text-align: left;
+  white-space: nowrap;
 }
 
 @media (min-width: 761px) {
@@ -1869,6 +1869,10 @@ h1, h2, h3, p {
 }
 
 @container skill (max-width: 24rem) {
+  .profile-card .skills .skill-metric {
+    grid-template-columns: 2.3rem 1.9rem;
+  }
+
   .profile-card .skills .skill-metric h3 {
     display: none;
   }
