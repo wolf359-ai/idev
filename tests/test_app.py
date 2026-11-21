@@ -1513,6 +1513,7 @@ class HttpTests(unittest.TestCase):
         self.assertNotIn('id="admin-tools"', html)
         self.assertIn('id="stats-modal"', html)
         self.assertIn('id="kpi-modal"', html)
+        self.assertIn('id="radar-modal"', html)
         self.assertIn('id="promote-modal"', html)
         status, script = self.call("GET", "/static/app.js")
         self.assertEqual(status, 200)
