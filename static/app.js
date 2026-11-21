@@ -3708,6 +3708,7 @@
         label: "Profile",
         items: [
           { label: "Edit player", icon: "edit", action: () => editPlayer(player) },
+          { label: "Skills", icon: "rate", action: () => openPlayerSkills(player) },
           {
             label: "View on main page",
             icon: "view",
@@ -3742,6 +3743,71 @@
       host: adminModal,
     });
   }
+
+  const playerSkillsModal = document.getElementById("player-skills-modal");
+  const playerSkillsForm = document.getElementById("player-skills-form");
+  const playerSkillsList = document.getElementById("player-skills-list");
+  let playerSkillsTarget = null;
+
+  async function openPlayerSkills(player) {
+    let skills;
+    try {
+      skills = (await request("/api/skills")).skills || [];
+    } catch (error) {
+      showError(error.message);
+      return;
+    }
+    playerSkillsTarget = player;
+    const hidden = new Set(player.hidden_skill_ids || []);
+    document.getElementById("player-skills-title").textContent = `Skills for ${player.name}`;
+    fill(
+      playerSkillsList,
+      skills.map((skill) =>
+        el(
+          "label",
+          {},
+          el("input", { type: "checkbox", name: "skill_ids", value: skill.id, checked: !hidden.has(skill.id) }),
+          skill.name,
+        ),
+      ),
+    );
+    document.getElementById("player-skills-new").value = "";
+    document.getElementById("player-skills-new-all").checked = false;
+    showDialog(playerSkillsModal);
+  }
+
+  const setAllPlayerSkills = (on) => {
+    playerSkillsList.querySelectorAll("input[type=checkbox]").forEach((box) => {
+      box.checked = on;
+    });
+  };
+  document.getElementById("player-skills-all").addEventListener("click", () => setAllPlayerSkills(true));
+  document.getElementById("player-skills-none").addEventListener("click", () => setAllPlayerSkills(false));
+  document.getElementById("cancel-player-skills").addEventListener("click", () => hideDialog(playerSkillsModal));
+  playerSkillsForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!playerSkillsTarget) return;
+    const player = playerSkillsTarget;
+    const body = {
+      skill_ids: new FormData(playerSkillsForm).getAll("skill_ids"),
+      new_skill: document.getElementById("player-skills-new").value,
+      new_skill_for_all: document.getElementById("player-skills-new-all").checked,
+    };
+    const save = document.getElementById("player-skills-save");
+    save.disabled = true;
+    try {
+      await request(`/api/players/${encodeURIComponent(player.id)}/skills`, {
+        method: "PUT",
+        body: JSON.stringify(body),
+      });
+      hideDialog(playerSkillsModal);
+      await loadPlayers();
+    } catch (error) {
+      showError(error.message);
+    } finally {
+      save.disabled = false;
+    }
+  });
 
   function showContextMenu({ title, sub, badge, groups, row, x, y, host }) {
     closePlayerMenu();

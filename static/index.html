@@ -174,6 +174,33 @@
       <div class="stats-modal-body" id="stats-modal-body"></div>
     </dialog>
 
+    <dialog id="player-skills-modal" class="modal modal-player-skills" aria-labelledby="player-skills-title">
+      <form id="player-skills-form" class="form" autocomplete="off">
+        <h3 class="modal-title" id="player-skills-title">Skills</h3>
+        <p class="meta">Checked skills appear on this player's Performance Profile. Unchecking one hides it but keeps its rating history, so you can bring it back later.</p>
+        <div class="promote-check-tools">
+          <button type="button" class="btn btn-sm" id="player-skills-all">Select all</button>
+          <button type="button" class="btn btn-sm" id="player-skills-none">Select none</button>
+        </div>
+        <div id="player-skills-list" class="team-check-list player-skills-list"></div>
+        <fieldset class="team-checks">
+          <legend>Add a new skill</legend>
+          <label>
+            Skill name
+            <input id="player-skills-new" maxlength="40" placeholder="e.g. Slap hitting">
+          </label>
+          <label class="check-row">
+            <input type="checkbox" id="player-skills-new-all">
+            <span>Also add it for every other player</span>
+          </label>
+        </fieldset>
+        <div class="row modal-actions">
+          <button type="submit" class="btn btn-primary" id="player-skills-save">Save skills</button>
+          <button type="button" id="cancel-player-skills" class="btn">Cancel</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="kpi-modal" class="modal modal-kpi" aria-labelledby="kpi-modal-title">
       <div class="admin-modal-head">
         <h3 class="modal-title" id="kpi-modal-title">Stat details</h3>

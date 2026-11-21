@@ -1199,6 +1199,7 @@ PUBLIC_PLAYER_FIELDS = (
     "created_at",
     "stats",
     "stats_history",
+    "hidden_skill_ids",
 )
 
 
@@ -2046,6 +2047,56 @@ class Store:
             self._save()
             return dict(skill)
 
+    def set_player_skills(self, player_id: str, payload: object) -> dict:
+        """Choose which skills appear for one player. `skill_ids` lists the
+        skills to show; a `new_skill` name is created and shown for this
+        player, and for everyone else only when `new_skill_for_all` is true.
+        Ratings for hidden skills are kept, so showing a skill again brings
+        its history back."""
+        if not isinstance(payload, dict):
+            raise ValueError("Send the player's skills in the request body")
+        shown = payload.get("skill_ids")
+        if not isinstance(shown, list) or not all(isinstance(sid, str) for sid in shown):
+            raise ValueError("Skills must be a list")
+        raw_new = payload.get("new_skill")
+        new_name = (
+            clean_text(raw_new, "Skill name", MAX_SKILL_LEN)
+            if isinstance(raw_new, str) and raw_new.strip()
+            else ""
+        )
+        for_all = payload.get("new_skill_for_all") is True
+        with self.lock:
+            player = self._player_unlocked(player_id)
+            valid = {skill.get("id") for skill in self.data["skills"]}
+            shown_set = set(shown)
+            if not shown_set <= valid:
+                raise ValueError("Choose skills from the list")
+            created = None
+            if new_name:
+                if any(
+                    str(skill.get("name", "")).casefold() == new_name.casefold()
+                    for skill in self.data["skills"]
+                ):
+                    raise ValueError("That skill already exists")
+                created = {"id": new_id("skill"), "name": new_name}
+                self.data["skills"].append(created)
+                shown_set.add(created["id"])
+                if not for_all:
+                    for other in self.data["players"]:
+                        if other.get("id") != player_id:
+                            other.setdefault("hidden_skill_ids", []).append(created["id"])
+            if not shown_set:
+                raise ValueError("Keep at least one skill")
+            player["hidden_skill_ids"] = [
+                skill["id"] for skill in self.data["skills"] if skill.get("id") not in shown_set
+            ]
+            self._save()
+            return {
+                "hidden_skill_ids": list(player["hidden_skill_ids"]),
+                "skills": [dict(skill) for skill in self.data["skills"]],
+                "created": dict(created) if created else None,
+            }
+
     def list_players(self) -> list[dict]:
         with self.lock:
             ratings_by_player: dict[str, list[dict]] = {}
@@ -2099,7 +2150,8 @@ class Store:
                 for item in record.get("records", [])
                 if isinstance(item, dict) and item.get("delta") is not None
             ]
-            skills = list(self.data["skills"])
+            hidden = set(record.get("hidden_skill_ids") or [])
+            skills = [skill for skill in self.data["skills"] if skill.get("id") not in hidden]
         ratings.sort(key=lambda item: item.get("created_at", ""))
         notes.sort(key=lambda item: item.get("created_at", ""), reverse=True)
         activity.sort(key=lambda item: item.get("created_at", ""), reverse=True)
@@ -3615,6 +3667,10 @@ class IdevHandler(BaseHTTPRequestHandler):
         path = parsed.path
         try:
             payload = json_body(self)
+            skills_match = re.fullmatch(rf"/api/players/({ID_RE})/skills", path)
+            if skills_match:
+                send_json(self, 200, self.store.set_player_skills(skills_match.group(1), payload))
+                return
             stats_match = re.fullmatch(r"/api/players/([a-zA-Z0-9_-]{8,64})/stats", path)
             if stats_match:
                 send_json(self, 200, self.store.update_stats(stats_match.group(1), payload))

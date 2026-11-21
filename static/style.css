@@ -5207,3 +5207,14 @@ html {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- Per-player skills ---------- */
+.modal-player-skills {
+  width: min(520px, 94vw);
+}
+
+.player-skills-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  margin: 0.6rem 0 0.4rem;
+}
