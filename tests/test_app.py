@@ -369,6 +369,63 @@ class StoreTests(unittest.TestCase):
         detail = self.store.get_player(pid)
         self.assertEqual(len(detail["records"]), 1)
 
+    def test_player_skills_show_hide_and_add(self) -> None:
+        ava = self.store.add_player({"name": "Ava", "position": "Pitcher"})
+        bea = self.store.add_player({"name": "Bea", "position": "Catcher"})
+        for name in ("Hitting", "Power", "Bunting"):
+            self.store.add_skill(name)
+        skills = self.store.list_skills()
+        hitting, power = skills[0], skills[1]
+        self.store.add_rating(ava["id"], {"skill_id": power["id"], "score": 4})
+
+        keep = [s["id"] for s in skills if s["id"] != power["id"]]
+        result = self.store.set_player_skills(ava["id"], {"skill_ids": keep})
+        self.assertEqual(result["hidden_skill_ids"], [power["id"]])
+        names = [p["skill_name"] for p in self.store.get_player(ava["id"])["progress"]]
+        self.assertNotIn(power["name"], names)
+        self.assertIn(hitting["name"], names)
+        # Other players are unaffected.
+        self.assertEqual(len(self.store.get_player(bea["id"])["progress"]), len(skills))
+
+        # Showing the skill again brings its rating history back.
+        self.store.set_player_skills(ava["id"], {"skill_ids": [s["id"] for s in skills]})
+        restored = {p["skill_name"]: p for p in self.store.get_player(ava["id"])["progress"]}
+        self.assertEqual(restored[power["name"]]["current"], 4)
+
+        # A new skill just for this player.
+        result = self.store.set_player_skills(
+            ava["id"], {"skill_ids": [s["id"] for s in skills], "new_skill": "Slap hitting"}
+        )
+        self.assertEqual(result["created"]["name"], "Slap hitting")
+        ava_names = [p["skill_name"] for p in self.store.get_player(ava["id"])["progress"]]
+        bea_names = [p["skill_name"] for p in self.store.get_player(bea["id"])["progress"]]
+        self.assertIn("Slap hitting", ava_names)
+        self.assertNotIn("Slap hitting", bea_names)
+
+        # A new skill for everyone.
+        self.store.set_player_skills(
+            ava["id"],
+            {"skill_ids": [s["id"] for s in skills], "new_skill": "Sliding", "new_skill_for_all": True},
+        )
+        bea_names = [p["skill_name"] for p in self.store.get_player(bea["id"])["progress"]]
+        self.assertIn("Sliding", bea_names)
+
+    def test_player_skills_validation(self) -> None:
+        ava = self.store.add_player({"name": "Ava", "position": "Pitcher"})
+        for name in ("Hitting", "Power"):
+            self.store.add_skill(name)
+        skills = self.store.list_skills()
+        with self.assertRaises(ValueError):
+            self.store.set_player_skills(ava["id"], {"skill_ids": []})
+        with self.assertRaises(ValueError):
+            self.store.set_player_skills(ava["id"], {"skill_ids": ["skill-nope"]})
+        with self.assertRaises(ValueError):
+            self.store.set_player_skills(
+                ava["id"], {"skill_ids": [skills[0]["id"]], "new_skill": skills[1]["name"]}
+            )
+        with self.assertRaises(KeyError):
+            self.store.set_player_skills("player-nope", {"skill_ids": [skills[0]["id"]]})
+
     def test_promote_team_to_new_season(self) -> None:
         fall = self.store.add_team(
             {"name": "Caps Fall 2026", "season": "Fall", "year": "2026", "age_bracket": "12u"}
@@ -1513,6 +1570,7 @@ class HttpTests(unittest.TestCase):
         self.assertNotIn('id="admin-tools"', html)
         self.assertIn('id="stats-modal"', html)
         self.assertIn('id="kpi-modal"', html)
+        self.assertIn('id="player-skills-modal"', html)
         self.assertIn('id="promote-modal"', html)
         status, script = self.call("GET", "/static/app.js")
         self.assertEqual(status, 200)
@@ -1770,6 +1828,23 @@ class HttpTests(unittest.TestCase):
         )
         self.assertEqual(status, 200)
         self.assertFalse(cleared["has_password"])
+
+    def test_player_skills_is_coach_only(self) -> None:
+        status, player = self.call("POST", "/api/players", {"name": "Pat Lane", "position": "Utility"})
+        self.assertEqual(status, 201)
+        self.give_player_login(player["id"], "patlane", "player-pass")
+        for name in ("Hitting", "Power"):
+            self.call("POST", "/api/skills", {"name": name})
+        status, listing = self.call("GET", "/api/skills")
+        self.assertEqual(status, 200)
+        first = listing["skills"][0]["id"]
+        status, result = self.call("PUT", f"/api/players/{player['id']}/skills", {"skill_ids": [first]})
+        self.assertEqual(status, 200)
+        self.assertEqual(len(result["hidden_skill_ids"]), len(listing["skills"]) - 1)
+        self.sign_out()
+        self.login_player("patlane", "player-pass")
+        status, _payload = self.call("PUT", f"/api/players/{player['id']}/skills", {"skill_ids": [first]})
+        self.assertEqual(status, 403)
 
     def test_promote_team_is_coach_only(self) -> None:
         status, team = self.call("POST", "/api/teams", {"name": "Fall Caps", "season": "Fall"})
